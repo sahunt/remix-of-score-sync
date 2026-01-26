@@ -43,7 +43,7 @@ export function BottomNav() {
           )
         }
       >
-        <Icon name="stars" size={24} />
+        <Icon name="star_shine" size={24} />
         <span className="font-medium">Scores</span>
       </NavLink>
 
