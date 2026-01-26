@@ -1,4 +1,5 @@
 import { useUsername } from '@/hooks/useUsername';
+import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
 import { GoalCard } from '@/components/home/GoalCard';
@@ -6,6 +7,7 @@ import rainbowBg from '@/assets/rainbow-bg.png';
 
 export default function Home() {
   const { username, loading: usernameLoading } = useUsername();
+  const characterImage = useSessionCharacter();
 
   const handleSearch = (query: string) => {
     // TODO: Implement search functionality
@@ -18,6 +20,13 @@ export default function Home() {
       <div 
         className="fixed inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${rainbowBg})` }}
+      />
+      
+      {/* Character image - fixed, positioned top-right */}
+      <img
+        src={characterImage}
+        alt="Character"
+        className="fixed top-0 right-0 w-[280px] h-auto object-contain pointer-events-none z-[5]"
       />
       
       {/* Content overlay */}
