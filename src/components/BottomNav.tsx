@@ -2,45 +2,57 @@ import { NavLink } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
 
-const navItems = [
-  { to: '/home', icon: 'home', label: 'Home' },
-  { to: '/scores', icon: 'music_note', label: 'Scores' },
-  { to: '/upload', icon: 'upload', label: 'Upload' },
-];
-
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-secondary/95 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-md items-center justify-around">
-        {navItems.map(({ to, icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              cn(
-                'flex flex-1 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors',
-                isActive
-                  ? 'text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <div
-                  className={cn(
-                    'rounded-lg p-1.5 transition-all',
-                    isActive && 'bg-primary/10 glow-primary'
-                  )}
-                >
-                  <Icon name={icon} size={24} />
-                </div>
-                <span>{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-      </div>
+    <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-3">
+      {/* Home - Circle button */}
+      <NavLink
+        to="/home"
+        className={({ isActive }) =>
+          cn(
+            'flex h-11 w-11 items-center justify-center rounded-full transition-all',
+            'bg-secondary/90 backdrop-blur-md',
+            isActive
+              ? 'text-primary ring-2 ring-primary/50'
+              : 'text-foreground hover:text-primary'
+          )
+        }
+      >
+        <Icon name="home" size={24} />
+      </NavLink>
+
+      {/* Scores - Wide pill button (center/main) */}
+      <NavLink
+        to="/scores"
+        className={({ isActive }) =>
+          cn(
+            'flex h-11 items-center gap-2 rounded-full px-8 transition-all',
+            'bg-secondary/90 backdrop-blur-md',
+            isActive
+              ? 'text-primary ring-2 ring-primary/50'
+              : 'text-foreground hover:text-primary'
+          )
+        }
+      >
+        <Icon name="star" size={24} />
+        <span className="font-medium">Scores</span>
+      </NavLink>
+
+      {/* Upload - Circle button */}
+      <NavLink
+        to="/upload"
+        className={({ isActive }) =>
+          cn(
+            'flex h-11 w-11 items-center justify-center rounded-full transition-all',
+            'bg-secondary/90 backdrop-blur-md',
+            isActive
+              ? 'text-primary ring-2 ring-primary/50'
+              : 'text-foreground hover:text-primary'
+          )
+        }
+      >
+        <Icon name="upload" size={24} />
+      </NavLink>
     </nav>
   );
 }
