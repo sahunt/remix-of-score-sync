@@ -30,9 +30,9 @@ export default function Home() {
       />
       
       {/* Content overlay */}
-      <div className="relative z-10 flex flex-col min-h-screen px-4">
+      <div className="relative z-10 flex flex-col min-h-screen px-[28px]">
         {/* Header section */}
-        <header className="pt-6 pb-4">
+        <header className="pt-[75px] pb-4">
           {/* Avatar and greeting */}
           <div className="flex items-start gap-2 mb-4">
             <UserAvatar size={40} className="mt-1" />
