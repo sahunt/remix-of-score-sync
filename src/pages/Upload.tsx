@@ -2,11 +2,11 @@ import { useState, useCallback } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/hooks/useAuth';
 import { useLastUpload } from '@/hooks/useLastUpload';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, FileUp, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
@@ -119,7 +119,7 @@ export default function UploadPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5 text-primary" />
+              <Icon name="upload" size={20} className="text-primary" />
               Import Scores
             </CardTitle>
             <CardDescription>
@@ -139,7 +139,7 @@ export default function UploadPage() {
                     : 'border-border hover:border-primary/50 hover:bg-secondary/20'
                 )}
               >
-                <FileUp className="mb-3 h-10 w-10 text-muted-foreground" />
+                <Icon name="upload_file" size={40} className="mb-3 text-muted-foreground" />
                 <p className="mb-1 font-medium">Drop your file here</p>
                 <p className="mb-4 text-sm text-muted-foreground">or click to browse</p>
                 <Button variant="outline" asChild>
@@ -158,7 +158,7 @@ export default function UploadPage() {
 
             {state === 'uploading' && (
               <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="mb-3 h-10 w-10 animate-spin text-primary" />
+                <Icon name="sync" size={40} className="mb-3 animate-spin text-primary" />
                 <p className="font-medium">Processing your file...</p>
                 <p className="text-sm text-muted-foreground">This may take a moment</p>
               </div>
@@ -167,7 +167,7 @@ export default function UploadPage() {
             {state === 'success' && result && (
               <div className="flex flex-col items-center py-8">
                 <div className="mb-4 rounded-full bg-success/10 p-4">
-                  <CheckCircle className="h-10 w-10 text-success" />
+                  <Icon name="check_circle" size={40} className="text-success" />
                 </div>
                 <p className="mb-2 font-medium">Upload Successful!</p>
                 <div className="mb-4 grid grid-cols-3 gap-4 text-center text-sm">
@@ -191,7 +191,7 @@ export default function UploadPage() {
             {state === 'error' && (
               <div className="flex flex-col items-center py-8">
                 <div className="mb-4 rounded-full bg-destructive/10 p-4">
-                  <XCircle className="h-10 w-10 text-destructive" />
+                  <Icon name="cancel" size={40} className="text-destructive" />
                 </div>
                 <p className="mb-2 font-medium">Upload Failed</p>
                 {errorMessage && (
