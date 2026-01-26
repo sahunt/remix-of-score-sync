@@ -22,6 +22,13 @@ export default function Home() {
         style={{ backgroundImage: `url(${rainbowBg})` }}
       />
       
+      {/* Character image - fixed, positioned top-right */}
+      <img
+        src={characterImage}
+        alt="Character"
+        className="fixed top-0 right-0 w-[280px] h-auto object-contain pointer-events-none z-[5]"
+      />
+      
       {/* Content overlay */}
       <div className="relative z-10 flex flex-col min-h-screen px-4">
         {/* Header section */}
