@@ -26,7 +26,7 @@ export default function Home() {
       <img
         src={characterImage}
         alt="Character"
-        className="fixed top-0 right-0 w-[140px] h-auto object-contain pointer-events-none z-[5]"
+        className="fixed top-0 right-0 w-[200px] h-auto object-contain pointer-events-none z-[5]"
       />
       
       {/* Content overlay */}
