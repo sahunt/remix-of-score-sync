@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-4 left-4 right-4 z-50 flex items-center justify-between">
+    <nav className="fixed bottom-[46px] left-[28px] right-[28px] z-50 flex items-center justify-between">
       {/* Home - Circle button, anchored left */}
       <NavLink
         to="/home"
