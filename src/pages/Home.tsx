@@ -7,7 +7,7 @@ import { GoalCard } from '@/components/home/GoalCard';
 import rainbowBg from '@/assets/rainbow-bg.png';
 
 export default function Home() {
-  const { signOut } = useAuth();
+  const { } = useAuth();
   const { username, loading: usernameLoading } = useUsername();
 
   const handleSearch = (query: string) => {
@@ -28,22 +28,11 @@ export default function Home() {
         {/* Header section */}
         <header className="px-4 pt-6 pb-4">
           {/* Top bar with avatar and greeting */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <UserAvatar size={48} />
-              <div className="bg-card/80 backdrop-blur-sm rounded-full px-4 py-2 border border-border/50">
-                <span className="text-foreground font-medium">
-                  Hi {usernameLoading ? '...' : username}
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={signOut}
-              className="p-2 rounded-full bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card transition-colors"
-              aria-label="Sign out"
-            >
-              <span className="material-symbols-rounded text-foreground text-xl">logout</span>
-            </button>
+          <div className="flex items-center gap-3 mb-6">
+            <UserAvatar size={44} />
+            <span className="text-foreground font-medium text-lg text-shadow-greeting">
+              Hi{usernameLoading ? '...' : username}
+            </span>
           </div>
 
           {/* Search bar */}
@@ -57,32 +46,30 @@ export default function Home() {
 
         {/* Goals section */}
         <section className="px-4 pb-24">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Your Goals</h2>
-            <button className="text-sm text-primary font-medium hover:underline">
-              View All
-            </button>
-          </div>
-          
           <div className="space-y-3">
-            {/* Placeholder goal cards */}
             <GoalCard
-              title="Get AAA on Paranoia"
-              subtitle="ESP Lv.18"
-              progress={75}
-              iconName="stars"
-              variant="accent"
+              title="Paranoia"
+              difficulty="ESP"
+              level={18}
+              type="pfc"
+              current={12}
+              total={33}
             />
             <GoalCard
-              title="Clear 10 songs today"
-              subtitle="7/10 completed"
-              progress={70}
-              iconName="check_circle"
+              title="MAX 300"
+              difficulty="CSP"
+              level={17}
+              type="mfc"
+              current={8}
+              total={25}
             />
             <GoalCard
-              title="Improve MAX combo"
-              subtitle="Current best: 342"
-              iconName="trending_up"
+              title="Pluto Relinquish"
+              difficulty="ESP"
+              level={16}
+              type="gfc"
+              current={21}
+              total={30}
             />
           </div>
         </section>

@@ -124,6 +124,24 @@
     box-shadow: var(--shadow-card);
   }
 
+  /* Text shadow for header greeting */
+  .text-shadow-greeting {
+    text-shadow: 0 2px 8px hsl(0 0% 0% / 0.4);
+  }
+
+  /* Goal badge color variants */
+  .badge-pfc {
+    @apply bg-yellow-400 text-yellow-950;
+  }
+  
+  .badge-mfc {
+    @apply bg-pink-400 text-pink-950;
+  }
+  
+  .badge-gfc {
+    @apply bg-green-400 text-green-950;
+  }
+
   /* Difficulty color utilities - DDR specific */
   .difficulty-beginner {
     @apply text-cyan-400;
