@@ -16,17 +16,15 @@ export function SearchBar({ placeholder = 'Search by song title...', onSearch }:
 
   return (
     <form onSubmit={handleSubmit} className="w-full">
-      <div className="relative">
+      <div className="flex items-center justify-between px-[23px] py-[16px] bg-secondary rounded-[10px]">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={placeholder}
-          className="w-full h-12 pl-4 pr-12 bg-secondary rounded-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+          className="flex-1 bg-transparent text-white text-[13px] font-normal leading-[21px] tracking-[0.3px] placeholder:text-white/60 focus:outline-none"
         />
-        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
-          <Icon name="search" size={20} className="text-muted-foreground" />
-        </div>
+        <Icon name="search" size={20} className="text-white ml-3 flex-shrink-0" />
       </div>
     </form>
   );
