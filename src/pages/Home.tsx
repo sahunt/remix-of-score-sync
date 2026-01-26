@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/hooks/useAuth';
 import { useLastUpload } from '@/hooks/useLastUpload';
 import { supabase } from '@/integrations/supabase/client';
-import { Upload, ListMusic, Music2, LogOut, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 export default function Home() {
   const { user, signOut } = useAuth();
@@ -37,10 +37,10 @@ export default function Home() {
   }, [user]);
 
   const getStatusIcon = () => {
-    if (!lastUpload) return <Clock className="h-5 w-5 text-muted-foreground" />;
-    if (lastUpload.parse_status === 'parsed') return <CheckCircle className="h-5 w-5 text-success" />;
-    if (lastUpload.parse_status === 'failed') return <XCircle className="h-5 w-5 text-destructive" />;
-    return <Clock className="h-5 w-5 text-warning animate-pulse" />;
+    if (!lastUpload) return <Icon name="schedule" size={20} className="text-muted-foreground" />;
+    if (lastUpload.parse_status === 'parsed') return <Icon name="check_circle" size={20} className="text-success" />;
+    if (lastUpload.parse_status === 'failed') return <Icon name="cancel" size={20} className="text-destructive" />;
+    return <Icon name="schedule" size={20} className="text-warning animate-pulse" />;
   };
 
   const getStatusText = () => {
@@ -63,7 +63,7 @@ export default function Home() {
         description={`Welcome back${user?.email ? ', ' + user.email.split('@')[0] : ''}`}
         actions={
           <Button variant="ghost" size="icon" onClick={signOut}>
-            <LogOut className="h-4 w-4" />
+            <Icon name="logout" size={20} />
           </Button>
         }
       />
@@ -74,7 +74,7 @@ export default function Home() {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-primary/10 p-2">
-                <Music2 className="h-6 w-6 text-primary" />
+                <Icon name="music_note" size={24} className="text-primary" />
               </div>
               <div>
                 <CardTitle className="text-lg">DDR Score Tracker</CardTitle>
@@ -109,7 +109,7 @@ export default function Home() {
             <Card className="h-full transition-colors hover:border-primary/50 hover:bg-secondary/30">
               <CardContent className="flex items-center gap-4 p-4">
                 <div className="rounded-lg bg-primary/10 p-3">
-                  <Upload className="h-5 w-5 text-primary" />
+                  <Icon name="upload" size={20} className="text-primary" />
                 </div>
                 <div>
                   <p className="font-medium">Upload Scores</p>
@@ -123,7 +123,7 @@ export default function Home() {
             <Card className="h-full transition-colors hover:border-primary/50 hover:bg-secondary/30">
               <CardContent className="flex items-center gap-4 p-4">
                 <div className="rounded-lg bg-accent/10 p-3">
-                  <ListMusic className="h-5 w-5 text-accent" />
+                  <Icon name="music_note" size={20} className="text-accent" />
                 </div>
                 <div>
                   <p className="font-medium">View Scores</p>

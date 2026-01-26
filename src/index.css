@@ -3,73 +3,78 @@
 @tailwind utilities;
 
 /* DDR Score Tracker Design System
-   Dark arcade aesthetic with neon accents */
+   Dark arcade aesthetic with neon accents
+   Based on Figma mockup */
 
 @layer base {
   :root {
-    /* Core dark theme - no light mode needed */
-    --background: 220 20% 8%;
-    --foreground: 210 20% 95%;
+    /* Core dark theme - extracted from mockup */
+    --background: 230 18% 15%; /* #262937 main content bg */
+    --foreground: 220 15% 90%; /* #E3E3E3 text */
 
-    --card: 220 18% 12%;
-    --card-foreground: 210 20% 95%;
+    --card: 230 20% 18%; /* Slightly lighter card bg */
+    --card-foreground: 220 15% 90%;
 
-    --popover: 220 18% 12%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 230 18% 15%;
+    --popover-foreground: 220 15% 90%;
 
-    /* Cyan/teal accent - DDR inspired */
-    --primary: 185 75% 55%;
-    --primary-foreground: 220 20% 8%;
+    /* Primary blue accent - from mockup buttons #6692FA */
+    --primary: 222 94% 69%;
+    --primary-foreground: 230 40% 10%;
 
-    --secondary: 220 15% 18%;
-    --secondary-foreground: 210 20% 90%;
+    /* Secondary - muted button bg #3B3F51 */
+    --secondary: 226 16% 27%;
+    --secondary-foreground: 220 15% 90%;
 
-    --muted: 220 15% 15%;
-    --muted-foreground: 215 15% 55%;
+    /* Muted - subdued backgrounds */
+    --muted: 226 16% 22%;
+    --muted-foreground: 220 10% 55%;
 
-    /* Magenta accent for highlights */
-    --accent: 320 80% 60%;
-    --accent-foreground: 220 20% 8%;
+    /* Accent - light blue chips #B8CDFF */
+    --accent: 222 100% 86%;
+    --accent-foreground: 230 40% 10%;
 
+    /* Destructive */
     --destructive: 0 75% 55%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 20%;
-    --input: 220 15% 18%;
-    --ring: 185 75% 55%;
+    /* Borders and inputs */
+    --border: 226 16% 30%;
+    --input: 226 16% 22%;
+    --ring: 222 94% 69%;
 
-    --radius: 0.75rem;
+    --radius: 0.625rem; /* 10px based on mockup */
 
-    /* Custom tokens */
+    /* Custom semantic tokens */
     --success: 145 70% 45%;
     --warning: 40 90% 55%;
     --info: 200 80% 55%;
     
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(185 75% 55%) 0%, hsl(200 80% 50%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(320 80% 60%) 0%, hsl(280 70% 55%) 100%);
-    --gradient-surface: linear-gradient(180deg, hsl(220 18% 14%) 0%, hsl(220 20% 10%) 100%);
+    /* Gradient backgrounds - from mockup */
+    --gradient-hero: linear-gradient(135deg, hsl(235 46% 30%) 0%, hsl(312 78% 55%) 50%, hsl(36 99% 63%) 75%, hsl(52 98% 55%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(235 46% 30%) 0%, hsl(312 78% 55%) 50%, hsl(36 99% 63%) 100%);
+    --gradient-surface: linear-gradient(180deg, hsl(230 18% 18%) 0%, hsl(230 18% 14%) 100%);
     
     /* Shadows */
-    --shadow-glow-primary: 0 0 20px hsl(185 75% 55% / 0.3);
-    --shadow-glow-accent: 0 0 20px hsl(320 80% 60% / 0.3);
-    --shadow-card: 0 4px 24px hsl(220 30% 5% / 0.5);
+    --shadow-glow-primary: 0 0 20px hsl(222 94% 69% / 0.3);
+    --shadow-glow-accent: 0 0 20px hsl(312 78% 55% / 0.3);
+    --shadow-card: 0 4px 24px hsl(230 30% 5% / 0.5);
 
     /* Sidebar - matching dark theme */
-    --sidebar-background: 220 20% 6%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 185 75% 55%;
-    --sidebar-primary-foreground: 220 20% 8%;
-    --sidebar-accent: 220 15% 15%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 220 15% 18%;
-    --sidebar-ring: 185 75% 55%;
+    --sidebar-background: 230 18% 12%;
+    --sidebar-foreground: 220 15% 90%;
+    --sidebar-primary: 222 94% 69%;
+    --sidebar-primary-foreground: 230 40% 10%;
+    --sidebar-accent: 226 16% 22%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 226 16% 25%;
+    --sidebar-ring: 222 94% 69%;
   }
 
-  /* Dark mode is the default - no class toggle needed */
+  /* Dark mode is the default */
   .dark {
-    --background: 220 20% 8%;
-    --foreground: 210 20% 95%;
+    --background: 230 18% 15%;
+    --foreground: 220 15% 90%;
   }
 }
 
@@ -82,15 +87,24 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* Material Symbols configuration */
+  .material-symbols-rounded {
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 24;
+  }
 }
 
 @layer utilities {
-  .gradient-primary {
-    background: var(--gradient-primary);
+  .gradient-hero {
+    background: var(--gradient-hero);
   }
   
-  .gradient-accent {
-    background: var(--gradient-accent);
+  .gradient-card {
+    background: var(--gradient-card);
   }
   
   .gradient-surface {
@@ -109,7 +123,7 @@
     box-shadow: var(--shadow-card);
   }
 
-  /* Difficulty color utilities */
+  /* Difficulty color utilities - DDR specific */
   .difficulty-beginner {
     @apply text-cyan-400;
   }
@@ -138,14 +152,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(220 20% 10%);
+  background: hsl(230 18% 12%);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(220 15% 25%);
+  background: hsl(226 16% 30%);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(220 15% 35%);
+  background: hsl(226 16% 40%);
 }

@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Music2 } from 'lucide-react';
+import { Icon } from '@/components/ui/Icon';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -94,14 +94,13 @@ export default function Scores() {
 
       <div className="mx-auto w-full max-w-2xl p-4">
         {/* Search */}
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="mb-4">
           <Input
             type="text"
             placeholder="Search by song or artist..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            iconLeft="search"
           />
         </div>
 
@@ -113,7 +112,7 @@ export default function Scores() {
         ) : filteredScores.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <Music2 className="mb-3 h-10 w-10 text-muted-foreground" />
+              <Icon name="music_note" size={40} className="mb-3 text-muted-foreground" />
               <p className="font-medium">No scores found</p>
               <p className="text-sm text-muted-foreground">
                 {search ? 'Try a different search term' : 'Upload a score file to get started'}
