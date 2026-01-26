@@ -30,7 +30,13 @@ export default function Home() {
       />
       
       {/* Content overlay */}
-      <div className="relative z-10 flex flex-col min-h-screen px-[28px]">
+      <div 
+        className="relative z-10 flex flex-col min-h-screen px-[28px]"
+        style={{
+          maskImage: 'linear-gradient(to bottom, black 0%, black 75%, transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 75%, transparent 100%)'
+        }}
+      >
         {/* Header section */}
         <header className="pt-[75px] pb-4">
           {/* Avatar and greeting */}
