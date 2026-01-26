@@ -41,7 +41,7 @@ export default function Home() {
           {/* Two-line greeting */}
           <div className="mb-6">
             <span className="text-foreground text-2xl">Hi </span>
-            <span className="text-foreground text-2xl font-bold">
+            <span className="text-white text-2xl font-bold text-shadow-greeting">
               {usernameLoading ? '...' : username}
             </span>
           </div>
