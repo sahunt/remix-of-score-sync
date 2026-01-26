@@ -6,7 +6,7 @@ interface SearchBarProps {
   onSearch?: (query: string) => void;
 }
 
-export function SearchBar({ placeholder = 'Search goals or songs...', onSearch }: SearchBarProps) {
+export function SearchBar({ placeholder = 'Search by song title...', onSearch }: SearchBarProps) {
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -25,7 +25,7 @@ export function SearchBar({ placeholder = 'Search goals or songs...', onSearch }
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={placeholder}
-          className="w-full h-12 pl-12 pr-4 bg-secondary/80 backdrop-blur-sm border border-border/50 rounded-full text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all"
+          className="w-full h-12 pl-12 pr-4 bg-secondary rounded-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
         />
       </div>
     </form>
