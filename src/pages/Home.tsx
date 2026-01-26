@@ -14,9 +14,9 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen">
-      {/* Rainbow background */}
+      {/* Rainbow background - fixed */}
       <div 
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${rainbowBg})` }}
       />
       
