@@ -63,7 +63,7 @@ export default function Home() {
         </header>
 
         {/* Goals section */}
-        <section className="flex-1 flex flex-col gap-[3px] pb-24 mt-[3px]">
+        <section className="flex flex-col gap-[3px] mt-[3px]">
           <GoalCard
             title="PFC all 14's"
             type="pfc"
