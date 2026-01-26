@@ -1,4 +1,5 @@
 import { useUsername } from '@/hooks/useUsername';
+import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
 import { GoalCard } from '@/components/home/GoalCard';
