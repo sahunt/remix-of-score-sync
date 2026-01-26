@@ -62,9 +62,9 @@ export default function Home() {
           
           <div className="space-y-3">
             {/* Placeholder goal cards */}
-            <GoalCard title="Get AAA on Paranoia" subtitle="ESP Lv.18" progress={75} iconName="stars" variant="accent" />
-            <GoalCard title="Clear 10 songs today" subtitle="7/10 completed" progress={70} iconName="check_circle" />
-            <GoalCard title="Improve MAX combo" subtitle="Current best: 342" iconName="trending_up" />
+            <GoalCard title="Get AAA on Paranoia" type="pfc" current={3} total={4} />
+            <GoalCard title="Clear 10 songs today" type="mfc" current={7} total={10} />
+            <GoalCard title="Improve MAX combo" type="gfc" current={5} total={8} />
           </div>
         </section>
       </div>
