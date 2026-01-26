@@ -129,6 +129,11 @@
     text-shadow: 0 4px 11.4px rgba(33, 0, 51, 0.80);
   }
 
+  /* Global card style */
+  .card-base {
+    @apply flex flex-col items-start gap-[10px] rounded-[10px] bg-[#3B3F51] px-[23px] py-[24px];
+  }
+
   /* Goal badge color variants */
   .badge-pfc {
     @apply bg-yellow-400 text-yellow-950;

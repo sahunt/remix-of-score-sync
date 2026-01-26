@@ -22,15 +22,15 @@ export function GoalCard({
   const progressPercent = total > 0 ? (current / total) * 100 : 0;
   
   return (
-    <div className="rounded-[10px] bg-secondary p-4">
+    <div className="card-base w-full">
       {/* Badge */}
-      <GoalBadge type={type} className="mb-2" />
+      <GoalBadge type={type} />
       
       {/* Title */}
-      <h3 className="font-semibold text-foreground text-lg mb-1">{title}</h3>
+      <h3 className="font-semibold text-foreground text-lg">{title}</h3>
       
       {/* Progress text */}
-      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">
+      <p className="text-xs text-muted-foreground uppercase tracking-wide">
         {current}/{total} completed
       </p>
       
