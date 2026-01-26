@@ -7,6 +7,7 @@ import rainbowBg from '@/assets/rainbow-bg.png';
 
 export default function Home() {
   const { username, loading: usernameLoading } = useUsername();
+  const characterImage = useSessionCharacter();
 
   const handleSearch = (query: string) => {
     // TODO: Implement search functionality
