@@ -29,14 +29,20 @@ export default function Home() {
         className="fixed top-0 right-0 w-[200px] h-auto object-contain pointer-events-none z-[5]"
       />
       
-      {/* Content overlay */}
+      {/* Fixed fade overlay at bottom - reveals rainbow background */}
       <div 
-        className="relative z-10 flex flex-col min-h-screen px-[28px]"
-        style={{
-          maskImage: 'linear-gradient(to bottom, black 0%, black 75%, transparent 100%)',
-          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 75%, transparent 100%)'
+        className="fixed bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[15]"
+        style={{ 
+          backgroundImage: `url(${rainbowBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center bottom',
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 100%)'
         }}
-      >
+      />
+      
+      {/* Content overlay */}
+      <div className="relative z-10 flex flex-col min-h-screen px-[28px]">
         {/* Header section */}
         <header className="pt-[75px] pb-4">
           {/* Avatar and greeting */}
