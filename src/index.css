@@ -126,7 +126,7 @@
 
   /* Text shadow for header greeting */
   .text-shadow-greeting {
-    text-shadow: 0 2px 8px hsl(0 0% 0% / 0.4);
+    text-shadow: 0 4px 11.4px rgba(33, 0, 51, 0.80);
   }
 
   /* Goal badge color variants */
