@@ -1,72 +1,77 @@
-import { useAuth } from '@/hooks/useAuth';
 import { useUsername } from '@/hooks/useUsername';
+import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { UserAvatar } from '@/components/home/UserAvatar';
-import { CharacterEmoji } from '@/components/home/CharacterEmoji';
 import { SearchBar } from '@/components/home/SearchBar';
 import { GoalCard } from '@/components/home/GoalCard';
 import rainbowBg from '@/assets/rainbow-bg.png';
+
 export default function Home() {
-  const {
-    signOut
-  } = useAuth();
-  const {
-    username,
-    loading: usernameLoading
-  } = useUsername();
+  const { username, loading: usernameLoading } = useUsername();
+  const characterImage = useSessionCharacter();
+
   const handleSearch = (query: string) => {
     // TODO: Implement search functionality
     console.log('Search:', query);
   };
-  return <div className="relative min-h-screen">
-      {/* Rainbow background */}
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{
-      backgroundImage: `url(${rainbowBg})`
-    }} />
+
+  return (
+    <div className="relative min-h-screen">
+      {/* Rainbow background - fixed */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${rainbowBg})` }}
+      />
+      
+      {/* Character image - fixed, positioned top-right */}
+      <img
+        src={characterImage}
+        alt="Character"
+        className="fixed top-0 right-0 w-[200px] h-auto object-contain pointer-events-none z-[5]"
+      />
       
       {/* Content overlay */}
-      <div className="relative z-10 flex flex-col min-h-screen">
+      <div className="relative z-10 flex flex-col min-h-screen px-4">
         {/* Header section */}
-        <header className="px-4 pt-6 pb-4">
-          {/* Top bar with avatar and greeting */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <UserAvatar size={48} />
-              <div className="bg-card/80 backdrop-blur-sm rounded-full px-4 py-2 border border-border/50">
-                <span className="text-foreground font-medium pt-[75px]">
-                  Hi {usernameLoading ? '...' : username}
-                </span>
-              </div>
-            </div>
-            <button onClick={signOut} className="p-2 rounded-full bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card transition-colors" aria-label="Sign out">
-              <span className="material-symbols-rounded text-foreground text-xl">logout</span>
-            </button>
+        <header className="pt-6 pb-4">
+          {/* Avatar and greeting */}
+          <div className="flex items-start gap-2 mb-4">
+            <UserAvatar size={40} className="mt-1" />
+          </div>
+          
+          {/* Two-line greeting */}
+          <div className="mb-6">
+            <span className="text-foreground text-2xl">Hi </span>
+            <span className="text-white text-2xl font-bold text-shadow-greeting">
+              {usernameLoading ? '...' : username}
+            </span>
           </div>
 
           {/* Search bar */}
           <SearchBar onSearch={handleSearch} />
         </header>
 
-        {/* Character section */}
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-          <CharacterEmoji size={180} className="drop-shadow-2xl" />
-        </div>
-
         {/* Goals section */}
-        <section className="px-4 pb-24">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Your Goals</h2>
-            <button className="text-sm text-primary font-medium hover:underline">
-              View All
-            </button>
-          </div>
-          
-          <div className="space-y-3">
-            {/* Placeholder goal cards */}
-            <GoalCard title="Get AAA on Paranoia" type="pfc" current={3} total={4} />
-            <GoalCard title="Clear 10 songs today" type="mfc" current={7} total={10} />
-            <GoalCard title="Improve MAX combo" type="gfc" current={5} total={8} />
-          </div>
+        <section className="flex-1 space-y-3 pb-24 mt-4">
+          <GoalCard
+            title="PFC all 14's"
+            type="pfc"
+            current={123}
+            total={321}
+          />
+          <GoalCard
+            title="MFC 10 songs"
+            type="mfc"
+            current={2}
+            total={10}
+          />
+          <GoalCard
+            title="GFC 2 18's"
+            type="gfc"
+            current={1}
+            total={2}
+          />
         </section>
       </div>
-    </div>;
+    </div>
+  );
 }
