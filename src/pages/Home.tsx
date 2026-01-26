@@ -1,13 +1,16 @@
 import { useUsername } from '@/hooks/useUsername';
 import { useSessionCharacter } from '@/hooks/useSessionCharacter';
+import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
 import { GoalCard } from '@/components/home/GoalCard';
+import { cn } from '@/lib/utils';
 import rainbowBg from '@/assets/rainbow-bg.png';
 
 export default function Home() {
   const { username, loading: usernameLoading } = useUsername();
   const characterImage = useSessionCharacter();
+  const { isVisible } = useScrollDirection({ threshold: 15 });
 
   const handleSearch = (query: string) => {
     // TODO: Implement search functionality
@@ -29,9 +32,13 @@ export default function Home() {
         className="fixed top-0 right-0 w-[200px] h-auto object-contain pointer-events-none z-[5]"
       />
       
-      {/* Fixed fade overlay at bottom - reveals rainbow background */}
+      {/* Fixed fade overlay at bottom - reveals rainbow background, syncs with nav */}
       <div 
-        className="fixed bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[15]"
+        className={cn(
+          "fixed bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[15]",
+          "transition-transform duration-300 ease-out",
+          isVisible ? "translate-y-0" : "translate-y-[120px]"
+        )}
         style={{ 
           backgroundImage: `url(${rainbowBg})`,
           backgroundSize: 'cover',
