@@ -149,7 +149,7 @@ export function SongCard({
           <div className="flex items-center gap-1">
             {score !== null ? (
               <>
-                <span className="text-lg font-bold text-white tabular-nums">
+                <span className="text-[16px] font-bold text-white leading-normal tabular-nums">
                   {score.toLocaleString()}
                 </span>
                 {rank && (
