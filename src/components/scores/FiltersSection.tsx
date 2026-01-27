@@ -14,7 +14,7 @@ interface FiltersSectionProps {
 export function FiltersSection({ filters, onRemoveFilter, onAddFilter }: FiltersSectionProps) {
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-medium text-foreground">My filters</h2>
+      <h2 className="text-[14px] font-semibold text-white">My filters</h2>
       <div className="flex flex-wrap gap-2">
         {filters.map((filter) => (
           <FilterChip
