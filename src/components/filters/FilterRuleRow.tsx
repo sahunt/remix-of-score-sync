@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import { FlareSelector } from './FlareSelector';
 import { LampSelector } from './LampSelector';
+import { LevelSelector } from './LevelSelector';
 import {
   FILTER_TYPES,
   OPERATORS_BY_TYPE,
@@ -127,43 +128,11 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
       }
 
       case 'level':
-        if (isBetween) {
-          const [min, max] = Array.isArray(rule.value) ? rule.value : [1, 19];
-          return (
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-2">
-                <label className="text-sm text-muted-foreground">Min Level</label>
-                <input
-                  type="number"
-                  value={min}
-                  onChange={(e) => handleValueChange([parseInt(e.target.value) || 1, max])}
-                  className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white outline-none"
-                  min={1}
-                  max={19}
-                />
-              </div>
-              <div className="flex-1 space-y-2">
-                <label className="text-sm text-muted-foreground">Max Level</label>
-                <input
-                  type="number"
-                  value={max}
-                  onChange={(e) => handleValueChange([min, parseInt(e.target.value) || 19])}
-                  className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white outline-none"
-                  min={1}
-                  max={19}
-                />
-              </div>
-            </div>
-          );
-        }
         return (
-          <input
-            type="number"
-            value={typeof rule.value === 'number' ? rule.value : 1}
-            onChange={(e) => handleValueChange(parseInt(e.target.value) || 1)}
-            className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white outline-none text-center"
-            min={1}
-            max={19}
+          <LevelSelector
+            value={rule.value as number | [number, number]}
+            onChange={(val) => handleValueChange(val)}
+            isBetween={isBetween}
           />
         );
 
