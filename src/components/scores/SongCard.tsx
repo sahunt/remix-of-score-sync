@@ -109,8 +109,8 @@ export function SongCard({
         style={getHaloBarStyle(halo)}
       />
 
-      {/* Main content */}
-      <div className="flex items-center gap-3 px-3 pt-[8px] pb-3">
+      {/* Main content - pt-[12px] accounts for 4px halo bar to center content in dark area */}
+      <div className="flex items-center gap-3 px-3 pt-3 pb-3">
         {/* Album art with difficulty bar */}
         <div className="w-8 h-8 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
           {/* Difficulty color bar on left edge */}
