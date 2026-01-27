@@ -1,24 +1,30 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { cn } from '@/lib/utils';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 
 export function BottomNav() {
   const { isVisible } = useScrollDirection({ threshold: 15 });
+  const location = useLocation();
+  
+  // Home page has its own rainbow fade effect, so skip the dark fade there
+  const isHomePage = location.pathname === '/home' || location.pathname === '/';
 
   return (
     <>
-      {/* Bottom fade overlay - syncs with nav visibility */}
-      <div 
-        className={cn(
-          "fixed bottom-0 left-0 right-0 h-[160px] pointer-events-none z-40",
-          "transition-transform duration-300 ease-out",
-          isVisible ? "translate-y-0" : "translate-y-[120px]"
-        )}
-        style={{ 
-          background: 'linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background)) 40%, transparent 100%)'
-        }}
-      />
+      {/* Bottom fade overlay - syncs with nav visibility (skip on Home page which has its own) */}
+      {!isHomePage && (
+        <div 
+          className={cn(
+            "fixed bottom-0 left-0 right-0 h-[160px] pointer-events-none z-40",
+            "transition-transform duration-300 ease-out",
+            isVisible ? "translate-y-0" : "translate-y-[120px]"
+          )}
+          style={{ 
+            background: 'linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background)) 40%, transparent 100%)'
+          }}
+        />
+      )}
 
       {/* Navigation */}
       <nav 
