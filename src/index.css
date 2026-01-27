@@ -50,6 +50,13 @@
     --warning: 40 90% 55%;
     --info: 200 80% 55%;
     
+    /* DDR Difficulty colors - from Figma mockup */
+    --difficulty-beginner: 220 35% 82%; /* Light blue/periwinkle #C5D0E6 */
+    --difficulty-basic: 43 87% 63%; /* Yellow/gold #F2C94C */
+    --difficulty-difficult: 0 83% 69%; /* Red/coral #F26C6C */
+    --difficulty-expert: 160 52% 67%; /* Green/mint #7BDCB5 */
+    --difficulty-challenge: 270 50% 70%; /* Purple/violet #A78BDA */
+    
     /* Gradient backgrounds - from mockup */
     --gradient-hero: linear-gradient(135deg, hsl(235 46% 30%) 0%, hsl(312 78% 55%) 50%, hsl(36 99% 63%) 75%, hsl(52 98% 55%) 100%);
     --gradient-card: linear-gradient(180deg, hsl(235 46% 30%) 0%, hsl(312 78% 55%) 50%, hsl(36 99% 63%) 100%);
@@ -149,23 +156,28 @@
 
   /* Difficulty color utilities - DDR specific */
   .difficulty-beginner {
-    @apply text-cyan-400;
+    background-color: hsl(var(--difficulty-beginner));
+    color: hsl(230 40% 20%);
   }
   
   .difficulty-basic {
-    @apply text-orange-400;
+    background-color: hsl(var(--difficulty-basic));
+    color: hsl(230 40% 20%);
   }
   
   .difficulty-difficult {
-    @apply text-red-400;
+    background-color: hsl(var(--difficulty-difficult));
+    color: hsl(230 40% 20%);
   }
   
   .difficulty-expert {
-    @apply text-green-400;
+    background-color: hsl(var(--difficulty-expert));
+    color: hsl(230 40% 20%);
   }
   
   .difficulty-challenge {
-    @apply text-purple-400;
+    background-color: hsl(var(--difficulty-challenge));
+    color: hsl(230 40% 20%);
   }
 }
 
