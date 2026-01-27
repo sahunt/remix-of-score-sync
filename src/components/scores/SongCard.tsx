@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
-import { HaloSparkle, type HaloType } from '@/components/ui/HaloSparkle';
-
+import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
 interface SongCardProps {
   name: string;
   difficultyLevel: number | null;
@@ -15,26 +14,40 @@ interface SongCardProps {
 // Get halo bar background style
 function getHaloBarStyle(halo: string | null): React.CSSProperties {
   if (!halo) {
-    return { background: 'var(--halo-cleared)' };
+    return {
+      background: 'var(--halo-cleared)'
+    };
   }
-  
   const normalized = halo.toLowerCase();
-  
   switch (normalized) {
     case 'mfc':
-      return { background: 'var(--halo-mfc-gradient)' };
+      return {
+        background: 'var(--halo-mfc-gradient)'
+      };
     case 'pfc':
-      return { background: 'var(--halo-pfc)' };
+      return {
+        background: 'var(--halo-pfc)'
+      };
     case 'gfc':
-      return { background: 'var(--halo-gfc)' };
+      return {
+        background: 'var(--halo-gfc)'
+      };
     case 'fc':
-      return { background: 'var(--halo-fc)' };
+      return {
+        background: 'var(--halo-fc)'
+      };
     case 'life4':
-      return { background: 'var(--halo-life4)' };
+      return {
+        background: 'var(--halo-life4)'
+      };
     case 'failed':
-      return { background: 'var(--halo-failed)' };
+      return {
+        background: 'var(--halo-failed)'
+      };
     default:
-      return { background: 'var(--halo-cleared)' };
+      return {
+        background: 'var(--halo-cleared)'
+      };
   }
 }
 
@@ -51,7 +64,6 @@ function getDifficultyColorClass(level: number | null): string {
 // Convert numeric flare (1-9, 10 for EX) to FlareType
 function flareNumberToType(flare: number | null): FlareType | null {
   if (flare === null || flare === undefined) return null;
-  
   const mapping: Record<number, FlareType> = {
     0: 'ex',
     1: 'i',
@@ -63,26 +75,21 @@ function flareNumberToType(flare: number | null): FlareType | null {
     7: 'vii',
     8: 'viii',
     9: 'ix',
-    10: 'ex',
+    10: 'ex'
   };
-  
   return mapping[flare] ?? null;
 }
 
 // Normalize halo string from DB to HaloType
 function normalizeHaloType(halo: string | null): HaloType | null {
   if (!halo) return null;
-  
   const normalized = halo.toLowerCase();
   const validTypes: HaloType[] = ['fc', 'gfc', 'life4', 'mfc', 'pfc'];
-  
   if (validTypes.includes(normalized as HaloType)) {
     return normalized as HaloType;
   }
-  
   return null;
 }
-
 export function SongCard({
   name,
   difficultyLevel,
@@ -90,35 +97,21 @@ export function SongCard({
   rank,
   flare,
   halo,
-  className,
+  className
 }: SongCardProps) {
   const flareType = flareNumberToType(flare);
   const haloType = normalizeHaloType(halo);
   const difficultyClass = getDifficultyColorClass(difficultyLevel);
+  return <div className={cn('w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative', className)}>
+      {/* Top halo bar */}
+      <div className="h-1 w-full absolute top-0 left-0" style={getHaloBarStyle(halo)} />
 
-  return (
-    <div
-      className={cn(
-        'w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative',
-        className
-      )}
-    >
-      {/* Top halo bar - 4px with rounded ends */}
-      <div
-        className="h-1 w-full absolute top-0 left-0 rounded-sm"
-        style={getHaloBarStyle(halo)}
-      />
-
-      {/* Main content - pt-[12px] accounts for 4px halo bar to center content in dark area */}
-      <div className="flex items-center gap-3 px-3 pt-3 pb-3">
+      {/* Main content */}
+      <div className="flex items-center gap-3 px-3 py-[12px] pt-[12px] pb-[9px]">
         {/* Album art with difficulty bar */}
-        <div className="w-8 h-8 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
           {/* Difficulty color bar on left edge */}
-          {difficultyLevel && (
-            <div
-              className={cn('absolute left-0 top-0 w-[4px] h-full rounded-sm', difficultyClass)}
-            />
-          )}
+          {difficultyLevel && <div className={cn('absolute left-0 top-0 w-[4px] h-full', difficultyClass)} />}
           {/* Placeholder icon */}
           <span className="text-muted-foreground text-xs">♪</span>
         </div>
@@ -128,51 +121,43 @@ export function SongCard({
           {/* Title row */}
           <div className="flex items-center gap-2">
             <p className="text-[10px] font-medium text-[#96A7AF] uppercase tracking-[1px] leading-normal truncate">{name}</p>
-            {difficultyLevel && (
-              <div
-                className={cn(
-                  'flex-shrink-0 w-[14px] h-[14px] rounded-[4px] flex items-center justify-center',
-                  difficultyClass
-                )}
-              >
-                <span
-                  className="text-[10px] font-bold leading-[18px] text-[#000F33]"
-                  style={{ fontFeatureSettings: "'liga' off, 'clig' off" }}
-                >
+            {difficultyLevel && <div className={cn('flex-shrink-0 w-[14px] h-[14px] rounded-[4px] flex items-center justify-center', difficultyClass)}>
+                <span className="text-[10px] font-bold leading-[18px] text-[#000F33]" style={{
+              fontFeatureSettings: "'liga' off, 'clig' off"
+            }}>
                   {difficultyLevel}
                 </span>
-              </div>
-            )}
+              </div>}
           </div>
 
-          {/* Score row with flare badge */}
-          <div className="flex items-center gap-2">
-            {score !== null ? (
-              <>
+          {/* Score row */}
+          <div className="flex items-center gap-1">
+            {score !== null ? <>
                 <span className="text-[16px] font-bold text-white leading-normal tabular-nums">
                   {score.toLocaleString()}
                 </span>
-                {/* Flare chip - 20px height, beside score */}
-                {flareType && <FlareChip type={flareType} className="h-5" />}
-              </>
-            ) : (
-              <span className="text-sm text-muted-foreground">No score</span>
-            )}
+                {rank && <svg className="h-[18px] flex-shrink-0" style={{
+              fontFeatureSettings: "'liga' off, 'clig' off"
+            }}>
+                    <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="font-poppins text-[10px] font-bold" fill="#000F33" stroke="#FFF3D6" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" paintOrder="stroke fill">
+                      {rank}
+                    </text>
+                  </svg>}
+              </> : <span className="text-sm text-muted-foreground">No score</span>}
           </div>
         </div>
 
-        {/* Right side - sparkle + rank */}
-        <div className="flex-shrink-0 flex items-center gap-1.5">
-          {/* Halo sparkle */}
-          {haloType && <HaloSparkle type={haloType} />}
-          {/* Clear rank */}
-          {rank && (
-            <span className="text-[16px] font-bold text-white leading-normal">
-              {rank}
-            </span>
-          )}
+        {/* Badge area (right side) - fixed width for consistent alignment */}
+        <div className="flex-shrink-0 flex items-center gap-2 ml-5 w-[72px] justify-end">
+          {/* Flare chip placeholder (28px width) */}
+          <div className="w-[28px] flex justify-center">
+            {flareType && <FlareChip type={flareType} />}
+          </div>
+          {/* Halo chip placeholder (40px width) */}
+          <div className="w-[40px] flex justify-center">
+            {haloType && <HaloChip type={haloType} />}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    </div>;
 }
