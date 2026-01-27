@@ -239,7 +239,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
     <div className="animate-in slide-in-from-top-2 fade-in duration-200 rounded-[10px] bg-[#262937] p-4">
       {/* Description header row with delete button */}
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground italic">
+        <p className="text-sm text-muted-foreground">
           {generateRuleDescription(rule)}
         </p>
         {showRemove && (
