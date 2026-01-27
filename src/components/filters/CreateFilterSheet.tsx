@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/Icon';
 import { FilterRuleRow } from './FilterRuleRow';
@@ -46,6 +46,7 @@ export function CreateFilterSheet({
     },
   ]);
   const [matchMode, setMatchMode] = useState<'all' | 'any'>('all');
+  const addRuleButtonRef = useRef<HTMLButtonElement>(null);
 
   const { count } = useFilterResults(scores, rules, matchMode);
 
@@ -59,6 +60,10 @@ export function CreateFilterSheet({
         value: getDefaultValue('level'),
       },
     ]);
+    // Scroll to the add rule button after state updates
+    setTimeout(() => {
+      addRuleButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
   };
 
   const handleUpdateRule = (updatedRule: FilterRule) => {
@@ -137,6 +142,7 @@ export function CreateFilterSheet({
 
         {/* Add rule button - dashed outline */}
         <button
+          ref={addRuleButtonRef}
           onClick={handleAddRule}
           className="flex w-full items-center justify-center gap-2 rounded-[10px] border-2 border-dashed border-muted-foreground/30 h-[52px] text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
         >
