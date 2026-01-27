@@ -82,10 +82,10 @@ export function LevelSelector({ value, onChange, isBetween }: LevelSelectorProps
             key={level}
             onClick={() => onChange(level)}
             className={cn(
-              "h-[44px] rounded-full text-sm font-medium transition-all duration-200",
+              "aspect-square rounded-[10px] text-sm font-medium transition-all duration-200",
               isSelected
                 ? "bg-primary text-primary-foreground"
-                : "bg-transparent border border-muted-foreground/30 text-white hover:border-primary hover:text-primary"
+                : "bg-[#3B3F51] text-white hover:bg-[#454a5e]"
             )}
           >
             {level}
