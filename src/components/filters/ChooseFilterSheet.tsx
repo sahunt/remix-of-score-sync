@@ -90,12 +90,11 @@ export function ChooseFilterSheet({
           Apply
         </Button>
         <Button
-          variant="outline"
           className="flex-1"
           onClick={onCreateNew}
+          iconRight="add_circle"
         >
           Create
-          <Icon name="add_circle" size={20} className="ml-2" />
         </Button>
       </div>
     </div>
