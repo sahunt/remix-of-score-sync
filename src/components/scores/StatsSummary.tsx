@@ -28,7 +28,7 @@ export function StatsSummary({ stats, className }: StatsSummaryProps) {
       }}
     >
       {/* Stats row */}
-      <div className="relative flex items-center px-4 py-4">
+      <div className="relative flex items-start px-4 py-4">
         {stats.map((stat) => (
           <div 
             key={stat.label || stat.iconName} 
