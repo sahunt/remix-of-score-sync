@@ -37,7 +37,7 @@ export function FilterChip({ label, onRemove, isAddButton = false, onClick }: Fi
         <button
           type="button"
           onClick={onRemove}
-          className="hover:opacity-70 transition-opacity"
+          className="flex items-center justify-center hover:opacity-70 transition-opacity"
           aria-label={`Remove ${label} filter`}
         >
           <Icon name="close" size={16} />
