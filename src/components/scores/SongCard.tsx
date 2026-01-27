@@ -113,7 +113,7 @@ export function SongCard({
       {/* Main content - pt-3 pb-2.5 to center content in dark area below the 4px bar */}
       <div className="flex items-center gap-3 px-3 pt-3 pb-2.5">
         {/* Album art with difficulty bar */}
-        <div className="w-8 h-8 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
           {/* Difficulty color bar on left edge */}
           {difficultyLevel && <div className={cn('absolute left-0 top-0 w-[4px] h-full', difficultyClass)} />}
           {/* Placeholder icon */}
