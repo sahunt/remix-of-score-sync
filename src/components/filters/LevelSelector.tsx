@@ -3,8 +3,8 @@ import { cn } from '@/lib/utils';
 import { LevelPickerModal } from './LevelPickerModal';
 
 interface LevelSelectorProps {
-  value: number | [number, number];
-  onChange: (value: number | [number, number]) => void;
+  value: number[] | [number, number];
+  onChange: (value: number[] | [number, number]) => void;
   isBetween: boolean;
 }
 
@@ -15,7 +15,8 @@ export function LevelSelector({ value, onChange, isBetween }: LevelSelectorProps
   const [editingField, setEditingField] = useState<'min' | 'max' | null>(null);
 
   if (isBetween) {
-    const [min, max] = Array.isArray(value) ? value : [1, 19];
+    // For "is between", value is a tuple [min, max]
+    const [min, max] = Array.isArray(value) && value.length === 2 ? value : [1, 19];
 
     const handleOpenMinModal = () => {
       setEditingField('min');
@@ -69,18 +70,29 @@ export function LevelSelector({ value, onChange, isBetween }: LevelSelectorProps
     );
   }
 
-  // Non-between: show grid of all levels
-  const currentValue = typeof value === 'number' ? value : 1;
+  // Multi-select mode: value is an array of selected levels
+  const selectedLevels = Array.isArray(value) ? value : [value];
+
+  const toggleLevel = (level: number) => {
+    if (selectedLevels.includes(level)) {
+      // Don't allow deselecting the last item
+      if (selectedLevels.length > 1) {
+        onChange(selectedLevels.filter(l => l !== level));
+      }
+    } else {
+      onChange([...selectedLevels, level].sort((a, b) => a - b));
+    }
+  };
 
   return (
     <div className="grid grid-cols-7 gap-2">
       {LEVELS.map((level) => {
-        const isSelected = level === currentValue;
+        const isSelected = selectedLevels.includes(level);
         
         return (
           <button
             key={level}
-            onClick={() => onChange(level)}
+            onClick={() => toggleLevel(level)}
             className={cn(
               "aspect-square rounded-[10px] text-sm font-medium transition-all duration-200",
               isSelected

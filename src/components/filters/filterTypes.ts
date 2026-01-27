@@ -25,7 +25,12 @@ export interface FilterRule {
   id: string;
   type: FilterType;
   operator: FilterOperator;
-  value: string | number | [number, number];
+  value: string | number | string[] | number[] | [number, number];
+}
+
+// Helper to check if a value is a multi-select array (not a range tuple)
+export function isMultiSelectValue(value: FilterRule['value']): value is string[] | number[] {
+  return Array.isArray(value) && value.length !== 2;
 }
 
 export interface SavedFilter {
@@ -159,20 +164,20 @@ export function getDefaultOperator(type: FilterType): FilterOperator {
 }
 
 // Helper to get default value for a filter type
-export function getDefaultValue(type: FilterType): string | number {
+export function getDefaultValue(type: FilterType): string | number | string[] | number[] {
   switch (type) {
     case 'score':
       return 900000;
     case 'level':
-      return 15;
+      return [15]; // Multi-select array
     case 'flare':
-      return 5;
+      return [5]; // Multi-select array
     case 'grade':
-      return 'AAA';
+      return ['AAA']; // Multi-select array
     case 'lamp':
-      return 'pfc';
+      return ['pfc']; // Multi-select array
     case 'difficulty':
-      return 'EXPERT';
+      return ['EXPERT']; // Multi-select array
     case 'title':
       return '';
     case 'version':
