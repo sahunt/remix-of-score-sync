@@ -14,6 +14,11 @@ interface ScoreData {
 function matchesRule(score: ScoreData, rule: FilterRule): boolean {
   const { type, operator, value } = rule;
 
+  // If value is null/empty, skip this rule (treat as "no filter")
+  if (value === null || value === undefined) return true;
+  if (value === '') return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+
   // Handle numeric comparisons (score only uses single values or ranges)
   const compareNumeric = (actual: number | null, target: number | [number, number]): boolean => {
     if (actual === null) return false;
@@ -46,6 +51,7 @@ function matchesRule(score: ScoreData, rule: FilterRule): boolean {
     
     // Multi-select array
     if (Array.isArray(target)) {
+      if (target.length === 0) return true; // Empty selection = no filter
       const matches = target.includes(actual);
       return operator === 'is' ? matches : !matches;
     }
@@ -67,11 +73,13 @@ function matchesRule(score: ScoreData, rule: FilterRule): boolean {
     
     // Multi-select array
     if (Array.isArray(target)) {
+      if (target.length === 0) return true; // Empty selection = no filter
       const matches = target.some(t => normalizedActual === t.toLowerCase());
       return operator === 'is' ? matches : !matches;
     }
     
     // Single string value
+    if (target === '') return true; // Empty string = no filter
     const normalizedTarget = target.toLowerCase();
     switch (operator) {
       case 'is': return normalizedActual === normalizedTarget;
