@@ -163,7 +163,7 @@ export default function Scores() {
       <ScoresHeader />
 
       {/* Main content area with dark background */}
-      <div className="flex-1 bg-background rounded-t-[40px] -mt-6 relative z-10 px-[28px] py-6 space-y-6">
+      <div className="flex-1 bg-background rounded-t-[40px] relative z-10 px-[28px] pt-6 pb-6 space-y-6">
         {/* Difficulty rating grid */}
         <DifficultyGrid
           selectedLevel={selectedLevel}
