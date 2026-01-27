@@ -75,10 +75,8 @@ export function LevelSelector({ value, onChange, isBetween }: LevelSelectorProps
 
   const toggleLevel = (level: number) => {
     if (selectedLevels.includes(level)) {
-      // Don't allow deselecting the last item
-      if (selectedLevels.length > 1) {
-        onChange(selectedLevels.filter(l => l !== level));
-      }
+      // Allow deselecting to empty
+      onChange(selectedLevels.filter(l => l !== level));
     } else {
       onChange([...selectedLevels, level].sort((a, b) => a - b));
     }

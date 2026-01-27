@@ -66,10 +66,8 @@ export function FlareSelector({
 
   const toggleFlare = (flare: number) => {
     if (selectedFlares.includes(flare)) {
-      // Don't allow deselecting the last item
-      if (selectedFlares.length > 1) {
-        onChange(selectedFlares.filter(f => f !== flare));
-      }
+      // Allow deselecting to empty
+      onChange(selectedFlares.filter(f => f !== flare));
     } else {
       onChange([...selectedFlares, flare].sort((a, b) => b - a)); // Sort descending (EX first)
     }

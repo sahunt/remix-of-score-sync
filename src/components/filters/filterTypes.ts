@@ -25,7 +25,7 @@ export interface FilterRule {
   id: string;
   type: FilterType;
   operator: FilterOperator;
-  value: string | number | string[] | number[] | [number, number];
+  value: string | number | string[] | number[] | [number, number] | null;
 }
 
 // Helper to check if a value is a multi-select array (not a range tuple)
@@ -163,21 +163,21 @@ export function getDefaultOperator(type: FilterType): FilterOperator {
   return OPERATORS_BY_TYPE[type][0].value;
 }
 
-// Helper to get default value for a filter type
-export function getDefaultValue(type: FilterType): string | number | string[] | number[] {
+// Helper to get default value for a filter type (empty by default)
+export function getDefaultValue(type: FilterType): string | number | string[] | number[] | null {
   switch (type) {
     case 'score':
-      return 900000;
+      return null; // No preselection
     case 'level':
-      return [15]; // Multi-select array
+      return []; // Empty multi-select array
     case 'flare':
-      return [5]; // Multi-select array
+      return []; // Empty multi-select array
     case 'grade':
-      return ['AAA']; // Multi-select array
+      return []; // Empty multi-select array
     case 'lamp':
-      return ['pfc']; // Multi-select array
+      return []; // Empty multi-select array
     case 'difficulty':
-      return ['EXPERT']; // Multi-select array
+      return []; // Empty multi-select array
     case 'title':
       return '';
     case 'version':
@@ -185,8 +185,16 @@ export function getDefaultValue(type: FilterType): string | number | string[] | 
     case 'era':
       return '';
     default:
-      return '';
+      return null;
   }
+}
+
+// Check if a value is empty/not selected
+export function isValueEmpty(value: FilterRule['value']): boolean {
+  if (value === null || value === undefined) return true;
+  if (value === '') return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  return false;
 }
 
 // Auto-generate filter name from rules

@@ -20,10 +20,8 @@ export function DifficultySelector({ value, onChange }: DifficultySelectorProps)
 
   const toggleDifficulty = (difficulty: string) => {
     if (selectedDifficulties.includes(difficulty)) {
-      // Don't allow deselecting the last item
-      if (selectedDifficulties.length > 1) {
-        onChange(selectedDifficulties.filter(d => d !== difficulty));
-      }
+      // Allow deselecting to empty
+      onChange(selectedDifficulties.filter(d => d !== difficulty));
     } else {
       onChange([...selectedDifficulties, difficulty]);
     }
