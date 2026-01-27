@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Icon } from '@/components/ui/Icon';
 import { FilterRuleRow } from './FilterRuleRow';
 import { MatchModeToggle } from './MatchModeToggle';
@@ -81,7 +80,7 @@ export function CreateFilterSheet({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header with close/back, title, and kebab */}
       <div className="flex items-center justify-between -mx-7 -mt-4 px-5 py-4 border-b border-[#4A4E61]">
         <button
@@ -89,9 +88,9 @@ export function CreateFilterSheet({
           className="p-2 text-white hover:text-muted-foreground transition-colors"
           aria-label="Back"
         >
-          <Icon name="arrow_back" size={24} />
+          <Icon name="close" size={24} />
         </button>
-        <h2 className="text-lg font-semibold text-white">Create filter</h2>
+        <h2 className="text-lg font-semibold text-white">New Filter</h2>
         <button
           className="p-2 text-white hover:text-muted-foreground transition-colors"
           aria-label="More options"
@@ -100,14 +99,14 @@ export function CreateFilterSheet({
         </button>
       </div>
 
-      {/* Filter name input */}
-      <div className="space-y-2">
-        <label className="text-sm text-muted-foreground">Filter name (optional)</label>
-        <Input
+      {/* Filter name input - pill style */}
+      <div className="flex items-center h-[52px] rounded-full bg-[#262937] px-6">
+        <input
+          type="text"
           value={filterName}
           onChange={(e) => setFilterName(e.target.value)}
-          placeholder="e.g., Level 15+ PFCs"
-          className="bg-[#3B3F51] border-0"
+          placeholder="Filter name..."
+          className="flex-1 bg-transparent text-white placeholder:text-muted-foreground/50 outline-none"
         />
       </div>
 
@@ -120,7 +119,6 @@ export function CreateFilterSheet({
 
       {/* Rules */}
       <div className="space-y-3">
-        <p className="text-sm font-medium text-white">Rules</p>
         {rules.map((rule) => (
           <FilterRuleRow
             key={rule.id}
@@ -131,30 +129,36 @@ export function CreateFilterSheet({
           />
         ))}
 
-        {/* Add rule button */}
+        {/* Add rule button - dashed outline pill */}
         <button
           onClick={handleAddRule}
-          className="flex w-full items-center justify-center gap-2 rounded-[10px] border-2 border-dashed border-muted-foreground/30 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-dashed border-muted-foreground/30 h-[52px] text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
         >
           <Icon name="add" size={20} />
           Add rule
         </button>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex flex-col gap-3 pt-2">
-        <Button onClick={handleShowResults} className="w-full" size="lg">
+      {/* Action buttons - pill style */}
+      <div className="space-y-3 pt-2">
+        {/* Save filter button */}
+        <Button 
+          variant="outline" 
+          className="w-full h-11 rounded-full" 
+          onClick={handleSave}
+        >
+          <Icon name="favorite" size={20} className="mr-2" />
+          Save Filter
+        </Button>
+        
+        {/* Show results button */}
+        <Button 
+          className="w-full h-11 rounded-full" 
+          size="lg"
+          onClick={handleShowResults}
+        >
           Show {count.toLocaleString()} Result{count !== 1 ? 's' : ''}
         </Button>
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="secondary" className="flex-1" onClick={handleSave}>
-            <Icon name="save" size={20} className="mr-2" />
-            Save filter
-          </Button>
-        </div>
       </div>
     </div>
   );
