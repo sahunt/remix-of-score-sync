@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
-import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
+import { HaloSparkle, type HaloType } from '@/components/ui/HaloSparkle';
 
 interface SongCardProps {
   name: string;
@@ -103,20 +103,20 @@ export function SongCard({
         className
       )}
     >
-      {/* Top halo bar */}
+      {/* Top halo bar - 4px with rounded ends */}
       <div
-        className="h-1 w-full absolute top-0 left-0"
+        className="h-1 w-full absolute top-0 left-0 rounded-sm"
         style={getHaloBarStyle(halo)}
       />
 
       {/* Main content */}
       <div className="flex items-center gap-3 px-3 pt-[8px] pb-3">
         {/* Album art with difficulty bar */}
-        <div className="w-10 h-10 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
           {/* Difficulty color bar on left edge */}
           {difficultyLevel && (
             <div
-              className={cn('absolute left-0 top-0 w-[4px] h-full', difficultyClass)}
+              className={cn('absolute left-0 top-0 w-[4px] h-full rounded-sm', difficultyClass)}
             />
           )}
           {/* Placeholder icon */}
@@ -146,33 +146,16 @@ export function SongCard({
           </div>
 
           {/* Score row */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             {score !== null ? (
               <>
                 <span className="text-[16px] font-bold text-white leading-normal tabular-nums">
                   {score.toLocaleString()}
                 </span>
                 {rank && (
-                  <svg
-                    className="h-[18px] flex-shrink-0"
-                    style={{ fontFeatureSettings: "'liga' off, 'clig' off" }}
-                  >
-                    <text
-                      x="50%"
-                      y="50%"
-                      dominantBaseline="central"
-                      textAnchor="middle"
-                      className="font-poppins text-[10px] font-bold"
-                      fill="#000F33"
-                      stroke="#FFF3D6"
-                      strokeWidth="3"
-                      strokeLinejoin="round"
-                      strokeLinecap="round"
-                      paintOrder="stroke fill"
-                    >
-                      {rank}
-                    </text>
-                  </svg>
+                  <span className="text-[16px] font-bold text-white leading-normal">
+                    {rank}
+                  </span>
                 )}
               </>
             ) : (
@@ -181,16 +164,12 @@ export function SongCard({
           </div>
         </div>
 
-        {/* Badge area (right side) - fixed width for consistent alignment */}
-        <div className="flex-shrink-0 flex items-center gap-2 ml-5 w-[72px] justify-end">
-          {/* Flare chip placeholder (28px width) */}
-          <div className="w-[28px] flex justify-center">
-            {flareType && <FlareChip type={flareType} />}
-          </div>
-          {/* Halo chip placeholder (40px width) */}
-          <div className="w-[40px] flex justify-center">
-            {haloType && <HaloChip type={haloType} />}
-          </div>
+        {/* Badge area (right side) - flare chip + halo sparkle */}
+        <div className="flex-shrink-0 flex items-center gap-3">
+          {/* Flare chip - 20px height */}
+          {flareType && <FlareChip type={flareType} className="h-5" />}
+          {/* Halo sparkle */}
+          {haloType && <HaloSparkle type={haloType} />}
         </div>
       </div>
     </div>
