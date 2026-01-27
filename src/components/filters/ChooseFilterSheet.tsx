@@ -66,7 +66,7 @@ export function ChooseFilterSheet({
                   key={filter.id}
                   onClick={() => onSelectFilter(filter.id)}
                   className={cn(
-                    'flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all',
+                    'flex items-center gap-2 rounded-[10px] px-4 py-2.5 text-sm font-medium transition-all',
                     isSelected
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-[#4A4E61] text-white hover:bg-[#555970]'
