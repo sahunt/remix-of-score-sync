@@ -21,6 +21,18 @@ import {
   type FilterOperator,
 } from './filterTypes';
 
+function generateRuleDescription(rule: FilterRule): string {
+  const typeLabel = FILTER_TYPES.find(t => t.value === rule.type)?.label || rule.type;
+  const operators = OPERATORS_BY_TYPE[rule.type];
+  const operatorLabel = operators.find(o => o.value === rule.operator)?.label.toLowerCase() || rule.operator;
+  
+  if (rule.operator === 'is_between' && Array.isArray(rule.value)) {
+    return `${typeLabel} ${operatorLabel} ${rule.value[0]} and ${rule.value[1]}`;
+  }
+  
+  return `${typeLabel} ${operatorLabel} ${rule.value}`;
+}
+
 interface FilterRuleRowProps {
   rule: FilterRule;
   onChange: (rule: FilterRule) => void;
@@ -101,24 +113,29 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         if (isBetween) {
           const [min, max] = Array.isArray(rule.value) ? rule.value : [1, 19];
           return (
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                value={min}
-                onChange={(e) => handleValueChange([parseInt(e.target.value) || 1, max])}
-                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none text-center"
-                min={1}
-                max={19}
-              />
-              <span className="text-muted-foreground text-sm">and</span>
-              <input
-                type="number"
-                value={max}
-                onChange={(e) => handleValueChange([min, parseInt(e.target.value) || 19])}
-                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none text-center"
-                min={1}
-                max={19}
-              />
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-2">
+                <label className="text-sm text-muted-foreground">Min Level</label>
+                <input
+                  type="number"
+                  value={min}
+                  onChange={(e) => handleValueChange([parseInt(e.target.value) || 1, max])}
+                  className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white outline-none"
+                  min={1}
+                  max={19}
+                />
+              </div>
+              <div className="flex-1 space-y-2">
+                <label className="text-sm text-muted-foreground">Max Level</label>
+                <input
+                  type="number"
+                  value={max}
+                  onChange={(e) => handleValueChange([min, parseInt(e.target.value) || 19])}
+                  className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white outline-none"
+                  min={1}
+                  max={19}
+                />
+              </div>
             </div>
           );
         }
@@ -127,7 +144,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
             type="number"
             value={typeof rule.value === 'number' ? rule.value : 1}
             onChange={(e) => handleValueChange(parseInt(e.target.value) || 1)}
-            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none text-center"
+            className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white outline-none text-center"
             min={1}
             max={19}
           />
@@ -219,24 +236,29 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
   };
 
   return (
-    <div className="animate-in slide-in-from-top-2 fade-in duration-200 rounded-[10px] bg-[#262937] p-4 relative">
-      {/* Delete button */}
-      {showRemove && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onRemove}
-          className="absolute top-3 right-3 h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-        >
-          <Icon name="delete" size={20} />
-        </Button>
-      )}
+    <div className="animate-in slide-in-from-top-2 fade-in duration-200 rounded-[10px] bg-[#262937] p-4">
+      {/* Description header row with delete button */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground italic">
+          {generateRuleDescription(rule)}
+        </p>
+        {showRemove && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 -mr-2"
+          >
+            <Icon name="delete" size={20} />
+          </Button>
+        )}
+      </div>
 
       {/* Type and operator selectors in a row */}
       <div className="flex items-center gap-2 mb-4">
         {/* Type selector */}
         <Select value={rule.type} onValueChange={handleTypeChange}>
-          <SelectTrigger className="flex-1 h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
+          <SelectTrigger className="flex-1 h-[44px] rounded-[10px] bg-[#3B3F51] border-0 px-5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[#3B3F51] border-0">
@@ -250,7 +272,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
 
         {/* Operator selector */}
         <Select value={rule.operator} onValueChange={handleOperatorChange}>
-          <SelectTrigger className="flex-1 h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
+          <SelectTrigger className="flex-1 h-[44px] rounded-[10px] bg-[#3B3F51] border-0 px-5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[#3B3F51] border-0">
