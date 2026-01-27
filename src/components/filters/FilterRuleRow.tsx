@@ -78,6 +78,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
       case 'score': {
         const STEP = 10000;
         const formatScore = (val: number) => val.toLocaleString();
+        const parseScore = (str: string) => {
+          const num = parseInt(str.replace(/,/g, ''), 10);
+          return isNaN(num) ? 0 : Math.min(1000000, Math.max(0, num));
+        };
         
         if (isBetween) {
           const [min, max] = Array.isArray(rule.value) ? rule.value : [0, 1000000];
@@ -86,15 +90,29 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
               <div className="flex gap-3">
                 <div className="flex-1 space-y-2">
                   <label className="text-sm text-muted-foreground">Min Score</label>
-                  <div className="flex items-center justify-center h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white">
-                    {formatScore(min)}
-                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatScore(min)}
+                    onChange={(e) => {
+                      const newMin = parseScore(e.target.value);
+                      handleValueChange([newMin, max]);
+                    }}
+                    className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-center outline-none focus:ring-2 focus:ring-primary"
+                  />
                 </div>
                 <div className="flex-1 space-y-2">
                   <label className="text-sm text-muted-foreground">Max Score</label>
-                  <div className="flex items-center justify-center h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white">
-                    {formatScore(max)}
-                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatScore(max)}
+                    onChange={(e) => {
+                      const newMax = parseScore(e.target.value);
+                      handleValueChange([min, newMax]);
+                    }}
+                    className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-center outline-none focus:ring-2 focus:ring-primary"
+                  />
                 </div>
               </div>
               <Slider
@@ -112,9 +130,16 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         const currentValue = typeof rule.value === 'number' ? rule.value : 0;
         return (
           <div className="space-y-4">
-            <div className="flex items-center justify-center h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-lg font-medium">
-              {formatScore(currentValue)}
-            </div>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={formatScore(currentValue)}
+              onChange={(e) => {
+                const newVal = parseScore(e.target.value);
+                handleValueChange(newVal);
+              }}
+              className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-center text-lg font-medium outline-none focus:ring-2 focus:ring-primary"
+            />
             <Slider
               value={[currentValue]}
               onValueChange={([val]) => handleValueChange(val)}
