@@ -162,8 +162,8 @@ export default function Scores() {
       {/* Rainbow header with back button, sync badge, username */}
       <ScoresHeader />
 
-      {/* Main content area with dark background */}
-      <div className="flex-1 bg-background rounded-t-[40px] relative z-10 px-[28px] pt-6 pb-6 space-y-6">
+      {/* Main content area with dark background - overlaps header */}
+      <div className="flex-1 bg-background rounded-t-[40px] -mt-10 relative z-10 px-[28px] pt-6 pb-6 space-y-6">
         {/* Difficulty rating grid */}
         <DifficultyGrid
           selectedLevel={selectedLevel}

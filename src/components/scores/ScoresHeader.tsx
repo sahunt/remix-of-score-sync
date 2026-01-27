@@ -11,7 +11,7 @@ export function ScoresHeader() {
 
   return (
     <header
-      className="relative px-[28px] pt-[33px] pb-[19px]"
+      className="relative px-[28px] pt-[33px] pb-[60px]"
       style={{
         backgroundImage: `url(${rainbowBg})`,
         backgroundSize: 'cover',
