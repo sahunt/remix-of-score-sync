@@ -15,7 +15,7 @@ export function FilterChip({ label, onRemove, isAddButton = false, onClick }: Fi
         type="button"
         onClick={onClick}
         className={cn(
-          'flex h-9 items-center gap-2 rounded-full px-4 transition-all',
+          'flex h-9 items-center gap-2 rounded-[10px] px-4 transition-all',
           'bg-secondary text-foreground hover:bg-secondary/80'
         )}
       >
@@ -28,7 +28,7 @@ export function FilterChip({ label, onRemove, isAddButton = false, onClick }: Fi
   return (
     <div
       className={cn(
-        'flex h-9 items-center gap-2 rounded-full px-4',
+        'flex h-9 items-center gap-2 rounded-[10px] px-4',
         'bg-primary text-primary-foreground'
       )}
     >
