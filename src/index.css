@@ -57,6 +57,15 @@
     --difficulty-expert: 160 52% 67%; /* Green/mint #7BDCB5 */
     --difficulty-challenge: 270 50% 70%; /* Purple/violet #A78BDA */
     
+    /* Halo/Status colors for song cards */
+    --halo-pfc: #F9CD67;
+    --halo-gfc: #63EAA8;
+    --halo-fc: #9EBBFF;
+    --halo-mfc-gradient: linear-gradient(90deg, #B5EFFF 0%, #FDB8FF 34.62%, #D4B8FF 72.6%, #FFF 100%);
+    --halo-failed: #4C062F;
+    --halo-cleared: #A6ACC4;
+    --halo-life4: #FF565E;
+    
     /* Gradient backgrounds - from mockup */
     --gradient-hero: linear-gradient(135deg, hsl(235 46% 30%) 0%, hsl(312 78% 55%) 50%, hsl(36 99% 63%) 75%, hsl(52 98% 55%) 100%);
     --gradient-card: linear-gradient(180deg, hsl(235 46% 30%) 0%, hsl(312 78% 55%) 50%, hsl(36 99% 63%) 100%);
