@@ -99,8 +99,8 @@ export function CreateFilterSheet({
         </button>
       </div>
 
-      {/* Filter name input - pill style */}
-      <div className="flex items-center h-[52px] rounded-full bg-[#262937] px-6">
+      {/* Filter name input */}
+      <div className="flex items-center h-[52px] rounded-[10px] bg-[#262937] px-6">
         <input
           type="text"
           value={filterName}
@@ -129,21 +129,21 @@ export function CreateFilterSheet({
           />
         ))}
 
-        {/* Add rule button - dashed outline pill */}
+        {/* Add rule button - dashed outline */}
         <button
           onClick={handleAddRule}
-          className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-dashed border-muted-foreground/30 h-[52px] text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          className="flex w-full items-center justify-center gap-2 rounded-[10px] border-2 border-dashed border-muted-foreground/30 h-[52px] text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
         >
           <Icon name="add" size={20} />
           Add rule
         </button>
       </div>
 
-      {/* Action buttons - pill style */}
+      {/* Action buttons */}
       <div className="space-y-3 pt-2">
         {/* Save filter button - primary CTA */}
         <Button 
-          className="w-full h-11 rounded-full" 
+          className="w-full h-11 rounded-[10px]" 
           onClick={handleSave}
           iconLeft="favorite"
         >
@@ -153,7 +153,7 @@ export function CreateFilterSheet({
         {/* Show results button - secondary */}
         <Button 
           variant="outline"
-          className="w-full h-11 rounded-full" 
+          className="w-full h-11 rounded-[10px]" 
           onClick={handleShowResults}
         >
           Show {count.toLocaleString()} Result{count !== 1 ? 's' : ''}
