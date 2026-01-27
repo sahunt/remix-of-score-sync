@@ -202,7 +202,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
             type="text"
             value={typeof rule.value === 'string' ? rule.value : ''}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white placeholder:text-muted-foreground/50 outline-none"
+            className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary"
             placeholder="Song title..."
           />
         );
@@ -214,7 +214,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
             type="text"
             value={typeof rule.value === 'string' ? rule.value : ''}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white placeholder:text-muted-foreground/50 outline-none"
+            className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary"
             placeholder={`Enter ${rule.type}...`}
           />
         );
