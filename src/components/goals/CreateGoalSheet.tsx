@@ -7,6 +7,7 @@ import { X, Save } from 'lucide-react';
 import { GoalPreviewCard } from './GoalPreviewCard';
 import { TargetSelector } from './TargetSelector';
 import { GoalModeToggle } from './GoalModeToggle';
+import { GoalCriteriaSelector } from './GoalCriteriaSelector';
 import { useGoals } from '@/hooks/useGoals';
 import { useToast } from '@/hooks/use-toast';
 
@@ -27,15 +28,33 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const [targetValue, setTargetValue] = useState<string | null>(null);
   const [goalMode, setGoalMode] = useState<'all' | 'count'>('all');
   const [goalCount, setGoalCount] = useState(10);
+  const [selectedLevels, setSelectedLevels] = useState<number[]>([]);
 
   // Generate auto-name based on selections
   const generateName = () => {
     if (!targetValue) return '';
     const target = targetValue.toUpperCase();
-    if (goalMode === 'all') {
-      return `${target} all songs`;
+    
+    // Build level description
+    let levelDesc = '';
+    if (selectedLevels.length > 0 && selectedLevels.length < 19) {
+      const sorted = [...selectedLevels].sort((a, b) => a - b);
+      const isContiguous = sorted.every((level, i) => i === 0 || level === sorted[i - 1] + 1);
+      if (sorted.length === 1) {
+        levelDesc = ` ${sorted[0]}s`;
+      } else if (isContiguous) {
+        levelDesc = ` ${sorted[0]}-${sorted[sorted.length - 1]}s`;
+      } else {
+        levelDesc = ' songs';
+      }
     } else {
-      return `${target} ${goalCount} songs`;
+      levelDesc = ' songs';
+    }
+
+    if (goalMode === 'all') {
+      return `${target} all${levelDesc}`;
+    } else {
+      return `${target} ${goalCount}${levelDesc}`;
     }
   };
 
@@ -51,12 +70,17 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       return;
     }
 
+    // Build criteria rules from selected levels
+    const criteriaRules = selectedLevels.length > 0 && selectedLevels.length < 19
+      ? [{ id: `level_${Date.now()}`, type: 'level', operator: 'is', value: selectedLevels }]
+      : [];
+
     try {
       await createGoal.mutateAsync({
         name: displayName || 'New Goal',
         target_type: targetType,
         target_value: targetValue,
-        criteria_rules: [],
+        criteria_rules: criteriaRules,
         criteria_match_mode: 'all',
         goal_mode: goalMode,
         goal_count: goalMode === 'count' ? goalCount : null,
@@ -73,6 +97,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       setTargetValue(null);
       setGoalMode('all');
       setGoalCount(10);
+      setSelectedLevels([]);
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -122,7 +147,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
               placeholder={generateName() || "Enter goal name..."}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="rounded-[10px]"
+              className="rounded-[10px] bg-[#3B3F51] border-transparent"
             />
           </div>
 
@@ -138,6 +163,17 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
                 setTargetType(type);
                 setTargetValue(value);
               }}
+            />
+          </div>
+
+          {/* Criteria - Level Selection */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+              Which charts? (optional)
+            </Label>
+            <GoalCriteriaSelector
+              selectedLevels={selectedLevels}
+              onLevelsChange={setSelectedLevels}
             />
           </div>
 
