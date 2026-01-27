@@ -141,20 +141,19 @@ export function CreateFilterSheet({
 
       {/* Action buttons - pill style */}
       <div className="space-y-3 pt-2">
-        {/* Save filter button */}
+        {/* Save filter button - primary CTA */}
         <Button 
-          variant="outline" 
           className="w-full h-11 rounded-full" 
           onClick={handleSave}
+          iconLeft="favorite"
         >
-          <Icon name="favorite" size={20} className="mr-2" />
           Save Filter
         </Button>
         
-        {/* Show results button */}
+        {/* Show results button - secondary */}
         <Button 
+          variant="outline"
           className="w-full h-11 rounded-full" 
-          size="lg"
           onClick={handleShowResults}
         >
           Show {count.toLocaleString()} Result{count !== 1 ? 's' : ''}
