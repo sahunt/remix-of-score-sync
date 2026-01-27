@@ -159,6 +159,7 @@ export function SongCard({
                       color: '#000F33',
                       WebkitTextStrokeWidth: '2px',
                       WebkitTextStrokeColor: '#FFF3D6',
+                      paintOrder: 'stroke fill',
                       fontFeatureSettings: "'liga' off, 'clig' off",
                     }}
                   >
