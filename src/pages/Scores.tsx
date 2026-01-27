@@ -94,6 +94,7 @@ export default function Scores() {
       s.rank !== null
     ).length;
     const fail = filteredForStats.filter(s => s.rank === null && s.halo === null).length;
+    const noPlay = 0; // TODO: Calculate songs not played yet
 
     return [
       { label: 'Total', value: total },
@@ -101,7 +102,8 @@ export default function Scores() {
       { label: 'PFC', value: pfc },
       { label: 'AAA', value: aaa },
       { label: 'Clear', value: clear },
-      { label: '', value: fail, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
+      { label: 'Fail', value: fail },
+      { label: '', value: noPlay, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
     ];
   }, [scores, selectedLevel]);
 
