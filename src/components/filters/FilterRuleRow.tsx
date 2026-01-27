@@ -11,11 +11,11 @@ import {
 import { FlareSelector } from './FlareSelector';
 import { LampSelector } from './LampSelector';
 import { LevelSelector } from './LevelSelector';
+import { GradeSelector } from './GradeSelector';
+import { DifficultySelector } from './DifficultySelector';
 import {
   FILTER_TYPES,
   OPERATORS_BY_TYPE,
-  GRADE_OPTIONS,
-  DIFFICULTY_OPTIONS,
   getDefaultOperator,
   getDefaultValue,
   type FilterRule,
@@ -182,40 +182,18 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
 
       case 'grade':
         return (
-          <Select
-            value={typeof rule.value === 'string' ? rule.value : ''}
-            onValueChange={handleValueChange}
-          >
-            <SelectTrigger className="w-full h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
-              <SelectValue placeholder="Grade" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#3B3F51] border-0">
-              {GRADE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <GradeSelector
+            value={typeof rule.value === 'string' ? rule.value : null}
+            onChange={(val) => handleValueChange(val)}
+          />
         );
 
       case 'difficulty':
         return (
-          <Select
-            value={typeof rule.value === 'string' ? rule.value : ''}
-            onValueChange={handleValueChange}
-          >
-            <SelectTrigger className="w-full h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
-              <SelectValue placeholder="Difficulty" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#3B3F51] border-0">
-              {DIFFICULTY_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DifficultySelector
+            value={typeof rule.value === 'string' ? rule.value : null}
+            onChange={(val) => handleValueChange(val)}
+          />
         );
 
       case 'title':
