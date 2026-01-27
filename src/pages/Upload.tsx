@@ -142,12 +142,12 @@ export default function UploadPage() {
                 <Icon name="upload_file" size={40} className="mb-3 text-muted-foreground" />
                 <p className="mb-1 font-medium">Drop your file here</p>
                 <p className="mb-4 text-sm text-muted-foreground">or click to browse</p>
-                <Button variant="outline" asChild>
+                <Button variant="outline" className="relative">
                   <label className="cursor-pointer">
                     Select File
                     <input
                       type="file"
-                      className="hidden"
+                      className="absolute inset-0 cursor-pointer opacity-0"
                       accept=".json,.csv,.txt"
                       onChange={handleFileChange}
                     />
