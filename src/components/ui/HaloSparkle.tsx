@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import mfcSparkle from '@/assets/halos/sparkle_mfc.svg';
 
 export type HaloType = 'fc' | 'gfc' | 'life4' | 'mfc' | 'pfc';
 
@@ -7,7 +8,7 @@ const haloColors: Record<HaloType, string> = {
   fc: '#9EBBFF',
   gfc: '#63EAA8',
   life4: '#FF565E',
-  mfc: 'url(#mfc-gradient)',
+  mfc: '',
   pfc: '#F9CD67',
 };
 
@@ -17,8 +18,20 @@ interface HaloSparkleProps {
 }
 
 export function HaloSparkle({ type, className }: HaloSparkleProps) {
+  // For MFC, use the special imported SVG
+  if (type === 'mfc') {
+    return (
+      <img
+        src={mfcSparkle}
+        alt="MFC"
+        width="24"
+        height="22"
+        className={cn('flex-shrink-0', className)}
+      />
+    );
+  }
+
   const color = haloColors[type];
-  const isMfc = type === 'mfc';
 
   return (
     <svg
@@ -29,16 +42,6 @@ export function HaloSparkle({ type, className }: HaloSparkleProps) {
       xmlns="http://www.w3.org/2000/svg"
       className={cn('flex-shrink-0', className)}
     >
-      {isMfc && (
-        <defs>
-          <linearGradient id="mfc-gradient" x1="0" y1="0" x2="13" y2="12" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#B5EFFF" />
-            <stop offset="0.35" stopColor="#FDB8FF" />
-            <stop offset="0.73" stopColor="#D4B8FF" />
-            <stop offset="1" stopColor="white" />
-          </linearGradient>
-        </defs>
-      )}
       <path
         d="M4.32419 0C4.32419 3.01176 2.53514 5.71877 0 5.71877C2.52712 5.71877 4.32419 8.41681 4.32419 11.4375C4.32419 8.42577 6.11323 5.71877 8.64837 5.71877C6.12125 5.71877 4.32419 3.02073 4.32419 0Z"
         fill={color}
