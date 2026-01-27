@@ -31,14 +31,43 @@ interface ScoreWithSong {
 function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
   const { type, operator, value } = rule;
 
-  const compare = (actual: number | null, target: number | [number, number]): boolean => {
+  // Handle numeric comparisons (score only uses single values or ranges)
+  const compareNumeric = (actual: number | null, target: number | [number, number]): boolean => {
     if (actual === null) return false;
     
-    if (Array.isArray(target)) {
+    // Range comparison for "is_between"
+    if (Array.isArray(target) && target.length === 2) {
       const [min, max] = target;
       return actual >= Math.min(min, max) && actual <= Math.max(min, max);
     }
     
+    const singleTarget = typeof target === 'number' ? target : target[0];
+    switch (operator) {
+      case 'is': return actual === singleTarget;
+      case 'is_not': return actual !== singleTarget;
+      case 'less_than': return actual < singleTarget;
+      case 'greater_than': return actual > singleTarget;
+      default: return false;
+    }
+  };
+
+  // Handle numeric multi-select (level, flare)
+  const compareNumericMulti = (actual: number | null, target: number | number[] | [number, number]): boolean => {
+    if (actual === null) return false;
+    
+    // Range comparison for "is_between"
+    if (operator === 'is_between' && Array.isArray(target) && target.length === 2) {
+      const [min, max] = target as [number, number];
+      return actual >= Math.min(min, max) && actual <= Math.max(min, max);
+    }
+    
+    // Multi-select array
+    if (Array.isArray(target)) {
+      const matches = target.includes(actual);
+      return operator === 'is' ? matches : !matches;
+    }
+    
+    // Single value
     switch (operator) {
       case 'is': return actual === target;
       case 'is_not': return actual !== target;
@@ -48,11 +77,19 @@ function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
     }
   };
 
-  const compareString = (actual: string | null, target: string): boolean => {
+  // Handle string multi-select (grade, lamp, difficulty)
+  const compareStringMulti = (actual: string | null, target: string | string[]): boolean => {
     if (actual === null) return false;
     const normalizedActual = actual.toLowerCase();
-    const normalizedTarget = target.toLowerCase();
     
+    // Multi-select array
+    if (Array.isArray(target)) {
+      const matches = target.some(t => normalizedActual === t.toLowerCase());
+      return operator === 'is' ? matches : !matches;
+    }
+    
+    // Single string value
+    const normalizedTarget = target.toLowerCase();
     switch (operator) {
       case 'is': return normalizedActual === normalizedTarget;
       case 'is_not': return normalizedActual !== normalizedTarget;
@@ -62,13 +99,13 @@ function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
   };
 
   switch (type) {
-    case 'score': return compare(score.score, value as number | [number, number]);
-    case 'level': return compare(score.difficulty_level, value as number | [number, number]);
-    case 'flare': return compare(score.flare, value as number | [number, number]);
-    case 'grade': return compareString(score.rank, value as string);
-    case 'lamp': return compareString(score.halo, value as string);
-    case 'difficulty': return compareString(score.difficulty_name, value as string);
-    case 'title': return compareString(score.musicdb?.name ?? '', value as string);
+    case 'score': return compareNumeric(score.score, value as number | [number, number]);
+    case 'level': return compareNumericMulti(score.difficulty_level, value as number | number[] | [number, number]);
+    case 'flare': return compareNumericMulti(score.flare, value as number | number[] | [number, number]);
+    case 'grade': return compareStringMulti(score.rank, value as string | string[]);
+    case 'lamp': return compareStringMulti(score.halo, value as string | string[]);
+    case 'difficulty': return compareStringMulti(score.difficulty_name, value as string | string[]);
+    case 'title': return compareStringMulti(score.musicdb?.name ?? '', value as string);
     case 'version':
     case 'era':
       return true; // Placeholder

@@ -3,23 +3,20 @@ import { FlareChip } from '@/components/ui/FlareChip';
 import { FLARE_OPTIONS } from './filterTypes';
 
 interface FlareSelectorProps {
-  value: number | [number, number] | null;
-  onChange: (value: number) => void;
+  value: number[] | [number, number];
+  onChange: (value: number[] | [number, number]) => void;
   isBetween?: boolean;
-  onBetweenChange?: (value: [number, number]) => void;
-  betweenValue?: [number, number];
 }
 
 export function FlareSelector({ 
   value, 
   onChange,
-  isBetween,
-  onBetweenChange,
-  betweenValue = [1, 10]
+  isBetween = false,
 }: FlareSelectorProps) {
-  const selectedValue = Array.isArray(value) ? null : value;
+  if (isBetween) {
+    // For "is between", value is a tuple [min, max]
+    const [min, max] = Array.isArray(value) && value.length === 2 ? value : [1, 10];
 
-  if (isBetween && onBetweenChange) {
     return (
       <div className="space-y-3">
         <div className="space-y-2">
@@ -28,10 +25,10 @@ export function FlareSelector({
             {FLARE_OPTIONS.map((option) => (
               <button
                 key={`from-${option.value}`}
-                onClick={() => onBetweenChange([option.value, betweenValue[1]])}
+                onClick={() => onChange([option.value, max])}
                 className={cn(
-                  'rounded-lg p-2 transition-all',
-                  betweenValue[0] === option.value
+                  'rounded-[10px] p-2 transition-all',
+                  min === option.value
                     ? 'bg-primary/20 ring-2 ring-primary'
                     : 'bg-[#3B3F51] hover:bg-[#454A5E]'
                 )}
@@ -47,10 +44,10 @@ export function FlareSelector({
             {FLARE_OPTIONS.map((option) => (
               <button
                 key={`to-${option.value}`}
-                onClick={() => onBetweenChange([betweenValue[0], option.value])}
+                onClick={() => onChange([min, option.value])}
                 className={cn(
-                  'rounded-lg p-2 transition-all',
-                  betweenValue[1] === option.value
+                  'rounded-[10px] p-2 transition-all',
+                  max === option.value
                     ? 'bg-primary/20 ring-2 ring-primary'
                     : 'bg-[#3B3F51] hover:bg-[#454A5E]'
                 )}
@@ -64,22 +61,40 @@ export function FlareSelector({
     );
   }
 
+  // Multi-select mode
+  const selectedFlares = Array.isArray(value) ? value : [value];
+
+  const toggleFlare = (flare: number) => {
+    if (selectedFlares.includes(flare)) {
+      // Don't allow deselecting the last item
+      if (selectedFlares.length > 1) {
+        onChange(selectedFlares.filter(f => f !== flare));
+      }
+    } else {
+      onChange([...selectedFlares, flare].sort((a, b) => b - a)); // Sort descending (EX first)
+    }
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
-      {FLARE_OPTIONS.map((option) => (
-        <button
-          key={option.value}
-          onClick={() => onChange(option.value)}
-          className={cn(
-            'rounded-lg p-2 transition-all',
-            selectedValue === option.value
-              ? 'bg-primary/20 ring-2 ring-primary'
-              : 'bg-[#3B3F51] hover:bg-[#454A5E]'
-          )}
-        >
-          <FlareChip type={option.flareType} className="h-5" />
-        </button>
-      ))}
+      {FLARE_OPTIONS.map((option) => {
+        const isSelected = selectedFlares.includes(option.value);
+        
+        return (
+          <button
+            key={option.value}
+            onClick={() => toggleFlare(option.value)}
+            className={cn(
+              'rounded-[10px] p-2 transition-all',
+              isSelected
+                ? 'bg-primary/20 ring-2 ring-primary'
+                : 'bg-[#3B3F51] hover:bg-[#454A5E]'
+            )}
+          >
+            <FlareChip type={option.flareType} className="h-5" />
+          </button>
+        );
+      })}
     </div>
   );
 }

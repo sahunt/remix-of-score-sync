@@ -28,8 +28,16 @@ function generateRuleDescription(rule: FilterRule): string {
   const operators = OPERATORS_BY_TYPE[rule.type];
   const operatorLabel = operators.find(o => o.value === rule.operator)?.label.toLowerCase() || rule.operator;
   
-  if (rule.operator === 'is_between' && Array.isArray(rule.value)) {
+  if (rule.operator === 'is_between' && Array.isArray(rule.value) && rule.value.length === 2) {
     return `${typeLabel} ${operatorLabel} ${rule.value[0]} and ${rule.value[1]}`;
+  }
+  
+  // For multi-select arrays, join with commas
+  if (Array.isArray(rule.value)) {
+    const displayValue = rule.value.length > 3 
+      ? `${rule.value.slice(0, 3).join(', ')}...` 
+      : rule.value.join(', ');
+    return `${typeLabel} ${operatorLabel} ${displayValue}`;
   }
   
   return `${typeLabel} ${operatorLabel} ${rule.value}`;
@@ -56,20 +64,37 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
   };
 
   const handleOperatorChange = (operator: FilterOperator) => {
-    let newValue = rule.value;
+    let newValue: FilterRule['value'] = rule.value;
     
-    // If switching to/from is_between, adjust the value format
-    if (operator === 'is_between' && !Array.isArray(rule.value)) {
-      const currentVal = typeof rule.value === 'number' ? rule.value : 0;
-      newValue = [currentVal, currentVal + 1];
-    } else if (operator !== 'is_between' && Array.isArray(rule.value)) {
-      newValue = rule.value[0];
+    // If switching to is_between, convert to range tuple
+    if (operator === 'is_between') {
+      if (rule.type === 'score') {
+        const currentVal = typeof rule.value === 'number' ? rule.value : 0;
+        newValue = [currentVal, currentVal + 100000] as [number, number];
+      } else if (rule.type === 'level' || rule.type === 'flare') {
+        let baseVal = 1;
+        if (Array.isArray(rule.value) && rule.value.length > 0) {
+          baseVal = typeof rule.value[0] === 'number' ? rule.value[0] : 1;
+        } else if (typeof rule.value === 'number') {
+          baseVal = rule.value;
+        }
+        newValue = [baseVal, Math.min(baseVal + 1, rule.type === 'level' ? 19 : 10)] as [number, number];
+      }
+    } 
+    // If switching from is_between to something else
+    else if (rule.operator === 'is_between') {
+      if (rule.type === 'score') {
+        newValue = Array.isArray(rule.value) ? (rule.value[0] as number) : 0;
+      } else if (rule.type === 'level' || rule.type === 'flare') {
+        const baseVal = Array.isArray(rule.value) ? (rule.value[0] as number) : 1;
+        newValue = [baseVal];
+      }
     }
     
     onChange({ ...rule, operator, value: newValue });
   };
 
-  const handleValueChange = (value: string | number | [number, number]) => {
+  const handleValueChange = (value: FilterRule['value']) => {
     onChange({ ...rule, value });
   };
 
@@ -84,7 +109,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         };
         
         if (isBetween) {
-          const [min, max] = Array.isArray(rule.value) ? rule.value : [0, 1000000];
+          const rangeValue = Array.isArray(rule.value) ? rule.value : [0, 1000000];
+          const min = typeof rangeValue[0] === 'number' ? rangeValue[0] : 0;
+          const max = typeof rangeValue[1] === 'number' ? rangeValue[1] : 1000000;
+          
           return (
             <div className="space-y-4">
               <div className="flex gap-3">
@@ -96,7 +124,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
                     value={formatScore(min)}
                     onChange={(e) => {
                       const newMin = parseScore(e.target.value);
-                      handleValueChange([newMin, max]);
+                      handleValueChange([newMin, max] as [number, number]);
                     }}
                     className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-center outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -109,7 +137,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
                     value={formatScore(max)}
                     onChange={(e) => {
                       const newMax = parseScore(e.target.value);
-                      handleValueChange([min, newMax]);
+                      handleValueChange([min, newMax] as [number, number]);
                     }}
                     className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-center outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -117,7 +145,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
               </div>
               <Slider
                 value={[min, max]}
-                onValueChange={([newMin, newMax]) => handleValueChange([newMin, newMax])}
+                onValueChange={([newMin, newMax]) => handleValueChange([newMin, newMax] as [number, number])}
                 min={0}
                 max={1000000}
                 step={STEP}
@@ -152,49 +180,113 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         );
       }
 
-      case 'level':
+      case 'level': {
+        // Convert value to the expected format for LevelSelector
+        let levelValue: number[] | [number, number];
+        if (isBetween) {
+          const arr = Array.isArray(rule.value) ? rule.value : [1, 19];
+          levelValue = [
+            typeof arr[0] === 'number' ? arr[0] : 1,
+            typeof arr[1] === 'number' ? arr[1] : 19
+          ] as [number, number];
+        } else {
+          if (Array.isArray(rule.value)) {
+            levelValue = rule.value.filter((v): v is number => typeof v === 'number');
+            if (levelValue.length === 0) levelValue = [15];
+          } else {
+            levelValue = [typeof rule.value === 'number' ? rule.value : 15];
+          }
+        }
+        
         return (
           <LevelSelector
-            value={rule.value as number | [number, number]}
-            onChange={(val) => handleValueChange(val)}
+            value={levelValue}
+            onChange={handleValueChange}
             isBetween={isBetween}
           />
         );
+      }
 
-      case 'flare':
+      case 'flare': {
+        // Convert value to the expected format for FlareSelector
+        let flareValue: number[] | [number, number];
+        if (isBetween) {
+          const arr = Array.isArray(rule.value) ? rule.value : [1, 10];
+          flareValue = [
+            typeof arr[0] === 'number' ? arr[0] : 1,
+            typeof arr[1] === 'number' ? arr[1] : 10
+          ] as [number, number];
+        } else {
+          if (Array.isArray(rule.value)) {
+            flareValue = rule.value.filter((v): v is number => typeof v === 'number');
+            if (flareValue.length === 0) flareValue = [5];
+          } else {
+            flareValue = [typeof rule.value === 'number' ? rule.value : 5];
+          }
+        }
+        
         return (
           <FlareSelector
-            value={rule.value as number | [number, number]}
-            onChange={(val) => handleValueChange(val)}
+            value={flareValue}
+            onChange={handleValueChange}
             isBetween={isBetween}
-            onBetweenChange={(val) => handleValueChange(val)}
-            betweenValue={Array.isArray(rule.value) ? rule.value : [1, 10]}
           />
         );
+      }
 
-      case 'lamp':
+      case 'lamp': {
+        // Convert value to string array for LampSelector
+        let lampValue: string[];
+        if (Array.isArray(rule.value)) {
+          lampValue = rule.value.filter((v): v is string => typeof v === 'string');
+          if (lampValue.length === 0) lampValue = ['pfc'];
+        } else {
+          lampValue = [typeof rule.value === 'string' ? rule.value : 'pfc'];
+        }
+        
         return (
           <LampSelector
-            value={typeof rule.value === 'string' ? rule.value : null}
-            onChange={(val) => handleValueChange(val)}
+            value={lampValue}
+            onChange={handleValueChange}
           />
         );
+      }
 
-      case 'grade':
+      case 'grade': {
+        // Convert value to string array for GradeSelector
+        let gradeValue: string[];
+        if (Array.isArray(rule.value)) {
+          gradeValue = rule.value.filter((v): v is string => typeof v === 'string');
+          if (gradeValue.length === 0) gradeValue = ['AAA'];
+        } else {
+          gradeValue = [typeof rule.value === 'string' ? rule.value : 'AAA'];
+        }
+        
         return (
           <GradeSelector
-            value={typeof rule.value === 'string' ? rule.value : null}
-            onChange={(val) => handleValueChange(val)}
+            value={gradeValue}
+            onChange={handleValueChange}
           />
         );
+      }
 
-      case 'difficulty':
+      case 'difficulty': {
+        // Convert value to string array for DifficultySelector
+        let diffValue: string[];
+        if (Array.isArray(rule.value)) {
+          diffValue = rule.value.filter((v): v is string => typeof v === 'string');
+          if (diffValue.length === 0) diffValue = ['EXPERT'];
+        } else {
+          diffValue = [typeof rule.value === 'string' ? rule.value : 'EXPERT'];
+        }
+        
         return (
           <DifficultySelector
-            value={typeof rule.value === 'string' ? rule.value : null}
-            onChange={(val) => handleValueChange(val)}
+            value={diffValue}
+            onChange={handleValueChange}
           />
         );
+      }
 
       case 'title':
         return (
