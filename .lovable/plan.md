@@ -1,195 +1,267 @@
 
-# Song Card Component Implementation Plan
+
+# Filter Feature Implementation Plan
 
 ## Overview
-This plan creates a pixel-perfect song card component that displays DDR score data including song title, difficulty rating, score, rank, flare badge, and halo badge. The card includes a halo-colored top bar, difficulty-colored left accent on the album art, and properly aligned badge chips.
-
-## Visual Reference Analysis
-Based on the provided mockup:
-- Card dimensions: Full width, 57px height, 10px border radius
-- Top halo bar: 4px height, spans full width
-- Album art: ~40px with difficulty color bar on left edge
-- Title row: Song name (truncated with ellipsis) + difficulty level chip (14x14px)
-- Score row: Large score number + rank badge (with text stroke)
-- Right side: Fixed-width area (20px gap from content) for Flare chip + Halo chip
+Build a comprehensive filter system for the Scores page that allows users to create, save, and apply filters to their song score data. The feature includes:
+1. A "Choose Filter" half-sheet modal showing saved filters
+2. A "Create Filter" half-sheet modal for building new filters with multiple rules
+3. Smooth animations using the existing Drawer (vaul) component
+4. Real-time result counting with a dynamic "Show X Results" button
 
 ---
 
-## Step 1: Add Halo Color Variables to Global Styles
+## User Flow
 
-Update `src/index.css` to add the halo/status colors as CSS variables after the difficulty colors:
-
-```css
-/* Halo/Status colors for song cards */
---halo-pfc: #F9CD67;
---halo-gfc: #63EAA8;
---halo-fc: #9EBBFF;
---halo-mfc-gradient: linear-gradient(90deg, #B5EFFF 0%, #FDB8FF 34.62%, #D4B8FF 72.6%, #FFF 100%);
---halo-failed: #4C062F;
---halo-cleared: #A6ACC4;
---halo-life4: #FF565E;
+```text
+Tap "Add Filter..."
+       |
+       v
++---------------------+
+| Choose Filter Modal | (only if saved filters exist)
+| - List of saved     |
+| - Multi-select      |
++---------------------+
+       |
+   No saved filters? ----> Skip directly to Create Filter
+       |
+       v
++----------------------+
+| Create Filter Modal  |
+| - Name input         |
+| - Rule builder       |
+| - Match mode toggle  |
+| - Show X Results btn |
++----------------------+
 ```
 
 ---
 
-## Step 2: Create New SongCard Component
+## What Will Be Built
 
-Create `src/components/scores/SongCard.tsx`:
+### 1. Database Table for Saved Filters
+A new `user_filters` table will store user-created filters with:
+- Filter name
+- Array of filter rules (stored as JSON)
+- Match mode setting ("all" or "any")
+- User ownership for data isolation
 
-### Component Props
+### 2. New Components
+
+| Component | Purpose |
+|-----------|---------|
+| `FilterModal` | Main orchestrator that manages which sheet to show |
+| `ChooseFilterSheet` | Displays saved filters with multi-select capability |
+| `CreateFilterSheet` | Filter builder UI with rule management |
+| `FilterRuleRow` | Individual rule with type/operator/value inputs |
+| `MatchModeToggle` | "Match all" / "Match any" toggle |
+
+### 3. Filter Types & Their Options
+
+| Filter Type | Available Operators | Value Selection |
+|-------------|---------------------|-----------------|
+| **Score** | Is, Is not, Less than, Greater than, Is between | Number input (0-1,000,000) |
+| **Level** | Is, Is not, Less than, Greater than, Is between | Number input (1-19) |
+| **Grade** | Is, Is not | Dropdown: AAA, AA+, AA, AA-, A+, A, B, C, D, E |
+| **Lamp** | Is, Is not | Dropdown: MFC, PFC, GFC, FC, LIFE4, Clear, Fail |
+| **Difficulty** | Is, Is not | Dropdown: BEGINNER, BASIC, DIFFICULT, EXPERT, CHALLENGE |
+| **Title** | Is, Is not, Contains | Text input |
+| **Flare** | Is, Is not, Less than, Greater than, Is between | Visual selector using FlareChip graphics (EX, I-IX) |
+| **Version** | Is, Is not | Dropdown (values from database) |
+| **Era** | Is, Is not | Dropdown (values from database) |
+
+### 4. Operator Logic by Type
+
+Different filter types will show only relevant operators:
+
+| Type | Numeric Comparison | Equality | Text Match |
+|------|-------------------|----------|------------|
+| Score, Level, Flare | Less than, Greater than, Is between | Is, Is not | - |
+| Grade, Lamp, Difficulty, Version, Era | - | Is, Is not | - |
+| Title | - | Is, Is not | Contains |
+
+### 5. Multi-Rule Behavior
+
+When a user adds a second rule:
+- A toggle appears: "Match all rules" vs "Match any rule"
+- **ALL**: Results must match every rule (AND logic)
+- **ANY**: Results match if at least one rule applies (OR logic)
+
+---
+
+## Visual Design Specifications
+
+### Half-Sheet Styling
+Based on the provided mockups:
+- Background: #262937 (dark)
+- Card backgrounds: #3B3F51
+- Border radius: 10px
+- Drag handle: 100px wide, centered, muted color
+- Padding: 28px horizontal (matches app layout grid)
+
+### Flare Value Selector
+Instead of text dropdowns, the Flare filter will display a horizontal scrollable row of FlareChip graphics (the existing PNG badges) that users can tap to select. This provides a visual, game-authentic selection experience.
+
+### Lamp Value Selector  
+Options will include the HaloChip graphics for: MFC, PFC, GFC, FC, LIFE4, plus text options for Clear and Fail.
+
+### Animation Strategy
+Using the vaul Drawer component which provides:
+- Native spring-based animations
+- Touch-to-drag dismissal
+- Smooth backdrop fade
+- No janky or jarring transitions
+
+Additional polish:
+- Rule rows fade/slide in when added
+- Match mode toggle fades in when 2+ rules exist
+- Result count animates when value changes
+
+---
+
+## Implementation Phases
+
+### Phase 1: Foundation
+1. Create database table `user_filters` with security policies
+2. Create TypeScript types for filter rules and saved filters
+3. Create base `FilterModal` component with drawer structure
+
+### Phase 2: Create Filter UI
+4. Build `FilterRuleRow` with dynamic type/operator/value inputs
+5. Build `CreateFilterSheet` with rule management
+6. Build `MatchModeToggle` component
+7. Add FlareChip-based visual selector for Flare values
+8. Create hook for live result counting
+
+### Phase 3: Choose Filter UI
+9. Build `ChooseFilterSheet` with saved filter list
+10. Implement multi-select and apply logic
+
+### Phase 4: Integration
+11. Connect `FiltersSection` to open the FilterModal
+12. Apply active filters to the Scores page results
+13. Add auto-name generation for filters saved without a name
+
+### Phase 5: Polish
+14. Fine-tune animations and transitions
+15. Add loading states and error handling
+16. Handle empty states and edge cases
+
+---
+
+## Auto-Name Generation
+
+When a user saves a filter without providing a name:
+- **Single rule**: "{Type} {Operator} {Value}" (e.g., "Level Is 15", "Flare Is EX")
+- **Multiple rules**: "{First Rule Summary} + {count-1} more" (e.g., "Level Is 15 + 2 more")
+
+---
+
+## Files to Create
+
+| File | Description |
+|------|-------------|
+| `src/components/filters/FilterModal.tsx` | Main modal orchestrator |
+| `src/components/filters/ChooseFilterSheet.tsx` | Saved filters list |
+| `src/components/filters/CreateFilterSheet.tsx` | Filter builder |
+| `src/components/filters/FilterRuleRow.tsx` | Individual rule component |
+| `src/components/filters/MatchModeToggle.tsx` | All/Any toggle |
+| `src/components/filters/FlareSelector.tsx` | Visual Flare picker using FlareChip |
+| `src/components/filters/LampSelector.tsx` | Visual Lamp picker with HaloChip |
+| `src/components/filters/filterTypes.ts` | TypeScript types and constants |
+| `src/hooks/useFilterResults.ts` | Hook for live result counting |
+| `src/hooks/useSavedFilters.ts` | Hook for CRUD operations on saved filters |
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/scores/FiltersSection.tsx` | Update Filter interface, connect to FilterModal |
+| `src/pages/Scores.tsx` | Apply active filters to displayedScores, manage filter state |
+
+---
+
+## Technical Details
+
+### Filter Rule Type Definition
 ```typescript
-interface SongCardProps {
+type FilterType = 'score' | 'level' | 'grade' | 'lamp' | 'difficulty' | 'title' | 'flare' | 'version' | 'era';
+type FilterOperator = 'is' | 'is_not' | 'less_than' | 'greater_than' | 'is_between' | 'contains';
+
+interface FilterRule {
+  id: string;
+  type: FilterType;
+  operator: FilterOperator;
+  value: string | number | [number, number]; // tuple for "is_between"
+}
+
+interface SavedFilter {
+  id: string;
   name: string;
-  difficultyLevel: number | null;
-  score: number | null;
-  rank: string | null;
-  flare: number | null;
-  halo: string | null;
-  className?: string;
+  rules: FilterRule[];
+  matchMode: 'all' | 'any';
 }
 ```
 
-### Card Structure
-```text
-+------------------------------------------------------------------+
-| [HALO COLOR BAR - 4px height, full width, rounded top corners]   |
-+------------------------------------------------------------------+
-|  +--------+  SONG TITLE HERE...  [14]           [FLARE] [HALO]   |
-|  | ALBUM  |                                                       |
-|  | [diff] |  999,970  AAA                                         |
-|  +--------+                                                       |
-+------------------------------------------------------------------+
+### Database Migration
+```sql
+CREATE TABLE public.user_filters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  rules JSONB NOT NULL DEFAULT '[]',
+  match_mode TEXT NOT NULL DEFAULT 'all' 
+    CHECK (match_mode IN ('all', 'any')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.user_filters ENABLE ROW LEVEL SECURITY;
+
+-- Users can only access their own filters
+CREATE POLICY "Users can view own filters"
+  ON public.user_filters FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own filters"
+  ON public.user_filters FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own filters"
+  ON public.user_filters FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own filters"
+  ON public.user_filters FOR DELETE
+  USING (auth.uid() = user_id);
 ```
 
-### Layout Implementation Details
-
-1. **Container**: 
-   - `w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative`
-   
-2. **Top Halo Bar**:
-   - Absolute positioned, `h-1 w-full top-0 left-0`
-   - Background color based on halo type (MFC uses gradient)
-   - Default to "cleared" color (#A6ACC4) if no halo
-
-3. **Main Content Container**:
-   - `flex items-center gap-3 px-3 pt-[8px] pb-3` (accounting for 4px top bar)
-   
-4. **Album Art with Difficulty Bar**:
-   - Container: `w-10 h-10 rounded-lg bg-muted relative overflow-hidden flex-shrink-0`
-   - Difficulty bar: Absolute left edge, `w-[4px] h-full` with difficulty color
-   - Placeholder music note icon centered
-
-5. **Song Info Section**:
-   - Container: `flex-1 min-w-0 flex flex-col justify-center`
-   - **Title row**: `flex items-center gap-2`
-     - Title: `truncate` class for ellipsis on long names
-     - Style: `text-sm font-medium text-white`
-   - **Difficulty chip**: Fixed 14x14px, 4px border radius
-     - Style: `text-[10px] font-bold leading-[18px] text-[#000F33]`
-     - Background: difficulty color based on level
-   
-6. **Score Row**:
-   - `flex items-center gap-1`
-   - **Score display**: 
-     - If score exists: `text-lg font-bold text-white tabular-nums` showing formatted number
-     - If score is null: Show "No score" in muted text style
-   - **Rank badge**: 
-     - Style: `text-[10px] font-bold leading-[18px] text-[#000F33]`
-     - Text stroke: `-webkit-text-stroke: 2px #FFF3D6`
-
-7. **Badge Area (Right Side)**:
-   - Container: `flex-shrink-0 flex items-center gap-2 ml-5` (20px gap)
-   - Fixed width: `w-[72px] flex justify-end` for consistent alignment
-   - Flare chip: Show FlareChip component or empty 28px space
-   - Halo chip: Show HaloChip component or empty 40px space
-
-### Helper Functions
-
-1. **getHaloBarStyle(halo: string | null)**: Returns background style object for the top bar
-2. **getDifficultyColorClass(level: number)**: Maps level range to difficulty class name
-3. **flareNumberToRoman(flare: number | null)**: Converts 1-9 to 'i'-'ix', 10 to 'ex'
-4. **normalizeHaloType(halo: string | null)**: Converts DB halo string to HaloType
-
----
-
-## Step 3: Update Scores Page
-
-Replace `SongCardPlaceholder` with new `SongCard` in `src/pages/Scores.tsx`:
-
-```tsx
-import { SongCard } from '@/components/scores/SongCard';
-
-// In the render:
-{displayedScores.map((s) => (
-  <SongCard
-    key={s.id}
-    name={s.musicdb?.name ?? 'Unknown Song'}
-    difficultyLevel={s.difficulty_level}
-    score={s.score}
-    rank={s.rank}
-    flare={s.flare}
-    halo={s.halo}
-  />
-))}
+### Lamp Options (including LIFE4)
+```typescript
+const LAMP_OPTIONS = [
+  { value: 'mfc', label: 'MFC', hasChip: true },
+  { value: 'pfc', label: 'PFC', hasChip: true },
+  { value: 'gfc', label: 'GFC', hasChip: true },
+  { value: 'fc', label: 'FC', hasChip: true },
+  { value: 'life4', label: 'LIFE4', hasChip: true },
+  { value: 'clear', label: 'Clear', hasChip: false },
+  { value: 'fail', label: 'Fail', hasChip: false },
+];
 ```
 
----
+### Flare Options (using FlareChip graphics)
+```typescript
+const FLARE_OPTIONS = [
+  { value: 'ex', type: 'ex' as FlareType },
+  { value: 'ix', type: 'ix' as FlareType },
+  { value: 'viii', type: 'viii' as FlareType },
+  { value: 'vii', type: 'vii' as FlareType },
+  { value: 'vi', type: 'vi' as FlareType },
+  { value: 'v', type: 'v' as FlareType },
+  { value: 'iv', type: 'iv' as FlareType },
+  { value: 'iii', type: 'iii' as FlareType },
+  { value: 'ii', type: 'ii' as FlareType },
+  { value: 'i', type: 'i' as FlareType },
+];
+```
 
-## Technical Specifications
-
-### Typography
-| Element | Font | Size | Weight | Color |
-|---------|------|------|--------|-------|
-| Title | Poppins | 14px | 500 | white |
-| Difficulty chip | Poppins | 10px | 700 | #000F33 |
-| Score | Poppins | 18px | 700 | white |
-| No score text | Poppins | 14px | 400 | muted-foreground |
-| Rank | Poppins | 10px | 700 | #000F33 + 2px stroke #FFF3D6 |
-
-### Spacing
-| Element | Value |
-|---------|-------|
-| Card padding | 12px horizontal, 8px top, 12px bottom |
-| Album art to content gap | 12px |
-| Title to difficulty chip gap | 8px |
-| Score to rank gap | 4px |
-| Content to badge area gap | 20px |
-| Flare to halo gap | 8px |
-
-### Halo Bar Colors
-| Status | Color/Gradient |
-|--------|---------------|
-| PFC | #F9CD67 (gold) |
-| GFC | #63EAA8 (green) |
-| FC | #9EBBFF (blue) |
-| MFC | linear-gradient(90deg, #B5EFFF 0%, #FDB8FF 34.62%, #D4B8FF 72.6%, #FFF 100%) |
-| LIFE4 | #FF565E (red) |
-| Failed | #4C062F (dark red) |
-| Cleared/Default | #A6ACC4 (gray) |
-
-### Difficulty Level Mapping
-| Level Range | Class |
-|-------------|-------|
-| 1-5 | difficulty-beginner |
-| 6-8 | difficulty-basic |
-| 9-12 | difficulty-difficult |
-| 13-16 | difficulty-expert |
-| 17-19 | difficulty-challenge |
-
----
-
-## Files to Create/Modify
-
-1. **Create**: `src/components/scores/SongCard.tsx` - New song card component
-2. **Modify**: `src/index.css` - Add halo color CSS variables
-3. **Modify**: `src/pages/Scores.tsx` - Replace SongCardPlaceholder with SongCard
-
----
-
-## Edge Cases Handled
-
-- **Long titles**: Truncated with ellipsis, difficulty chip always visible
-- **Null flare/halo**: Empty placeholder space maintained for visual alignment in lists
-- **Null score**: Shows "No score" text in muted style
-- **Null rank**: Hidden (no space needed since it follows score)
-- **Null difficulty**: No difficulty bar or chip shown
