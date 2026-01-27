@@ -153,18 +153,26 @@ export function SongCard({
                   {score.toLocaleString()}
                 </span>
                 {rank && (
-                  <span
-                    className="text-[10px] font-bold leading-[18px]"
-                    style={{
-                      color: '#000F33',
-                      WebkitTextStrokeWidth: '2px',
-                      WebkitTextStrokeColor: '#FFF3D6',
-                      paintOrder: 'stroke fill',
-                      fontFeatureSettings: "'liga' off, 'clig' off",
-                    }}
+                  <svg
+                    className="h-[18px] flex-shrink-0"
+                    style={{ fontFeatureSettings: "'liga' off, 'clig' off" }}
                   >
-                    {rank}
-                  </span>
+                    <text
+                      x="50%"
+                      y="50%"
+                      dominantBaseline="central"
+                      textAnchor="middle"
+                      className="font-poppins text-[10px] font-bold"
+                      fill="#000F33"
+                      stroke="#FFF3D6"
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      paintOrder="stroke fill"
+                    >
+                      {rank}
+                    </text>
+                  </svg>
                 )}
               </>
             ) : (
