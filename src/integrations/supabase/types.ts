@@ -119,6 +119,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_filters: {
+        Row: {
+          created_at: string
+          id: string
+          match_mode: string
+          name: string
+          rules: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          match_mode?: string
+          name: string
+          rules?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          match_mode?: string
+          name?: string
+          rules?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_scores: {
         Row: {
           chart_id: number | null

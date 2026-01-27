@@ -1,22 +1,42 @@
+import { useState } from 'react';
 import { FilterChip } from './FilterChip';
+import { FilterModal } from '@/components/filters/FilterModal';
+import type { SavedFilter } from '@/components/filters/filterTypes';
 
-export interface Filter {
+export interface ActiveFilter {
   id: string;
   label: string;
+  filter: SavedFilter;
 }
 
 interface FiltersSectionProps {
-  filters: Filter[];
+  activeFilters: ActiveFilter[];
   onRemoveFilter: (id: string) => void;
-  onAddFilter: () => void;
+  onApplyFilters: (filters: SavedFilter[]) => void;
+  scores: Array<{
+    score: number | null;
+    difficulty_level: number | null;
+    difficulty_name: string | null;
+    rank: string | null;
+    halo: string | null;
+    flare: number | null;
+    musicdb: { name: string | null; artist: string | null } | null;
+  }>;
 }
 
-export function FiltersSection({ filters, onRemoveFilter, onAddFilter }: FiltersSectionProps) {
+export function FiltersSection({ 
+  activeFilters, 
+  onRemoveFilter, 
+  onApplyFilters,
+  scores 
+}: FiltersSectionProps) {
+  const [modalOpen, setModalOpen] = useState(false);
+
   return (
     <section className="space-y-3">
       <h2 className="text-[14px] font-semibold text-white">My filters</h2>
       <div className="flex flex-wrap gap-2">
-        {filters.map((filter) => (
+        {activeFilters.map((filter) => (
           <FilterChip
             key={filter.id}
             label={filter.label}
@@ -26,9 +46,16 @@ export function FiltersSection({ filters, onRemoveFilter, onAddFilter }: Filters
         <FilterChip
           label="Add filter..."
           isAddButton
-          onClick={onAddFilter}
+          onClick={() => setModalOpen(true)}
         />
       </div>
+
+      <FilterModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onApplyFilters={onApplyFilters}
+        scores={scores}
+      />
     </section>
   );
 }

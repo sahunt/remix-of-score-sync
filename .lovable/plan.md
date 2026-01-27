@@ -121,26 +121,26 @@ Additional polish:
 
 ## Implementation Phases
 
-### Phase 1: Foundation
-1. Create database table `user_filters` with security policies
-2. Create TypeScript types for filter rules and saved filters
-3. Create base `FilterModal` component with drawer structure
+### Phase 1: Foundation ✅ COMPLETE
+1. ✅ Create database table `user_filters` with security policies
+2. ✅ Create TypeScript types for filter rules and saved filters
+3. ✅ Create base `FilterModal` component with drawer structure
 
-### Phase 2: Create Filter UI
-4. Build `FilterRuleRow` with dynamic type/operator/value inputs
-5. Build `CreateFilterSheet` with rule management
-6. Build `MatchModeToggle` component
-7. Add FlareChip-based visual selector for Flare values
-8. Create hook for live result counting
+### Phase 2: Create Filter UI ✅ COMPLETE
+4. ✅ Build `FilterRuleRow` with dynamic type/operator/value inputs
+5. ✅ Build `CreateFilterSheet` with rule management
+6. ✅ Build `MatchModeToggle` component
+7. ✅ Add FlareChip-based visual selector for Flare values
+8. ✅ Create hook for live result counting
 
-### Phase 3: Choose Filter UI
-9. Build `ChooseFilterSheet` with saved filter list
-10. Implement multi-select and apply logic
+### Phase 3: Choose Filter UI ✅ COMPLETE
+9. ✅ Build `ChooseFilterSheet` with saved filter list
+10. ✅ Implement multi-select and apply logic
 
-### Phase 4: Integration
-11. Connect `FiltersSection` to open the FilterModal
-12. Apply active filters to the Scores page results
-13. Add auto-name generation for filters saved without a name
+### Phase 4: Integration ✅ COMPLETE
+11. ✅ Connect `FiltersSection` to open the FilterModal
+12. ✅ Apply active filters to the Scores page results
+13. ✅ Add auto-name generation for filters saved without a name
 
 ### Phase 5: Polish
 14. Fine-tune animations and transitions
