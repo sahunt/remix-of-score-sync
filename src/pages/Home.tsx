@@ -178,6 +178,15 @@ export default function Home() {
         </section>
       </div>
 
+      {/* Floating Create Button */}
+      <Button
+        onClick={() => setCreateGoalOpen(true)}
+        size="icon"
+        className="fixed bottom-[120px] right-[28px] z-20 h-14 w-14 rounded-full shadow-lg"
+      >
+        <Plus className="h-6 w-6" />
+      </Button>
+
       {/* Create Goal Sheet */}
       <CreateGoalSheet open={createGoalOpen} onOpenChange={setCreateGoalOpen} />
     </div>
