@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/Icon';
+import { Slider } from '@/components/ui/slider';
 import {
   Select,
   SelectContent,
@@ -73,41 +74,57 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
 
   const renderValueInput = () => {
     switch (rule.type) {
-      case 'score':
+      case 'score': {
+        const STEP = 10000;
+        const formatScore = (val: number) => val.toLocaleString();
+        
         if (isBetween) {
           const [min, max] = Array.isArray(rule.value) ? rule.value : [0, 1000000];
           return (
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                value={min}
-                onChange={(e) => handleValueChange([parseInt(e.target.value) || 0, max])}
-                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none"
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <div className="flex-1 space-y-2">
+                  <label className="text-sm text-muted-foreground">Min Score</label>
+                  <div className="flex items-center justify-center h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white">
+                    {formatScore(min)}
+                  </div>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <label className="text-sm text-muted-foreground">Max Score</label>
+                  <div className="flex items-center justify-center h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white">
+                    {formatScore(max)}
+                  </div>
+                </div>
+              </div>
+              <Slider
+                value={[min, max]}
+                onValueChange={([newMin, newMax]) => handleValueChange([newMin, newMax])}
                 min={0}
                 max={1000000}
-              />
-              <span className="text-muted-foreground text-sm">and</span>
-              <input
-                type="number"
-                value={max}
-                onChange={(e) => handleValueChange([min, parseInt(e.target.value) || 0])}
-                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none"
-                min={0}
-                max={1000000}
+                step={STEP}
+                className="w-full"
               />
             </div>
           );
         }
+        
+        const currentValue = typeof rule.value === 'number' ? rule.value : 0;
         return (
-          <input
-            type="number"
-            value={typeof rule.value === 'number' ? rule.value : 0}
-            onChange={(e) => handleValueChange(parseInt(e.target.value) || 0)}
-            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none"
-            min={0}
-            max={1000000}
-          />
+          <div className="space-y-4">
+            <div className="flex items-center justify-center h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-lg font-medium">
+              {formatScore(currentValue)}
+            </div>
+            <Slider
+              value={[currentValue]}
+              onValueChange={([val]) => handleValueChange(val)}
+              min={0}
+              max={1000000}
+              step={STEP}
+              className="w-full"
+            />
+          </div>
         );
+      }
 
       case 'level':
         if (isBetween) {
