@@ -127,7 +127,7 @@ export function SongCard({
         <div className="flex-1 min-w-0 flex flex-col justify-center">
           {/* Title row */}
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-white truncate">{name}</p>
+            <p className="text-[10px] font-medium text-[#96A7AF] uppercase tracking-[1px] leading-normal truncate">{name}</p>
             {difficultyLevel && (
               <div
                 className={cn(
