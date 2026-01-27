@@ -7,28 +7,28 @@ interface MatchModeToggleProps {
 
 export function MatchModeToggle({ value, onChange }: MatchModeToggleProps) {
   return (
-    <div className="flex items-center gap-2 rounded-[10px] bg-[#3B3F51] p-1">
-      <button
-        onClick={() => onChange('all')}
-        className={cn(
-          'flex-1 rounded-[8px] px-4 py-2 text-sm font-medium transition-all',
-          value === 'all'
-            ? 'bg-primary text-primary-foreground'
-            : 'text-muted-foreground hover:text-white'
-        )}
-      >
-        Match all
-      </button>
+    <div className="flex items-center gap-2 rounded-full bg-[#262937] p-1.5">
       <button
         onClick={() => onChange('any')}
         className={cn(
-          'flex-1 rounded-[8px] px-4 py-2 text-sm font-medium transition-all',
+          'flex-1 rounded-full h-10 px-4 text-sm font-medium transition-all',
           value === 'any'
             ? 'bg-primary text-primary-foreground'
             : 'text-muted-foreground hover:text-white'
         )}
       >
-        Match any
+        Match any rule
+      </button>
+      <button
+        onClick={() => onChange('all')}
+        className={cn(
+          'flex-1 rounded-full h-10 px-4 text-sm font-medium transition-all',
+          value === 'all'
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted-foreground hover:text-white'
+        )}
+      >
+        Match all rules
       </button>
     </div>
   );

@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Icon } from '@/components/ui/Icon';
 import {
   Select,
@@ -66,21 +65,21 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         if (isBetween) {
           const [min, max] = Array.isArray(rule.value) ? rule.value : [0, 1000000];
           return (
-            <div className="flex items-center gap-2">
-              <Input
+            <div className="flex items-center gap-3">
+              <input
                 type="number"
                 value={min}
                 onChange={(e) => handleValueChange([parseInt(e.target.value) || 0, max])}
-                className="w-28 bg-[#3B3F51] border-0"
+                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none"
                 min={0}
                 max={1000000}
               />
-              <span className="text-muted-foreground">to</span>
-              <Input
+              <span className="text-muted-foreground text-sm">and</span>
+              <input
                 type="number"
                 value={max}
                 onChange={(e) => handleValueChange([min, parseInt(e.target.value) || 0])}
-                className="w-28 bg-[#3B3F51] border-0"
+                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none"
                 min={0}
                 max={1000000}
               />
@@ -88,11 +87,11 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
           );
         }
         return (
-          <Input
+          <input
             type="number"
             value={typeof rule.value === 'number' ? rule.value : 0}
             onChange={(e) => handleValueChange(parseInt(e.target.value) || 0)}
-            className="w-32 bg-[#3B3F51] border-0"
+            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none"
             min={0}
             max={1000000}
           />
@@ -102,21 +101,21 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         if (isBetween) {
           const [min, max] = Array.isArray(rule.value) ? rule.value : [1, 19];
           return (
-            <div className="flex items-center gap-2">
-              <Input
+            <div className="flex items-center gap-3">
+              <input
                 type="number"
                 value={min}
                 onChange={(e) => handleValueChange([parseInt(e.target.value) || 1, max])}
-                className="w-16 bg-[#3B3F51] border-0"
+                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none text-center"
                 min={1}
                 max={19}
               />
-              <span className="text-muted-foreground">to</span>
-              <Input
+              <span className="text-muted-foreground text-sm">and</span>
+              <input
                 type="number"
                 value={max}
                 onChange={(e) => handleValueChange([min, parseInt(e.target.value) || 19])}
-                className="w-16 bg-[#3B3F51] border-0"
+                className="flex-1 h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none text-center"
                 min={1}
                 max={19}
               />
@@ -124,11 +123,11 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
           );
         }
         return (
-          <Input
+          <input
             type="number"
             value={typeof rule.value === 'number' ? rule.value : 1}
             onChange={(e) => handleValueChange(parseInt(e.target.value) || 1)}
-            className="w-20 bg-[#3B3F51] border-0"
+            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white outline-none text-center"
             min={1}
             max={19}
           />
@@ -159,7 +158,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
             value={typeof rule.value === 'string' ? rule.value : ''}
             onValueChange={handleValueChange}
           >
-            <SelectTrigger className="w-28 bg-[#3B3F51] border-0">
+            <SelectTrigger className="w-full h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
               <SelectValue placeholder="Grade" />
             </SelectTrigger>
             <SelectContent className="bg-[#3B3F51] border-0">
@@ -178,7 +177,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
             value={typeof rule.value === 'string' ? rule.value : ''}
             onValueChange={handleValueChange}
           >
-            <SelectTrigger className="w-36 bg-[#3B3F51] border-0">
+            <SelectTrigger className="w-full h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
               <SelectValue placeholder="Difficulty" />
             </SelectTrigger>
             <SelectContent className="bg-[#3B3F51] border-0">
@@ -193,11 +192,11 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
 
       case 'title':
         return (
-          <Input
+          <input
             type="text"
             value={typeof rule.value === 'string' ? rule.value : ''}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="flex-1 bg-[#3B3F51] border-0"
+            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white placeholder:text-muted-foreground/50 outline-none"
             placeholder="Song title..."
           />
         );
@@ -205,11 +204,11 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
       case 'version':
       case 'era':
         return (
-          <Input
+          <input
             type="text"
             value={typeof rule.value === 'string' ? rule.value : ''}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="flex-1 bg-[#3B3F51] border-0"
+            className="w-full h-[44px] rounded-full bg-[#3B3F51] px-5 text-white placeholder:text-muted-foreground/50 outline-none"
             placeholder={`Enter ${rule.type}...`}
           />
         );
@@ -220,11 +219,24 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
   };
 
   return (
-    <div className="animate-in slide-in-from-top-2 fade-in duration-200 space-y-3 rounded-[10px] bg-[#3B3F51] p-4">
-      <div className="flex items-start gap-2">
+    <div className="animate-in slide-in-from-top-2 fade-in duration-200 rounded-[10px] bg-[#262937] p-4 relative">
+      {/* Delete button */}
+      {showRemove && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onRemove}
+          className="absolute top-3 right-3 h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          <Icon name="delete" size={20} />
+        </Button>
+      )}
+
+      {/* Type and operator selectors in a row */}
+      <div className="flex items-center gap-2 mb-4">
         {/* Type selector */}
         <Select value={rule.type} onValueChange={handleTypeChange}>
-          <SelectTrigger className="w-28 bg-[#2A2D3A] border-0">
+          <SelectTrigger className="flex-1 h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[#3B3F51] border-0">
@@ -238,7 +250,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
 
         {/* Operator selector */}
         <Select value={rule.operator} onValueChange={handleOperatorChange}>
-          <SelectTrigger className="w-32 bg-[#2A2D3A] border-0">
+          <SelectTrigger className="flex-1 h-[44px] rounded-full bg-[#3B3F51] border-0 px-5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[#3B3F51] border-0">
@@ -249,22 +261,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
             ))}
           </SelectContent>
         </Select>
-
-        {/* Remove button */}
-        {showRemove && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onRemove}
-            className="ml-auto shrink-0 text-muted-foreground hover:text-destructive"
-          >
-            <Icon name="close" size={20} />
-          </Button>
-        )}
       </div>
 
       {/* Value input */}
-      <div className="pt-1">
+      <div>
         {renderValueInput()}
       </div>
     </div>
