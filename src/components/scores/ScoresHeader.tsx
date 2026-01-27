@@ -15,8 +15,8 @@ export function ScoresHeader() {
         backgroundPosition: 'center top',
       }}
     >
-      {/* Center content - username and sync below */}
-      <div className="flex flex-col items-center gap-1">
+      {/* Right-aligned content - username and sync below */}
+      <div className="flex flex-col items-end gap-1">
         {/* Username row */}
         <div className="flex items-center gap-2">
           <span className="text-xl font-bold text-white text-shadow-greeting">
