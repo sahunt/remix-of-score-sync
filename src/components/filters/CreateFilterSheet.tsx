@@ -82,15 +82,22 @@ export function CreateFilterSheet({
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
+      {/* Header with close/back, title, and kebab */}
+      <div className="flex items-center justify-between -mx-7 -mt-4 px-5 py-4 border-b border-[#4A4E61]">
         <button
           onClick={onBack}
-          className="p-1 text-muted-foreground hover:text-white transition-colors"
+          className="p-2 text-white hover:text-muted-foreground transition-colors"
+          aria-label="Back"
         >
           <Icon name="arrow_back" size={24} />
         </button>
         <h2 className="text-lg font-semibold text-white">Create filter</h2>
+        <button
+          className="p-2 text-white hover:text-muted-foreground transition-colors"
+          aria-label="More options"
+        >
+          <Icon name="more_vert" size={24} />
+        </button>
       </div>
 
       {/* Filter name input */}

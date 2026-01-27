@@ -1,5 +1,5 @@
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from '@/components/ui/Icon';
 import type { SavedFilter } from './filterTypes';
 
@@ -10,6 +10,7 @@ interface ChooseFilterSheetProps {
   onSelectFilter: (id: string) => void;
   onApply: () => void;
   onCreateNew: () => void;
+  onClose: () => void;
 }
 
 export function ChooseFilterSheet({
@@ -19,6 +20,7 @@ export function ChooseFilterSheet({
   onSelectFilter,
   onApply,
   onCreateNew,
+  onClose,
 }: ChooseFilterSheetProps) {
   if (loading) {
     return (
@@ -30,7 +32,23 @@ export function ChooseFilterSheet({
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-white">Choose filter</h2>
+      {/* Header with close, title, and kebab */}
+      <div className="flex items-center justify-between -mx-7 -mt-4 px-5 py-4 border-b border-[#4A4E61]">
+        <button
+          onClick={onClose}
+          className="p-2 text-white hover:text-muted-foreground transition-colors"
+          aria-label="Close"
+        >
+          <Icon name="close" size={24} />
+        </button>
+        <h2 className="text-lg font-semibold text-white">Filters</h2>
+        <button
+          className="p-2 text-white hover:text-muted-foreground transition-colors"
+          aria-label="More options"
+        >
+          <Icon name="more_vert" size={24} />
+        </button>
+      </div>
 
       {filters.length === 0 ? (
         <div className="py-8 text-center">
@@ -38,48 +56,47 @@ export function ChooseFilterSheet({
           <p className="text-sm text-muted-foreground">No saved filters yet</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filters.map((filter) => (
-            <button
-              key={filter.id}
-              onClick={() => onSelectFilter(filter.id)}
-              className="flex w-full items-center gap-3 rounded-[10px] bg-[#3B3F51] p-4 text-left transition-colors hover:bg-[#454A5E]"
-            >
-              <Checkbox
-                checked={selectedIds.includes(filter.id)}
-                onCheckedChange={() => onSelectFilter(filter.id)}
-                className="pointer-events-none"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-white truncate">{filter.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {filter.rules.length} rule{filter.rules.length !== 1 ? 's' : ''} • Match {filter.matchMode}
-                </p>
-              </div>
-              <div className="h-full w-1 rounded-full bg-primary" />
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2 pt-2">
+          {filters.map((filter) => {
+            const isSelected = selectedIds.includes(filter.id);
+            return (
+              <button
+                key={filter.id}
+                onClick={() => onSelectFilter(filter.id)}
+                className={cn(
+                  'flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all',
+                  isSelected
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-[#4A4E61] text-white hover:bg-[#555970]'
+                )}
+              >
+                {isSelected && (
+                  <Icon name="check_circle" size={20} className="animate-scale-in" />
+                )}
+                {filter.name}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      <div className="flex gap-3 pt-2">
+      {/* Action buttons - Apply first, Create second */}
+      <div className="flex gap-3 pt-4">
+        <Button
+          className="flex-1"
+          onClick={onApply}
+          disabled={selectedIds.length === 0}
+        >
+          Apply
+        </Button>
         <Button
           variant="outline"
           className="flex-1"
           onClick={onCreateNew}
         >
-          <Icon name="add" size={20} className="mr-2" />
-          Create new
+          Create
+          <Icon name="add_circle" size={20} className="ml-2" />
         </Button>
-        {filters.length > 0 && (
-          <Button
-            className="flex-1"
-            onClick={onApply}
-            disabled={selectedIds.length === 0}
-          >
-            Apply{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
-          </Button>
-        )}
       </div>
     </div>
   );
