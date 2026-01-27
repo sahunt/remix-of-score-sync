@@ -11,32 +11,38 @@ export function ScoresHeader() {
 
   return (
     <header
-      className="relative px-[28px] pt-[50px] pb-6"
+      className="relative px-[28px] pt-[33px] pb-[19px]"
       style={{
         backgroundImage: `url(${rainbowBg})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center top',
       }}
     >
-      {/* Back button */}
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        className="absolute left-[28px] top-[50px] flex h-10 w-10 items-center justify-center text-white"
-        aria-label="Go back"
-      >
-        <Icon name="arrow_back" size={24} />
-      </button>
+      {/* Row with back button, sync badge, and username/avatar */}
+      <div className="flex items-center justify-between">
+        {/* Back button */}
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="flex h-10 w-10 items-center justify-center text-foreground -ml-2"
+          aria-label="Go back"
+        >
+          <Icon name="arrow_back" size={28} />
+        </button>
 
-      {/* Center content - last sync and username */}
-      <div className="flex flex-col items-center gap-1">
-        <LastUploadBadge className="text-white/90 [&_*]:text-white/90" />
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-white text-shadow-greeting">
-            {loading ? '...' : username}
-          </span>
-          <UserAvatar size={24} />
+        {/* Center content - last sync and username */}
+        <div className="flex items-center gap-4">
+          <LastUploadBadge className="text-foreground [&_*]:text-foreground" />
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-bold text-white text-shadow-greeting">
+              {loading ? '...' : username}
+            </span>
+            <UserAvatar size={28} />
+          </div>
         </div>
+
+        {/* Spacer to balance the layout */}
+        <div className="w-10" />
       </div>
     </header>
   );
