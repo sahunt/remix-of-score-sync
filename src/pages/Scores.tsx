@@ -101,7 +101,7 @@ export default function Scores() {
       { label: 'PFC', value: pfc },
       { label: 'AAA', value: aaa },
       { label: 'Clear', value: clear },
-      { label: 'Fail', value: fail },
+      { label: '', value: fail, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
     ];
   }, [scores, selectedLevel]);
 
