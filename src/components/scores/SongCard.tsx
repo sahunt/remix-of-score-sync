@@ -135,7 +135,7 @@ export function SongCard({
           </div>
 
           {/* Score row with flare badge */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {score !== null ? (
               <>
                 <span className="text-[16px] font-bold text-white leading-normal tabular-nums">
