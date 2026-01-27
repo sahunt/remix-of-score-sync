@@ -1,0 +1,154 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Icon } from '@/components/ui/Icon';
+import { FilterRuleRow } from './FilterRuleRow';
+import { MatchModeToggle } from './MatchModeToggle';
+import { useFilterResults } from '@/hooks/useFilterResults';
+import {
+  generateRuleId,
+  getDefaultOperator,
+  getDefaultValue,
+  generateFilterName,
+  type FilterRule,
+} from './filterTypes';
+
+interface CreateFilterSheetProps {
+  scores: Array<{
+    score: number | null;
+    difficulty_level: number | null;
+    difficulty_name: string | null;
+    rank: string | null;
+    halo: string | null;
+    flare: number | null;
+    musicdb: { name: string | null; artist: string | null } | null;
+  }>;
+  onSave: (name: string, rules: FilterRule[], matchMode: 'all' | 'any') => void;
+  onShowResults: (rules: FilterRule[], matchMode: 'all' | 'any') => void;
+  onBack: () => void;
+  onCancel: () => void;
+}
+
+export function CreateFilterSheet({
+  scores,
+  onSave,
+  onShowResults,
+  onBack,
+  onCancel,
+}: CreateFilterSheetProps) {
+  const [filterName, setFilterName] = useState('');
+  const [rules, setRules] = useState<FilterRule[]>([
+    {
+      id: generateRuleId(),
+      type: 'level',
+      operator: getDefaultOperator('level'),
+      value: getDefaultValue('level'),
+    },
+  ]);
+  const [matchMode, setMatchMode] = useState<'all' | 'any'>('all');
+
+  const { count } = useFilterResults(scores, rules, matchMode);
+
+  const handleAddRule = () => {
+    setRules((prev) => [
+      ...prev,
+      {
+        id: generateRuleId(),
+        type: 'level',
+        operator: getDefaultOperator('level'),
+        value: getDefaultValue('level'),
+      },
+    ]);
+  };
+
+  const handleUpdateRule = (updatedRule: FilterRule) => {
+    setRules((prev) =>
+      prev.map((r) => (r.id === updatedRule.id ? updatedRule : r))
+    );
+  };
+
+  const handleRemoveRule = (id: string) => {
+    setRules((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const handleSave = () => {
+    const name = filterName.trim() || generateFilterName(rules);
+    onSave(name, rules, matchMode);
+  };
+
+  const handleShowResults = () => {
+    onShowResults(rules, matchMode);
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="p-1 text-muted-foreground hover:text-white transition-colors"
+        >
+          <Icon name="arrow_back" size={24} />
+        </button>
+        <h2 className="text-lg font-semibold text-white">Create filter</h2>
+      </div>
+
+      {/* Filter name input */}
+      <div className="space-y-2">
+        <label className="text-sm text-muted-foreground">Filter name (optional)</label>
+        <Input
+          value={filterName}
+          onChange={(e) => setFilterName(e.target.value)}
+          placeholder="e.g., Level 15+ PFCs"
+          className="bg-[#3B3F51] border-0"
+        />
+      </div>
+
+      {/* Match mode toggle (shows when 2+ rules) */}
+      {rules.length >= 2 && (
+        <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+          <MatchModeToggle value={matchMode} onChange={setMatchMode} />
+        </div>
+      )}
+
+      {/* Rules */}
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-white">Rules</p>
+        {rules.map((rule) => (
+          <FilterRuleRow
+            key={rule.id}
+            rule={rule}
+            onChange={handleUpdateRule}
+            onRemove={() => handleRemoveRule(rule.id)}
+            showRemove={rules.length > 1}
+          />
+        ))}
+
+        {/* Add rule button */}
+        <button
+          onClick={handleAddRule}
+          className="flex w-full items-center justify-center gap-2 rounded-[10px] border-2 border-dashed border-muted-foreground/30 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+        >
+          <Icon name="add" size={20} />
+          Add rule
+        </button>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex flex-col gap-3 pt-2">
+        <Button onClick={handleShowResults} className="w-full" size="lg">
+          Show {count.toLocaleString()} Result{count !== 1 ? 's' : ''}
+        </Button>
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="secondary" className="flex-1" onClick={handleSave}>
+            <Icon name="save" size={20} className="mr-2" />
+            Save filter
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,14 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
-import { FiltersSection, type Filter } from '@/components/scores/FiltersSection';
+import { FiltersSection, type ActiveFilter } from '@/components/scores/FiltersSection';
 import { StatsSummary } from '@/components/scores/StatsSummary';
 import { SearchSortBar, type SortOption } from '@/components/scores/SearchSortBar';
 import { SongCard } from '@/components/scores/SongCard';
 import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
+import type { SavedFilter, FilterRule } from '@/components/filters/filterTypes';
 
 interface ScoreWithSong {
   id: string;
@@ -26,6 +27,56 @@ interface ScoreWithSong {
   } | null;
 }
 
+// Filter matching logic
+function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
+  const { type, operator, value } = rule;
+
+  const compare = (actual: number | null, target: number | [number, number]): boolean => {
+    if (actual === null) return false;
+    
+    if (Array.isArray(target)) {
+      const [min, max] = target;
+      return actual >= Math.min(min, max) && actual <= Math.max(min, max);
+    }
+    
+    switch (operator) {
+      case 'is': return actual === target;
+      case 'is_not': return actual !== target;
+      case 'less_than': return actual < target;
+      case 'greater_than': return actual > target;
+      default: return false;
+    }
+  };
+
+  const compareString = (actual: string | null, target: string): boolean => {
+    if (actual === null) return false;
+    const normalizedActual = actual.toLowerCase();
+    const normalizedTarget = target.toLowerCase();
+    
+    switch (operator) {
+      case 'is': return normalizedActual === normalizedTarget;
+      case 'is_not': return normalizedActual !== normalizedTarget;
+      case 'contains': return normalizedActual.includes(normalizedTarget);
+      default: return false;
+    }
+  };
+
+  switch (type) {
+    case 'score': return compare(score.score, value as number | [number, number]);
+    case 'level': return compare(score.difficulty_level, value as number | [number, number]);
+    case 'flare': return compare(score.flare, value as number | [number, number]);
+    case 'grade': return compareString(score.rank, value as string);
+    case 'lamp': return compareString(score.halo, value as string);
+    case 'difficulty': return compareString(score.difficulty_name, value as string);
+    case 'title': return compareString(score.musicdb?.name ?? '', value as string);
+    case 'version':
+    case 'era':
+      return true; // Placeholder
+    default:
+      return true;
+  }
+}
+
 export default function Scores() {
   const { user } = useAuth();
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
@@ -33,7 +84,7 @@ export default function Scores() {
   
   // State for filters and search
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
-  const [filters, setFilters] = useState<Filter[]>([]);
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('name');
 
@@ -116,6 +167,22 @@ export default function Scores() {
       result = result.filter(s => s.difficulty_level === selectedLevel);
     }
 
+    // Apply active filters
+    if (activeFilters.length > 0) {
+      result = result.filter(score => {
+        // Each active filter must match (AND between filters)
+        return activeFilters.every(af => {
+          const filter = af.filter;
+          // Apply match mode within each filter
+          if (filter.matchMode === 'all') {
+            return filter.rules.every(rule => matchesRule(score, rule));
+          } else {
+            return filter.rules.some(rule => matchesRule(score, rule));
+          }
+        });
+      });
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -148,16 +215,20 @@ export default function Scores() {
     });
 
     return result;
-  }, [scores, selectedLevel, searchQuery, sortBy]);
+  }, [scores, selectedLevel, activeFilters, searchQuery, sortBy]);
 
-  const handleRemoveFilter = (id: string) => {
-    setFilters(prev => prev.filter(f => f.id !== id));
-  };
+  const handleRemoveFilter = useCallback((id: string) => {
+    setActiveFilters(prev => prev.filter(f => f.id !== id));
+  }, []);
 
-  const handleAddFilter = () => {
-    // TODO: Open filter selection modal
-    console.log('Add filter clicked');
-  };
+  const handleApplyFilters = useCallback((filters: SavedFilter[]) => {
+    const newActiveFilters: ActiveFilter[] = filters.map(f => ({
+      id: f.id,
+      label: f.name,
+      filter: f,
+    }));
+    setActiveFilters(newActiveFilters);
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -174,9 +245,10 @@ export default function Scores() {
 
         {/* Filters section */}
         <FiltersSection
-          filters={filters}
+          activeFilters={activeFilters}
           onRemoveFilter={handleRemoveFilter}
-          onAddFilter={handleAddFilter}
+          onApplyFilters={handleApplyFilters}
+          scores={scores}
         />
 
         {/* Stats summary */}
