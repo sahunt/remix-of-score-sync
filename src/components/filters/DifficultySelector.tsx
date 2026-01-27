@@ -6,13 +6,13 @@ interface DifficultySelectorProps {
   onChange: (value: string) => void;
 }
 
-// Color mapping for DDR difficulty types
-const DIFFICULTY_COLORS: Record<string, string> = {
-  BEGINNER: 'bg-difficulty-beginner text-difficulty-beginner-foreground',
-  BASIC: 'bg-difficulty-basic text-difficulty-basic-foreground',
-  DIFFICULT: 'bg-difficulty-difficult text-difficulty-difficult-foreground',
-  EXPERT: 'bg-difficulty-expert text-difficulty-expert-foreground',
-  CHALLENGE: 'bg-difficulty-challenge text-difficulty-challenge-foreground',
+// Map to the CSS utility classes defined in index.css
+const DIFFICULTY_CLASSES: Record<string, string> = {
+  BEGINNER: 'difficulty-beginner',
+  BASIC: 'difficulty-basic',
+  DIFFICULT: 'difficulty-difficult',
+  EXPERT: 'difficulty-expert',
+  CHALLENGE: 'difficulty-challenge',
 };
 
 export function DifficultySelector({ value, onChange }: DifficultySelectorProps) {
@@ -20,7 +20,7 @@ export function DifficultySelector({ value, onChange }: DifficultySelectorProps)
     <div className="grid grid-cols-5 gap-2">
       {DIFFICULTY_OPTIONS.map((option) => {
         const isSelected = option.value === value;
-        const colorClass = DIFFICULTY_COLORS[option.value] || '';
+        const difficultyClass = DIFFICULTY_CLASSES[option.value] || '';
         
         return (
           <button
@@ -29,7 +29,7 @@ export function DifficultySelector({ value, onChange }: DifficultySelectorProps)
             className={cn(
               "h-[44px] rounded-[10px] text-xs font-medium transition-all duration-200",
               isSelected
-                ? colorClass
+                ? difficultyClass
                 : "bg-[#3B3F51] text-white hover:bg-[#454a5e]"
             )}
           >
