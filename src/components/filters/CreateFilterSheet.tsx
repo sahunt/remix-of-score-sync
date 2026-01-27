@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/Icon';
 import { FilterRuleRow } from './FilterRuleRow';
 import { MatchModeToggle } from './MatchModeToggle';
+import { RuleConnectorChip } from './RuleConnectorChip';
 import { useFilterResults } from '@/hooks/useFilterResults';
 import {
   generateRuleId,
@@ -118,15 +119,20 @@ export function CreateFilterSheet({
       )}
 
       {/* Rules */}
-      <div className="space-y-3">
-        {rules.map((rule) => (
-          <FilterRuleRow
-            key={rule.id}
-            rule={rule}
-            onChange={handleUpdateRule}
-            onRemove={() => handleRemoveRule(rule.id)}
-            showRemove={rules.length > 1}
-          />
+      <div className="space-y-1">
+        {rules.map((rule, index) => (
+          <div key={rule.id}>
+            <FilterRuleRow
+              rule={rule}
+              onChange={handleUpdateRule}
+              onRemove={() => handleRemoveRule(rule.id)}
+              showRemove={rules.length > 1}
+            />
+            {/* Show connector chip between rules when there are multiple */}
+            {rules.length > 1 && index < rules.length - 1 && (
+              <RuleConnectorChip mode={matchMode} />
+            )}
+          </div>
         ))}
 
         {/* Add rule button - dashed outline */}
