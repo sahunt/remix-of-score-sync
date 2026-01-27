@@ -150,7 +150,7 @@ export function SongCard({
         </div>
 
         {/* Right side - sparkle + rank aligned right */}
-        <div className="flex-shrink-0 flex items-center gap-1.5">
+        <div className="flex-shrink-0 flex items-center gap-[3px]">
           {haloType && <HaloSparkle type={haloType} />}
           {rank && (
             <span className="text-[16px] font-bold text-white leading-normal">
