@@ -6,12 +6,13 @@ interface TargetSelectorProps {
   onTargetChange: (type: 'lamp' | 'grade' | 'flare' | 'score', value: string) => void;
 }
 
+// Lamp options with colored dots matching DDR halo system
 const LAMP_OPTIONS = [
-  { value: 'mfc', label: 'MFC', color: 'bg-gradient-to-r from-blue-400 to-pink-400' },
-  { value: 'pfc', label: 'PFC', color: 'bg-yellow-400' },
-  { value: 'gfc', label: 'GFC', color: 'bg-green-400' },
-  { value: 'fc', label: 'FC', color: 'bg-blue-400' },
-  { value: 'life4', label: 'LIFE4', color: 'bg-red-400' },
+  { value: 'mfc', label: 'MFC', dotClass: 'bg-gradient-to-r from-[#B5EFFF] via-[#FDB8FF] to-[#D4B8FF]' },
+  { value: 'pfc', label: 'PFC', dotClass: 'bg-[#F9CD67]' },
+  { value: 'gfc', label: 'GFC', dotClass: 'bg-[#63EAA8]' },
+  { value: 'fc', label: 'FC', dotClass: 'bg-[#9EBBFF]' },
+  { value: 'life4', label: 'LIFE4', dotClass: 'bg-[#FF565E]' },
 ];
 
 const GRADE_OPTIONS = [
@@ -29,28 +30,28 @@ const FLARE_OPTIONS = [
 ];
 
 export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
+  const isSelected = (type: string, value: string) => 
+    targetType === type && targetValue === value;
+
   return (
     <div className="space-y-4">
       {/* Lamp targets */}
       <div className="space-y-2">
-        <p className="text-xs text-muted-foreground">Lamp</p>
+        <p className="text-sm text-muted-foreground">Lamp</p>
         <div className="flex flex-wrap gap-2">
           {LAMP_OPTIONS.map((option) => (
             <button
               key={option.value}
               onClick={() => onTargetChange('lamp', option.value)}
               className={cn(
-                "px-3 py-2 rounded-[10px] text-sm font-medium transition-all",
-                "border-2",
-                targetType === 'lamp' && targetValue === option.value
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-muted bg-muted/50 text-muted-foreground hover:border-primary/50"
+                "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all duration-200",
+                "flex items-center gap-2",
+                isSelected('lamp', option.value)
+                  ? "bg-primary/20 border-2 border-primary text-foreground"
+                  : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
               )}
             >
-              <span className={cn(
-                "inline-block w-2 h-2 rounded-full mr-2",
-                option.color
-              )} />
+              <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", option.dotClass)} />
               {option.label}
             </button>
           ))}
@@ -59,18 +60,17 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
 
       {/* Grade targets */}
       <div className="space-y-2">
-        <p className="text-xs text-muted-foreground">Grade</p>
+        <p className="text-sm text-muted-foreground">Grade</p>
         <div className="flex flex-wrap gap-2">
           {GRADE_OPTIONS.map((option) => (
             <button
               key={option.value}
               onClick={() => onTargetChange('grade', option.value)}
               className={cn(
-                "px-3 py-2 rounded-[10px] text-sm font-medium transition-all",
-                "border-2",
-                targetType === 'grade' && targetValue === option.value
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-muted bg-muted/50 text-muted-foreground hover:border-primary/50"
+                "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all duration-200",
+                isSelected('grade', option.value)
+                  ? "bg-primary/20 border-2 border-primary text-foreground"
+                  : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
               )}
             >
               {option.label}
@@ -81,18 +81,17 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
 
       {/* Flare targets */}
       <div className="space-y-2">
-        <p className="text-xs text-muted-foreground">Flare</p>
+        <p className="text-sm text-muted-foreground">Flare</p>
         <div className="flex flex-wrap gap-2">
           {FLARE_OPTIONS.map((option) => (
             <button
               key={option.value}
               onClick={() => onTargetChange('flare', option.value)}
               className={cn(
-                "px-3 py-2 rounded-[10px] text-sm font-medium transition-all",
-                "border-2",
-                targetType === 'flare' && targetValue === option.value
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-muted bg-muted/50 text-muted-foreground hover:border-primary/50"
+                "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all duration-200",
+                isSelected('flare', option.value)
+                  ? "bg-primary/20 border-2 border-primary text-foreground"
+                  : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
               )}
             >
               {option.label}
