@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
-import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
+import { HaloSparkle, type HaloType } from '@/components/ui/HaloSparkle';
+
 interface SongCardProps {
   name: string;
   difficultyLevel: number | null;
@@ -90,6 +91,7 @@ function normalizeHaloType(halo: string | null): HaloType | null {
   }
   return null;
 }
+
 export function SongCard({
   name,
   difficultyLevel,
@@ -102,14 +104,16 @@ export function SongCard({
   const flareType = flareNumberToType(flare);
   const haloType = normalizeHaloType(halo);
   const difficultyClass = getDifficultyColorClass(difficultyLevel);
-  return <div className={cn('w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative', className)}>
-      {/* Top halo bar */}
-      <div className="h-1 w-full absolute top-0 left-0" style={getHaloBarStyle(halo)} />
 
-      {/* Main content */}
-      <div className="flex items-center gap-3 px-3 py-[12px] pt-[12px] pb-[9px]">
+  return (
+    <div className={cn('w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative', className)}>
+      {/* Top halo bar */}
+      <div className="h-1 w-full absolute top-0 left-0 rounded-t-sm" style={getHaloBarStyle(halo)} />
+
+      {/* Main content - pt-3 pb-3 to center content in dark area below the 4px bar */}
+      <div className="flex items-center gap-3 px-3 pt-3 pb-3">
         {/* Album art with difficulty bar */}
-        <div className="w-10 h-10 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
           {/* Difficulty color bar on left edge */}
           {difficultyLevel && <div className={cn('absolute left-0 top-0 w-[4px] h-full', difficultyClass)} />}
           {/* Placeholder icon */}
@@ -121,43 +125,40 @@ export function SongCard({
           {/* Title row */}
           <div className="flex items-center gap-2">
             <p className="text-[10px] font-medium text-[#96A7AF] uppercase tracking-[1px] leading-normal truncate">{name}</p>
-            {difficultyLevel && <div className={cn('flex-shrink-0 w-[14px] h-[14px] rounded-[4px] flex items-center justify-center', difficultyClass)}>
-                <span className="text-[10px] font-bold leading-[18px] text-[#000F33]" style={{
-              fontFeatureSettings: "'liga' off, 'clig' off"
-            }}>
+            {difficultyLevel && (
+              <div className={cn('flex-shrink-0 w-[14px] h-[14px] rounded-[4px] flex items-center justify-center', difficultyClass)}>
+                <span className="text-[10px] font-bold leading-[18px] text-[#000F33]" style={{ fontFeatureSettings: "'liga' off, 'clig' off" }}>
                   {difficultyLevel}
                 </span>
-              </div>}
+              </div>
+            )}
           </div>
 
-          {/* Score row */}
-          <div className="flex items-center gap-1">
-            {score !== null ? <>
+          {/* Score row with flare badge */}
+          <div className="flex items-center gap-2">
+            {score !== null ? (
+              <>
                 <span className="text-[16px] font-bold text-white leading-normal tabular-nums">
                   {score.toLocaleString()}
                 </span>
-                {rank && <svg className="h-[18px] flex-shrink-0" style={{
-              fontFeatureSettings: "'liga' off, 'clig' off"
-            }}>
-                    <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="font-poppins text-[10px] font-bold" fill="#000F33" stroke="#FFF3D6" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" paintOrder="stroke fill">
-                      {rank}
-                    </text>
-                  </svg>}
-              </> : <span className="text-sm text-muted-foreground">No score</span>}
+                {flareType && <FlareChip type={flareType} className="h-5" />}
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">No score</span>
+            )}
           </div>
         </div>
 
-        {/* Badge area (right side) - fixed width for consistent alignment */}
-        <div className="flex-shrink-0 flex items-center gap-2 ml-5 w-[72px] justify-end">
-          {/* Flare chip placeholder (28px width) */}
-          <div className="w-[28px] flex justify-center">
-            {flareType && <FlareChip type={flareType} />}
-          </div>
-          {/* Halo chip placeholder (40px width) */}
-          <div className="w-[40px] flex justify-center">
-            {haloType && <HaloChip type={haloType} />}
-          </div>
+        {/* Right side - sparkle + rank aligned right */}
+        <div className="flex-shrink-0 flex items-center gap-1.5">
+          {haloType && <HaloSparkle type={haloType} />}
+          {rank && (
+            <span className="text-[16px] font-bold text-white leading-normal">
+              {rank}
+            </span>
+          )}
         </div>
       </div>
-    </div>;
+    </div>
+  );
 }
