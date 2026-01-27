@@ -101,7 +101,7 @@ export function FilterModal({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerPortal>
         <DrawerOverlay className="fixed inset-0 bg-black/60" />
-        <DrawerContent className="fixed bottom-0 left-0 right-0 mt-24 flex h-auto max-h-[85vh] flex-col rounded-t-[20px] bg-[#3B3F51] outline-none">
+        <DrawerContent hideHandle className="fixed bottom-0 left-0 right-0 mt-24 flex h-auto max-h-[85vh] flex-col rounded-t-[20px] bg-[#3B3F51] border-0 outline-none">
           <div className="flex-1 overflow-y-auto px-7 pb-8 pt-4">
             {view === 'choose' ? (
               <ChooseFilterSheet
