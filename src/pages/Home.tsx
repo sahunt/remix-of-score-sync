@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useUsername } from '@/hooks/useUsername';
 import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
@@ -11,6 +12,7 @@ import { SearchBar } from '@/components/home/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { GoalCard } from '@/components/home/GoalCard';
+import { CreateGoalSheet } from '@/components/goals/CreateGoalSheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import rainbowBg from '@/assets/rainbow-bg.png';
@@ -56,6 +58,7 @@ export default function Home() {
   const { isVisible } = useScrollDirection({ threshold: 15 });
   const { user } = useAuth();
   const { goals, isLoading: goalsLoading } = useGoals();
+  const [createGoalOpen, setCreateGoalOpen] = useState(false);
 
   // Fetch user scores for progress calculation
   const { data: scores = [], isLoading: scoresLoading } = useQuery({
@@ -157,7 +160,7 @@ export default function Home() {
               <p className="text-sm text-muted-foreground mt-1 mb-4">
                 Create your first goal to start tracking progress!
               </p>
-              <Button onClick={() => console.log('TODO: Open create goal sheet')}>
+              <Button onClick={() => setCreateGoalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Goal
               </Button>
@@ -174,6 +177,9 @@ export default function Home() {
           )}
         </section>
       </div>
+
+      {/* Create Goal Sheet */}
+      <CreateGoalSheet open={createGoalOpen} onOpenChange={setCreateGoalOpen} />
     </div>
   );
 }
