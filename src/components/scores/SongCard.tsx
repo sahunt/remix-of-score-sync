@@ -145,18 +145,15 @@ export function SongCard({
             )}
           </div>
 
-          {/* Score row */}
+          {/* Score row with flare badge */}
           <div className="flex items-center gap-2">
             {score !== null ? (
               <>
                 <span className="text-[16px] font-bold text-white leading-normal tabular-nums">
                   {score.toLocaleString()}
                 </span>
-                {rank && (
-                  <span className="text-[16px] font-bold text-white leading-normal">
-                    {rank}
-                  </span>
-                )}
+                {/* Flare chip - 20px height, beside score */}
+                {flareType && <FlareChip type={flareType} className="h-5" />}
               </>
             ) : (
               <span className="text-sm text-muted-foreground">No score</span>
@@ -164,12 +161,16 @@ export function SongCard({
           </div>
         </div>
 
-        {/* Badge area (right side) - flare chip + halo sparkle */}
-        <div className="flex-shrink-0 flex items-center gap-3">
-          {/* Flare chip - 20px height */}
-          {flareType && <FlareChip type={flareType} className="h-5" />}
+        {/* Right side - sparkle + rank */}
+        <div className="flex-shrink-0 flex items-center gap-1.5">
           {/* Halo sparkle */}
           {haloType && <HaloSparkle type={haloType} />}
+          {/* Clear rank */}
+          {rank && (
+            <span className="text-[16px] font-bold text-white leading-normal">
+              {rank}
+            </span>
+          )}
         </div>
       </div>
     </div>
