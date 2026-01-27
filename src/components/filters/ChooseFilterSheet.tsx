@@ -56,27 +56,30 @@ export function ChooseFilterSheet({
           <p className="text-sm text-muted-foreground">No saved filters yet</p>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2 pt-2">
-          {filters.map((filter) => {
-            const isSelected = selectedIds.includes(filter.id);
-            return (
-              <button
-                key={filter.id}
-                onClick={() => onSelectFilter(filter.id)}
-                className={cn(
-                  'flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all',
-                  isSelected
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-[#4A4E61] text-white hover:bg-[#555970]'
-                )}
-              >
-                {isSelected && (
-                  <Icon name="check_circle" size={20} className="animate-scale-in" />
-                )}
-                {filter.name}
-              </button>
-            );
-          })}
+        <div className="space-y-3 pt-2">
+          <h3 className="text-[14px] font-semibold text-white">My saved filters</h3>
+          <div className="flex flex-wrap gap-2">
+            {filters.map((filter) => {
+              const isSelected = selectedIds.includes(filter.id);
+              return (
+                <button
+                  key={filter.id}
+                  onClick={() => onSelectFilter(filter.id)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all',
+                    isSelected
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-[#4A4E61] text-white hover:bg-[#555970]'
+                  )}
+                >
+                  {isSelected && (
+                    <Icon name="check_circle" size={20} className="animate-scale-in" />
+                  )}
+                  {filter.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
