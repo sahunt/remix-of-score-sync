@@ -32,12 +32,18 @@ export function LastUploadBadge({ className, variant = 'default' }: LastUploadBa
 
   const timeAgo = formatDistanceToNow(new Date(lastUpload.created_at));
 
-  // Header variant - shows sync icon and "About X ago" format
+  // Header variant - shows sync icon and "X AGO" format
   if (variant === 'header') {
     return (
-      <div className={cn('flex items-center gap-2', className)}>
-        <Icon name="sync" size={20} />
-        <span className="text-sm font-medium uppercase tracking-wide">
+      <div className="flex items-center gap-1.5 text-white">
+        <Icon name="sync" size={16} />
+        <span 
+          className="font-bold uppercase"
+          style={{ 
+            fontSize: '10px', 
+            letterSpacing: '1px' 
+          }}
+        >
           {timeAgo.toUpperCase()} AGO
         </span>
       </div>

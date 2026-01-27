@@ -15,15 +15,17 @@ export function ScoresHeader() {
         backgroundPosition: 'center top',
       }}
     >
-      {/* Center content - last sync and username */}
-      <div className="flex items-center justify-center gap-6">
-        <LastUploadBadge variant="header" className="text-foreground" />
+      {/* Center content - username and sync below */}
+      <div className="flex flex-col items-center gap-1">
+        {/* Username row */}
         <div className="flex items-center gap-2">
           <span className="text-xl font-bold text-white text-shadow-greeting">
             {loading ? '...' : username}
           </span>
           <UserAvatar size={28} />
         </div>
+        {/* Sync badge below */}
+        <LastUploadBadge variant="header" />
       </div>
     </header>
   );
