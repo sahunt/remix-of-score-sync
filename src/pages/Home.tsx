@@ -8,6 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
 import { GoalCard } from '@/components/home/GoalCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -151,10 +153,14 @@ export default function Home() {
             </>
           ) : goals.length === 0 ? (
             <div className="card-base w-full text-center py-8">
-              <p className="text-muted-foreground">No goals yet</p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-foreground text-lg font-medium">No goals yet</p>
+              <p className="text-sm text-muted-foreground mt-1 mb-4">
                 Create your first goal to start tracking progress!
               </p>
+              <Button onClick={() => console.log('TODO: Open create goal sheet')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Goal
+              </Button>
             </div>
           ) : (
             goals.map((goal) => (
