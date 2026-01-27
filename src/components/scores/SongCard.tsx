@@ -123,7 +123,7 @@ export function SongCard({
         {/* Song info section */}
         <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
           {/* Title row */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {difficultyLevel && (
               <div className={cn('flex-shrink-0 w-[14px] h-[14px] rounded-[4px] flex items-center justify-center', difficultyClass)}>
                 <span className="text-[10px] font-bold leading-[18px] text-[#000F33]" style={{ fontFeatureSettings: "'liga' off, 'clig' off" }}>
