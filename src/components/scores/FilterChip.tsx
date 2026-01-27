@@ -20,7 +20,7 @@ export function FilterChip({ label, onRemove, isAddButton = false, onClick }: Fi
         )}
       >
         <span className="text-sm">{label}</span>
-        <Icon name="add" size={16} />
+        <Icon name="add_circle" size={20} />
       </button>
     );
   }
