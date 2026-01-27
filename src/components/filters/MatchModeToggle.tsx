@@ -11,7 +11,7 @@ export function MatchModeToggle({ value, onChange }: MatchModeToggleProps) {
       {/* Sliding background indicator */}
       <div
         className={cn(
-          'absolute top-1.5 bottom-1.5 rounded-[8px] bg-primary border-2 border-white transition-all duration-300 ease-out',
+          'absolute top-1.5 bottom-1.5 rounded-[8px] bg-primary transition-all duration-300 ease-out',
           value === 'all' 
             ? 'left-[calc(50%+1.5px)] right-1.5' 
             : 'left-1.5 right-[calc(50%+1.5px)]'
