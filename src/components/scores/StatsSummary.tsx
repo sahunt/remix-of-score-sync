@@ -32,14 +32,24 @@ export function StatsSummary({ stats, className }: StatsSummaryProps) {
         {stats.map((stat) => (
           <div 
             key={stat.label || stat.iconName} 
-            className="flex flex-1 flex-col items-center"
+            className="flex flex-1 flex-col items-center text-center"
           >
             {stat.isIcon && stat.iconName ? (
-              <Icon name={stat.iconName} size={16} className="text-white/80 mb-0.5" />
+              <Icon name={stat.iconName} size={16} className="text-white" />
             ) : (
-              <span className="text-xs text-white/80">{stat.label}</span>
+              <span 
+                className="text-white font-bold"
+                style={{ fontSize: '12px', lineHeight: '20px' }}
+              >
+                {stat.label}
+              </span>
             )}
-            <span className="text-base font-bold text-white">{stat.value}</span>
+            <span 
+              className="text-white font-bold"
+              style={{ fontSize: '12px', lineHeight: '20px' }}
+            >
+              {stat.value}
+            </span>
           </div>
         ))}
       </div>
