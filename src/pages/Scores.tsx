@@ -6,7 +6,7 @@ import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
 import { FiltersSection, type Filter } from '@/components/scores/FiltersSection';
 import { StatsSummary } from '@/components/scores/StatsSummary';
 import { SearchSortBar, type SortOption } from '@/components/scores/SearchSortBar';
-import { SongCardPlaceholder } from '@/components/scores/SongCardPlaceholder';
+import { SongCard } from '@/components/scores/SongCard';
 import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -209,12 +209,13 @@ export default function Scores() {
         ) : (
           <div className="space-y-2">
             {displayedScores.map((s) => (
-              <SongCardPlaceholder
+              <SongCard
                 key={s.id}
                 name={s.musicdb?.name ?? 'Unknown Song'}
-                artist={s.musicdb?.artist ?? undefined}
                 difficultyLevel={s.difficulty_level}
                 score={s.score}
+                rank={s.rank}
+                flare={s.flare}
                 halo={s.halo}
               />
             ))}
