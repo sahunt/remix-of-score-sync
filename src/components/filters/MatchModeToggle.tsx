@@ -7,13 +7,21 @@ interface MatchModeToggleProps {
 
 export function MatchModeToggle({ value, onChange }: MatchModeToggleProps) {
   return (
-    <div className="flex items-center gap-2 rounded-[10px] bg-[#262937] p-1.5">
+    <div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
+      {/* Sliding background indicator */}
+      <div
+        className={cn(
+          'absolute top-1.5 bottom-1.5 w-[calc(50%-3px)] rounded-[8px] bg-primary transition-transform duration-300 ease-out',
+          value === 'all' ? 'translate-x-[calc(100%+6px)]' : 'translate-x-0'
+        )}
+      />
+      
       <button
         onClick={() => onChange('any')}
         className={cn(
-          'flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-all',
+          'relative z-10 flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-colors duration-300',
           value === 'any'
-            ? 'bg-primary text-primary-foreground'
+            ? 'text-primary-foreground'
             : 'text-muted-foreground hover:text-white'
         )}
       >
@@ -22,9 +30,9 @@ export function MatchModeToggle({ value, onChange }: MatchModeToggleProps) {
       <button
         onClick={() => onChange('all')}
         className={cn(
-          'flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-all',
+          'relative z-10 flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-colors duration-300',
           value === 'all'
-            ? 'bg-primary text-primary-foreground'
+            ? 'text-primary-foreground'
             : 'text-muted-foreground hover:text-white'
         )}
       >
