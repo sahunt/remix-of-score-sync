@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
+import statsBg from '@/assets/stats-bg.png';
 
 interface StatItem {
   label: string;
@@ -21,14 +22,16 @@ export function StatsSummary({ stats, className }: StatsSummaryProps) {
         className
       )}
       style={{
-        background: 'linear-gradient(90deg, rgba(78, 62, 162, 0.60) -8.44%, rgba(177, 73, 143, 0.60) 30.55%, rgba(228, 127, 98, 0.60) 63.76%, rgba(236, 209, 96, 0.60) 107.01%)',
+        backgroundImage: `url(${statsBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
       }}
     >
       {/* Stats row */}
-      <div className="relative flex items-center px-4 py-3">
-        {stats.map((stat, index) => (
+      <div className="relative flex items-center px-4 py-4">
+        {stats.map((stat) => (
           <div 
-            key={stat.label} 
+            key={stat.label || stat.iconName} 
             className="flex flex-1 flex-col items-center"
           >
             {stat.isIcon && stat.iconName ? (
@@ -39,14 +42,6 @@ export function StatsSummary({ stats, className }: StatsSummaryProps) {
             <span className="text-base font-bold text-white">{stat.value}</span>
           </div>
         ))}
-        {/* Info/expand icon */}
-        <button
-          type="button"
-          className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-white/20 text-white ml-2"
-          aria-label="More info"
-        >
-          <Icon name="info" size={16} />
-        </button>
       </div>
     </div>
   );
