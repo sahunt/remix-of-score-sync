@@ -29,7 +29,7 @@ export default function Home() {
       <img
         src={characterImage}
         alt="Character"
-        className="fixed top-0 right-0 w-[200px] h-auto object-contain pointer-events-none z-[5]"
+        className="fixed top-0 right-0 w-[240px] h-auto object-contain pointer-events-none z-[5]"
       />
       
       {/* Fixed fade overlay at bottom - reveals rainbow background, syncs with nav */}
