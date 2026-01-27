@@ -16,7 +16,7 @@ export function DifficultyGrid({ selectedLevel, onSelectLevel }: DifficultyGridP
   return (
     <section className="space-y-3">
       <h2 className="text-[14px] font-semibold text-white">Rating</h2>
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-7 gap-2">
         {DIFFICULTY_LEVELS.map((level) => (
           <DifficultyChip
             key={level}
