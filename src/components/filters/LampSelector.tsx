@@ -22,10 +22,8 @@ export function LampSelector({ value, onChange }: LampSelectorProps) {
 
   const toggleLamp = (lamp: string) => {
     if (selectedLamps.includes(lamp)) {
-      // Don't allow deselecting the last item
-      if (selectedLamps.length > 1) {
-        onChange(selectedLamps.filter(l => l !== lamp));
-      }
+      // Allow deselecting to empty
+      onChange(selectedLamps.filter(l => l !== lamp));
     } else {
       onChange([...selectedLamps, lamp]);
     }

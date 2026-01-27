@@ -11,10 +11,8 @@ export function GradeSelector({ value, onChange }: GradeSelectorProps) {
 
   const toggleGrade = (grade: string) => {
     if (selectedGrades.includes(grade)) {
-      // Don't allow deselecting the last item
-      if (selectedGrades.length > 1) {
-        onChange(selectedGrades.filter(g => g !== grade));
-      }
+      // Allow deselecting to empty
+      onChange(selectedGrades.filter(g => g !== grade));
     } else {
       onChange([...selectedGrades, grade]);
     }

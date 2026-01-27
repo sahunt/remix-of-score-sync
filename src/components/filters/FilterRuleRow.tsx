@@ -18,15 +18,25 @@ import {
   OPERATORS_BY_TYPE,
   getDefaultOperator,
   getDefaultValue,
+  isValueEmpty,
   type FilterRule,
   type FilterType,
   type FilterOperator,
 } from './filterTypes';
 
-function generateRuleDescription(rule: FilterRule): string {
+function generateRuleDescription(rule: FilterRule): React.ReactNode {
   const typeLabel = FILTER_TYPES.find(t => t.value === rule.type)?.label || rule.type;
   const operators = OPERATORS_BY_TYPE[rule.type];
   const operatorLabel = operators.find(o => o.value === rule.operator)?.label.toLowerCase() || rule.operator;
+  
+  // Check if value is empty
+  if (isValueEmpty(rule.value)) {
+    return (
+      <>
+        {typeLabel} {operatorLabel} <span className="border-b border-muted-foreground inline-block w-8" />
+      </>
+    );
+  }
   
   if (rule.operator === 'is_between' && Array.isArray(rule.value) && rule.value.length === 2) {
     return `${typeLabel} ${operatorLabel} ${rule.value[0]} and ${rule.value[1]}`;
@@ -192,9 +202,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         } else {
           if (Array.isArray(rule.value)) {
             levelValue = rule.value.filter((v): v is number => typeof v === 'number');
-            if (levelValue.length === 0) levelValue = [15];
+          } else if (typeof rule.value === 'number') {
+            levelValue = [rule.value];
           } else {
-            levelValue = [typeof rule.value === 'number' ? rule.value : 15];
+            levelValue = []; // Empty selection
           }
         }
         
@@ -219,9 +230,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         } else {
           if (Array.isArray(rule.value)) {
             flareValue = rule.value.filter((v): v is number => typeof v === 'number');
-            if (flareValue.length === 0) flareValue = [5];
+          } else if (typeof rule.value === 'number') {
+            flareValue = [rule.value];
           } else {
-            flareValue = [typeof rule.value === 'number' ? rule.value : 5];
+            flareValue = []; // Empty selection
           }
         }
         
@@ -239,9 +251,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         let lampValue: string[];
         if (Array.isArray(rule.value)) {
           lampValue = rule.value.filter((v): v is string => typeof v === 'string');
-          if (lampValue.length === 0) lampValue = ['pfc'];
+        } else if (typeof rule.value === 'string' && rule.value !== '') {
+          lampValue = [rule.value];
         } else {
-          lampValue = [typeof rule.value === 'string' ? rule.value : 'pfc'];
+          lampValue = []; // Empty selection
         }
         
         return (
@@ -257,9 +270,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         let gradeValue: string[];
         if (Array.isArray(rule.value)) {
           gradeValue = rule.value.filter((v): v is string => typeof v === 'string');
-          if (gradeValue.length === 0) gradeValue = ['AAA'];
+        } else if (typeof rule.value === 'string' && rule.value !== '') {
+          gradeValue = [rule.value];
         } else {
-          gradeValue = [typeof rule.value === 'string' ? rule.value : 'AAA'];
+          gradeValue = []; // Empty selection
         }
         
         return (
@@ -275,9 +289,10 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
         let diffValue: string[];
         if (Array.isArray(rule.value)) {
           diffValue = rule.value.filter((v): v is string => typeof v === 'string');
-          if (diffValue.length === 0) diffValue = ['EXPERT'];
+        } else if (typeof rule.value === 'string' && rule.value !== '') {
+          diffValue = [rule.value];
         } else {
-          diffValue = [typeof rule.value === 'string' ? rule.value : 'EXPERT'];
+          diffValue = []; // Empty selection
         }
         
         return (
