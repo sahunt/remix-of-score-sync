@@ -146,6 +146,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_goals: {
+        Row: {
+          created_at: string
+          criteria_match_mode: string
+          criteria_rules: Json
+          goal_count: number | null
+          goal_mode: string
+          id: string
+          name: string
+          target_type: string
+          target_value: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          criteria_match_mode?: string
+          criteria_rules?: Json
+          goal_count?: number | null
+          goal_mode?: string
+          id?: string
+          name: string
+          target_type: string
+          target_value: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          criteria_match_mode?: string
+          criteria_rules?: Json
+          goal_count?: number | null
+          goal_mode?: string
+          id?: string
+          name?: string
+          target_type?: string
+          target_value?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_scores: {
         Row: {
           chart_id: number | null

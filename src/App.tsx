@@ -12,6 +12,7 @@ import Auth from "./pages/Auth";
 import Home from "./pages/Home";
 import Scores from "./pages/Scores";
 import Upload from "./pages/Upload";
+import GoalDetail from "./pages/GoalDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
                 <Route path="/home" element={<Home />} />
                 <Route path="/scores" element={<Scores />} />
                 <Route path="/upload" element={<Upload />} />
+                <Route path="/goal/:goalId" element={<GoalDetail />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

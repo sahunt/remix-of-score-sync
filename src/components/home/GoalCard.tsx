@@ -1,10 +1,15 @@
+import { useNavigate } from 'react-router-dom';
 import { GoalBadge, GoalType } from './GoalBadge';
+import { cn } from '@/lib/utils';
 
 interface GoalCardProps {
+  id?: string;
   title: string;
   type: GoalType;
   current: number;
   total: number;
+  clickable?: boolean;
+  className?: string;
 }
 
 const progressColorMap: Record<GoalType, string> = {
@@ -14,15 +19,39 @@ const progressColorMap: Record<GoalType, string> = {
 };
 
 export function GoalCard({ 
+  id,
   title, 
   type,
   current,
   total,
+  clickable = true,
+  className,
 }: GoalCardProps) {
+  const navigate = useNavigate();
   const progressPercent = total > 0 ? (current / total) * 100 : 0;
+
+  const handleClick = () => {
+    if (clickable && id) {
+      navigate(`/goal/${id}`);
+    }
+  };
   
   return (
-    <div className="card-base w-full">
+    <div 
+      className={cn(
+        "card-base w-full",
+        clickable && id && "cursor-pointer hover:bg-[#454959] transition-colors",
+        className
+      )}
+      onClick={handleClick}
+      role={clickable && id ? "button" : undefined}
+      tabIndex={clickable && id ? 0 : undefined}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && clickable && id) {
+          handleClick();
+        }
+      }}
+    >
       {/* Badge */}
       <GoalBadge type={type} />
       

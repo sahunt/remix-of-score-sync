@@ -1,16 +1,89 @@
 import { useUsername } from '@/hooks/useUsername';
 import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
+import { useGoals } from '@/hooks/useGoals';
+import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
 import { GoalCard } from '@/components/home/GoalCard';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import rainbowBg from '@/assets/rainbow-bg.png';
+import type { Goal } from '@/hooks/useGoalProgress';
+
+// Component to render a goal card with real progress
+function GoalCardWithProgress({ 
+  goal, 
+  scores, 
+  isLoadingScores 
+}: { 
+  goal: Goal; 
+  scores: ScoreWithSong[];
+  isLoadingScores: boolean;
+}) {
+  const progress = useGoalProgress(goal, scores, [], isLoadingScores);
+
+  // Map target type to goal card type
+  const getGoalCardType = () => {
+    if (goal.target_type === 'lamp') {
+      const value = goal.target_value.toLowerCase();
+      if (value === 'pfc') return 'pfc' as const;
+      if (value === 'mfc') return 'mfc' as const;
+      if (value === 'gfc') return 'gfc' as const;
+    }
+    return 'pfc' as const;
+  };
+
+  return (
+    <GoalCard
+      id={goal.id}
+      title={goal.name}
+      type={getGoalCardType()}
+      current={progress.current}
+      total={progress.total}
+    />
+  );
+}
 
 export default function Home() {
   const { username, loading: usernameLoading } = useUsername();
   const characterImage = useSessionCharacter();
   const { isVisible } = useScrollDirection({ threshold: 15 });
+  const { user } = useAuth();
+  const { goals, isLoading: goalsLoading } = useGoals();
+
+  // Fetch user scores for progress calculation
+  const { data: scores = [], isLoading: scoresLoading } = useQuery({
+    queryKey: ['user-scores', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('user_scores')
+        .select(`
+          id,
+          score,
+          timestamp,
+          playstyle,
+          difficulty_name,
+          difficulty_level,
+          rank,
+          flare,
+          halo,
+          musicdb(name, artist)
+        `)
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: false, nullsFirst: false })
+        .limit(500);
+
+      if (error) throw error;
+      return (data || []) as ScoreWithSong[];
+    },
+    enabled: !!user?.id,
+  });
 
   const handleSearch = (query: string) => {
     // TODO: Implement search functionality
@@ -71,24 +144,28 @@ export default function Home() {
 
         {/* Goals section */}
         <section className="flex flex-col gap-[3px] mt-[3px]">
-          <GoalCard
-            title="PFC all 14's"
-            type="pfc"
-            current={123}
-            total={321}
-          />
-          <GoalCard
-            title="MFC 10 songs"
-            type="mfc"
-            current={2}
-            total={10}
-          />
-          <GoalCard
-            title="GFC 2 18's"
-            type="gfc"
-            current={1}
-            total={2}
-          />
+          {goalsLoading ? (
+            <>
+              <Skeleton className="h-32 w-full rounded-[10px]" />
+              <Skeleton className="h-32 w-full rounded-[10px]" />
+            </>
+          ) : goals.length === 0 ? (
+            <div className="card-base w-full text-center py-8">
+              <p className="text-muted-foreground">No goals yet</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Create your first goal to start tracking progress!
+              </p>
+            </div>
+          ) : (
+            goals.map((goal) => (
+              <GoalCardWithProgress
+                key={goal.id}
+                goal={goal}
+                scores={scores}
+                isLoadingScores={scoresLoading}
+              />
+            ))
+          )}
         </section>
       </div>
     </div>
