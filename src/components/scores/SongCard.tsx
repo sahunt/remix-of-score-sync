@@ -124,7 +124,6 @@ export function SongCard({
         <div className="flex-1 min-w-0 flex flex-col justify-center">
           {/* Title row */}
           <div className="flex items-center gap-2">
-            <p className="text-[10px] font-medium text-[#96A7AF] uppercase tracking-[1px] leading-normal truncate">{name}</p>
             {difficultyLevel && (
               <div className={cn('flex-shrink-0 w-[14px] h-[14px] rounded-[4px] flex items-center justify-center', difficultyClass)}>
                 <span className="text-[10px] font-bold leading-[18px] text-[#000F33]" style={{ fontFeatureSettings: "'liga' off, 'clig' off" }}>
@@ -132,6 +131,7 @@ export function SongCard({
                 </span>
               </div>
             )}
+            <p className="text-[10px] font-medium text-[#96A7AF] uppercase tracking-[1px] leading-normal truncate">{name}</p>
           </div>
 
           {/* Score row with flare badge */}
