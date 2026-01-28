@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
   console.log('import-musicdb: Starting import process');
 
   try {
-    // Parse request body - accept either content directly or a URL to fetch from
+    // Parse request body - accept either content directly, a URL, or a storage path
     const body = await req.json().catch(() => ({}));
     let content = body.content;
     
@@ -57,10 +57,28 @@ Deno.serve(async (req) => {
       content = await response.text();
     }
     
+    // If a storage_path is provided, fetch from Supabase storage
+    if (body.storage_path && !content) {
+      console.log(`import-musicdb: Fetching XML from storage: ${body.storage_path}`);
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const storageClient = createClient(supabaseUrl, supabaseServiceKey);
+      
+      const { data, error } = await storageClient.storage
+        .from('score-uploads')
+        .download(body.storage_path);
+      
+      if (error) {
+        throw new Error(`Failed to download from storage: ${error.message}`);
+      }
+      
+      content = await data.text();
+    }
+    
     if (!content || typeof content !== 'string') {
       console.error('import-musicdb: No XML content provided');
       return new Response(
-        JSON.stringify({ error: 'XML content is required. Provide either "content" or "url" in the request body.' }),
+        JSON.stringify({ error: 'XML content is required. Provide "content", "url", or "storage_path" in the request body.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
