@@ -604,6 +604,218 @@ function extractRank(item: any): string | null {
   return item.data?.rank || item.rank || item.grade || item.letterGrade || null;
 }
 
+// ============================================================================
+// PhaseII Regex-Based Field Extraction (bypasses JSON.parse entirely)
+// ============================================================================
+
+interface PhaseIIEntry {
+  songId: number | null;
+  chart: string | null;
+  points: string | null;
+  halo: string | null;
+  rank: string | null;
+  flare: number | null;
+  timestamp: string | null;
+}
+
+function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skippedCount: number } {
+  const entries: PhaseIIEntry[] = [];
+  let skippedCount = 0;
+  
+  // Split into entry blocks - each score entry is a JSON object with song, data, etc.
+  // We look for patterns like {"song":{...},"data":{...},...}
+  // Use a regex to find each top-level entry in the array
+  
+  // First, find where the array starts - could be root array or nested in data/scores
+  let arrayContent = content;
+  
+  // Try to find the main data array
+  const dataArrayMatch = content.match(/"data"\s*:\s*\[/);
+  const scoresArrayMatch = content.match(/"scores"\s*:\s*\[/);
+  const rootArrayMatch = content.match(/^\s*\[/);
+  
+  if (dataArrayMatch) {
+    const startIdx = dataArrayMatch.index! + dataArrayMatch[0].length - 1;
+    arrayContent = content.substring(startIdx);
+  } else if (scoresArrayMatch) {
+    const startIdx = scoresArrayMatch.index! + scoresArrayMatch[0].length - 1;
+    arrayContent = content.substring(startIdx);
+  } else if (rootArrayMatch) {
+    arrayContent = content;
+  }
+  
+  // Split by looking for entry boundaries: },{ pattern
+  // This is more robust than trying to parse full JSON
+  const entryBlocks: string[] = [];
+  let depth = 0;
+  let currentBlock = '';
+  let inString = false;
+  let escaped = false;
+  
+  for (let i = 0; i < arrayContent.length; i++) {
+    const char = arrayContent[i];
+    
+    if (escaped) {
+      escaped = false;
+      currentBlock += char;
+      continue;
+    }
+    
+    if (char === '\\' && inString) {
+      escaped = true;
+      currentBlock += char;
+      continue;
+    }
+    
+    if (char === '"' && !escaped) {
+      inString = !inString;
+      currentBlock += char;
+      continue;
+    }
+    
+    if (!inString) {
+      if (char === '{') {
+        if (depth === 0 && currentBlock.trim()) {
+          // Starting a new entry
+          currentBlock = '';
+        }
+        depth++;
+        currentBlock += char;
+      } else if (char === '}') {
+        depth--;
+        currentBlock += char;
+        if (depth === 0 && currentBlock.trim()) {
+          entryBlocks.push(currentBlock);
+          currentBlock = '';
+        }
+      } else if (char === '[' && depth === 0) {
+        // Start of array, skip
+        continue;
+      } else if (char === ']' && depth === 0) {
+        // End of array
+        break;
+      } else {
+        if (depth > 0) {
+          currentBlock += char;
+        }
+      }
+    } else {
+      currentBlock += char;
+    }
+  }
+  
+  console.log(`Found ${entryBlocks.length} entry blocks to process`);
+  
+  // Process each block with regex extraction
+  for (const block of entryBlocks) {
+    try {
+      const entry = extractFieldsFromBlock(block);
+      if (entry.songId !== null && entry.chart !== null) {
+        entries.push(entry);
+      } else {
+        // Missing required fields
+        skippedCount++;
+        console.log(`Skipped entry: missing songId or chart`);
+      }
+    } catch (err) {
+      skippedCount++;
+      console.log(`Skipped corrupted entry: ${err}`);
+    }
+  }
+  
+  return { entries, skippedCount };
+}
+
+function extractFieldsFromBlock(block: string): PhaseIIEntry {
+  // Extract song.id - look for "song":{..."id":12345...}
+  let songId: number | null = null;
+  const songIdMatch = block.match(/"song"\s*:\s*\{[^}]*?"id"\s*:\s*(\d+)/);
+  if (songIdMatch) {
+    songId = parseInt(songIdMatch[1]);
+  }
+  
+  // Extract song.chart - "chart":"SP EXPERT - 15"
+  let chart: string | null = null;
+  const chartMatch = block.match(/"chart"\s*:\s*"([^"]+)"/);
+  if (chartMatch) {
+    chart = chartMatch[1];
+  }
+  
+  // Extract points - "points":"999,880" or "points":999880
+  let points: string | null = null;
+  const pointsMatch = block.match(/"points"\s*:\s*"?([^",}\s]+)"?/);
+  if (pointsMatch) {
+    points = pointsMatch[1];
+  }
+  
+  // Extract data.halo - look for "data":{..."halo":"PERFECT FULL COMBO"...}
+  let halo: string | null = null;
+  const haloMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
+  if (haloMatch) {
+    halo = haloMatch[1];
+  }
+  
+  // Extract data.rank - "rank":"AAA"
+  let rank: string | null = null;
+  const rankMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
+  if (rankMatch) {
+    rank = rankMatch[1];
+  }
+  
+  // Extract data.flare - "flare":10
+  let flare: number | null = null;
+  const flareMatch = block.match(/"flare"\s*:\s*(\d+)/);
+  if (flareMatch) {
+    flare = parseInt(flareMatch[1]);
+  }
+  
+  // Extract timestamp - "timestamp":"2025-11-19 21:34:50"
+  let timestamp: string | null = null;
+  const timestampMatch = block.match(/"timestamp"\s*:\s*"([^"]+)"/);
+  if (timestampMatch) {
+    timestamp = timestampMatch[1];
+  }
+  
+  return { songId, chart, points, halo, rank, flare, timestamp };
+}
+
+function parseChartString(chart: string): { playstyle: string; difficulty_name: string; difficulty_level: number } | null {
+  const match = chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
+  if (!match) return null;
+  return {
+    playstyle: match[1],
+    difficulty_name: match[2].toUpperCase(),
+    difficulty_level: parseInt(match[3])
+  };
+}
+
+function normalizeExtractedHalo(halo: string | null): string | null {
+  if (!halo) return null;
+  const normalized = halo.toUpperCase();
+  const map: Record<string, string> = {
+    'MARVELOUS FULL COMBO': 'mfc',
+    'MFC': 'mfc',
+    'PERFECT FULL COMBO': 'pfc',
+    'PFC': 'pfc',
+    'GREAT FULL COMBO': 'gfc',
+    'GFC': 'gfc',
+    'GOOD FULL COMBO': 'fc',
+    'FULL COMBO': 'fc',
+    'FC': 'fc',
+    'LIFE4': 'life4',
+    'LIFE 4': 'life4',
+    'CLEAR': 'clear',
+    'FAILED': 'fail',
+    'FAIL': 'fail',
+  };
+  return map[normalized] || 'clear';
+}
+
+function parseExtractedScore(points: string | null): number | null {
+  if (!points) return null;
+  return parseInt(points.replace(/,/g, '')) || null;
+}
+
 async function processPhaseII(
   supabase: any,
   content: string
@@ -611,115 +823,77 @@ async function processPhaseII(
   const scores: ScoreRecord[] = [];
   const unmatchedSongs: UnmatchedSong[] = [];
   
-  let parsed: any;
-  try {
-    const sanitized = sanitizeJsonString(content.trim());
-    parsed = JSON.parse(sanitized);
-  } catch (err) {
-    console.error('PhaseII JSON parse error (first attempt):', err);
-    // Try aggressive sanitization as fallback
-    try {
-      console.log('Attempting aggressive JSON sanitization...');
-      const aggressivelySanitized = aggressiveSanitizeJson(content.trim());
-      parsed = JSON.parse(aggressivelySanitized);
-      console.log('Aggressive sanitization succeeded');
-    } catch (err2) {
-      console.error('PhaseII JSON parse error (aggressive attempt):', err2);
-      // Final fallback: try to extract just the data array
-      const dataMatch = content.match(/"data"\s*:\s*(\[[\s\S]*?\])\s*}/);
-      if (dataMatch) {
-        try {
-          console.log('Attempting to extract data array directly...');
-          const dataArrayStr = sanitizeJsonString(dataMatch[1]);
-          parsed = { data: JSON.parse(dataArrayStr) };
-          console.log('Data array extraction succeeded');
-        } catch (err3) {
-          console.error('PhaseII JSON parse error (data extraction):', err3);
-          return { scores, sourceType: 'phaseii', unmatchedSongs: [{ name: null, difficulty: null, reason: 'invalid_json' }] };
-        }
-      } else {
-        return { scores, sourceType: 'phaseii', unmatchedSongs: [{ name: null, difficulty: null, reason: 'invalid_json' }] };
-      }
-    }
+  // Use regex-based extraction instead of JSON.parse
+  console.log('Using regex-based field extraction for PhaseII...');
+  const { entries, skippedCount } = extractPhaseIIEntries(content);
+  
+  console.log(`Extracted ${entries.length} valid entries, ${skippedCount} skipped due to corruption`);
+  
+  if (skippedCount > 0) {
+    unmatchedSongs.push({ 
+      name: `${skippedCount} entries`, 
+      difficulty: null, 
+      reason: 'corrupt_entry' 
+    });
   }
   
-  let dataArray: any[];
-  if (Array.isArray(parsed)) {
-    dataArray = parsed;
-  } else if (parsed.data && Array.isArray(parsed.data)) {
-    dataArray = parsed.data;
-  } else if (parsed.scores && Array.isArray(parsed.scores)) {
-    dataArray = parsed.scores;
-  } else if (parsed.results && Array.isArray(parsed.results)) {
-    dataArray = parsed.results;
-  } else {
-    dataArray = [parsed];
+  if (entries.length === 0) {
+    return { scores, sourceType: 'phaseii', unmatchedSongs };
   }
   
-  console.log(`Processing ${dataArray.length} PhaseII entries`);
-  
-  if (dataArray.length > 0) {
-    const sample = dataArray[0];
-    console.log('Sample item structure:', JSON.stringify(sample, null, 2).substring(0, 500));
+  // Sample logging
+  if (entries.length > 0) {
+    console.log('Sample extracted entry:', JSON.stringify(entries[0]));
   }
   
-  // OPTIMIZATION: Collect all entries that need song.id matching
+  // Collect entries for batch matching
   const entriesToMatch: Array<{
-    index: number;
-    item: any;
-    chartInfo: { playstyle: string; difficulty_name: string; difficulty_level: number };
-    songId: number;
-  }> = [];
-  
-  const itemsWithoutSongId: Array<{
-    index: number;
-    item: any;
+    entry: PhaseIIEntry;
     chartInfo: { playstyle: string; difficulty_name: string; difficulty_level: number };
   }> = [];
   
-  // First pass: categorize items
-  for (let i = 0; i < dataArray.length; i++) {
-    const item = dataArray[i];
-    const chartInfo = extractChartInfo(item);
-    
-    if (!chartInfo) {
-      const songName = extractSongName(item);
-      unmatchedSongs.push({ name: songName, difficulty: null, reason: 'missing_chart_info' });
+  for (const entry of entries) {
+    if (!entry.chart) {
+      unmatchedSongs.push({ name: null, difficulty: null, reason: 'missing_chart_info' });
       continue;
     }
     
-    const phaseiiSongId = item.song?.id ?? null;
-    
-    if (phaseiiSongId !== null && typeof phaseiiSongId === 'number') {
-      entriesToMatch.push({ index: i, item, chartInfo, songId: phaseiiSongId });
-    } else {
-      itemsWithoutSongId.push({ index: i, item, chartInfo });
+    const chartInfo = parseChartString(entry.chart);
+    if (!chartInfo) {
+      unmatchedSongs.push({ name: null, difficulty: entry.chart, reason: 'invalid_chart_format' });
+      continue;
     }
+    
+    if (entry.songId === null) {
+      unmatchedSongs.push({ name: null, difficulty: entry.chart, reason: 'missing_song_id' });
+      continue;
+    }
+    
+    entriesToMatch.push({ entry, chartInfo });
   }
   
   // BATCH MATCH: Fetch all matches in one query
   const matchMap = await batchMatchBySongId(
     supabase,
     entriesToMatch.map(e => ({
-      songId: e.songId,
+      songId: e.entry.songId!,
       playstyle: e.chartInfo.playstyle,
       difficultyName: e.chartInfo.difficulty_name,
       difficultyLevel: e.chartInfo.difficulty_level,
     }))
   );
   
-  // Process entries with song.id - ID-based matching ONLY
+  // Process entries - ID-based matching
   let idMatchCount = 0;
   
-  for (const entry of entriesToMatch) {
-    const key = `${entry.songId}|${entry.chartInfo.playstyle}|${entry.chartInfo.difficulty_name}|${entry.chartInfo.difficulty_level}`;
+  for (const { entry, chartInfo } of entriesToMatch) {
+    const key = `${entry.songId}|${chartInfo.playstyle}|${chartInfo.difficulty_name}|${chartInfo.difficulty_level}`;
     const match = matchMap.get(key) ?? null;
     
     if (!match) {
-      const songName = extractSongName(entry.item);
       unmatchedSongs.push({ 
-        name: songName, 
-        difficulty: `${entry.chartInfo.playstyle} ${entry.chartInfo.difficulty_name} ${entry.chartInfo.difficulty_level}`,
+        name: null, 
+        difficulty: `${chartInfo.playstyle} ${chartInfo.difficulty_name} ${chartInfo.difficulty_level}`,
         reason: 'no_match_by_id' 
       });
       continue;
@@ -730,31 +904,20 @@ async function processPhaseII(
       musicdb_id: match.id,
       chart_id: match.chart_id,
       song_id: match.song_id,
-      playstyle: entry.chartInfo.playstyle,
-      difficulty_name: entry.chartInfo.difficulty_name,
-      difficulty_level: entry.chartInfo.difficulty_level,
-      score: extractScore(entry.item),
-      timestamp: entry.item.timestamp || entry.item.playedAt || entry.item.date || null,
-      username: entry.item.username || entry.item.playerName || null,
-      rank: extractRank(entry.item),
-      flare: extractFlare(entry.item),
-      halo: extractHalo(entry.item),
+      playstyle: chartInfo.playstyle,
+      difficulty_name: chartInfo.difficulty_name,
+      difficulty_level: chartInfo.difficulty_level,
+      score: parseExtractedScore(entry.points),
+      timestamp: entry.timestamp,
+      username: null,
+      rank: entry.rank,
+      flare: entry.flare,
+      halo: normalizeExtractedHalo(entry.halo),
       source_type: 'phaseii',
     });
   }
   
   console.log(`PhaseII matching: ${idMatchCount} matched by ID`);
-  
-  // Entries without song.id cannot be matched - mark as unmatched
-  for (const entry of itemsWithoutSongId) {
-    const songName = extractSongName(entry.item);
-    unmatchedSongs.push({ 
-      name: songName, 
-      difficulty: `${entry.chartInfo.playstyle} ${entry.chartInfo.difficulty_name} ${entry.chartInfo.difficulty_level}`,
-      reason: 'missing_song_id' 
-    });
-  }
-  
   console.log(`PhaseII: ${scores.length} matched, ${unmatchedSongs.length} unmatched`);
   return { scores, sourceType: 'phaseii', unmatchedSongs };
 }

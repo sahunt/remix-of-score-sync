@@ -1,54 +1,31 @@
-
-
 # Robust PhaseII Upload: Field-Level Extraction
+
+## Status: ✅ IMPLEMENTED
 
 ## Problem
 `JSON.parse()` fails on control characters in fields we don't need (like `newRecord`), causing entire uploads to fail.
 
-## Solution
+## Solution (Implemented)
 Extract only required fields using targeted regex patterns. Skip corrupted entries instead of failing the whole upload.
 
-## Fields We Need (from your screenshot)
+## Fields Extracted
 
-| Field Path | Example | Purpose |
-|------------|---------|---------|
-| `song.id` | 38371 | Chart matching key |
-| `song.chart` | "SP EXPERT - 15" | Playstyle + difficulty + level |
-| `points` | "999,880" | Score value |
-| `data.halo` | "PERFECT FULL COMBO" | Lamp/halo |
-| `data.rank` | "AAA" | Grade |
-| `data.flare` | 10 | Flare level |
-| `timestamp` | "2025-11-19 21:34:50" | When played |
+| Field Path | Regex Pattern | Purpose |
+|------------|---------------|---------|
+| `song.id` | `/"song"\s*:\s*\{[^}]*?"id"\s*:\s*(\d+)/` | Chart matching key |
+| `song.chart` | `/"chart"\s*:\s*"([^"]+)"/` | Playstyle + difficulty + level |
+| `points` | `/"points"\s*:\s*"?([^",}\s]+)"?/` | Score value |
+| `data.halo` | `/"halo"\s*:\s*"([^"]+)"/` | Lamp/halo |
+| `data.rank` | `/"rank"\s*:\s*"([^"]+)"/` | Grade |
+| `data.flare` | `/"flare"\s*:\s*(\d+)/` | Flare level |
+| `timestamp` | `/"timestamp"\s*:\s*"([^"]+)"/` | When played |
 
-## Implementation
+## Implementation Details
 
-### 1. Entry-Level Extraction
-```text
-Instead of: JSON.parse(entireFile)
-Do: Split file into entry blocks, extract fields from each
-```
-
-### 2. Regex Field Extraction
-For each entry block, extract fields individually:
-```
-"song":\s*\{[^}]*"id":\s*(\d+)
-"chart":\s*"([^"]+)"
-"points":\s*"([^"]+)"
-"halo":\s*"([^"]+)"
-"rank":\s*"([^"]+)"
-"flare":\s*(\d+)
-```
-
-### 3. Error Handling Per Entry
-- If field extraction fails for an entry → skip it, log reason
-- Continue processing remaining entries
-- Report: "Processed 450/452 scores (2 skipped due to corruption)"
-
-## Changes Required
-
-| File | Change |
-|------|--------|
-| `supabase/functions/process-upload/index.ts` | Replace JSON.parse with regex-based field extraction |
+1. **Entry Block Splitting**: Parses the file character-by-character to find `{...}` blocks, tracking brace depth and string state
+2. **Regex Field Extraction**: Each block is processed with individual regex patterns to extract only needed fields
+3. **Error Handling**: Corrupted entries are skipped and counted; processing continues with remaining entries
+4. **Batch Matching**: Uses existing optimized batch matching for song_id lookups
 
 ## Expected Behavior
 
@@ -58,10 +35,3 @@ For each entry block, extract fields individually:
 | Entry with corrupted `newRecord` | Extract clean fields, ignore newRecord, insert score |
 | Entry with corrupted required field | Skip entry, log as "corrupt_entry", continue |
 | File with 2% bad entries | 98% success, clear report of what was skipped |
-
-## Benefits
-- Never fails entire upload due to one bad entry
-- Ignores fields we don't need (newRecord, ghost, medal, etc.)
-- Clear reporting of what succeeded vs what was skipped
-- Works regardless of what garbage characters appear in unused fields
-
