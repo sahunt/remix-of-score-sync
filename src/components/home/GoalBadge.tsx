@@ -10,7 +10,8 @@ interface GoalBadgeProps {
 }
 
 export function GoalBadge({ type, className }: GoalBadgeProps) {
+  // Skip transformation for goal badges - the goal target itself doesn't change
   return (
-    <HaloChip type={type as HaloType} className={className} />
+    <HaloChip type={type as HaloType} className={className} skipTransform />
   );
 }
