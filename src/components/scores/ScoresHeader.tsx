@@ -22,7 +22,7 @@ export function ScoresHeader() {
           <span className="text-xl font-bold text-white text-shadow-greeting">
             {loading ? '...' : username}
           </span>
-          <UserAvatar size={28} />
+          <UserAvatar size={28} linkToProfile />
         </div>
         {/* Sync badge below */}
         <LastUploadBadge variant="header" />
