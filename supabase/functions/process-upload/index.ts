@@ -604,17 +604,39 @@ async function processPhaseII(
     }))
   );
   
-  // Process entries with song.id
+  // Process entries with song.id - try ID match first, then fall back to name match
+  let idMatchCount = 0;
+  let nameMatchFallbackCount = 0;
+  
   for (const entry of entriesToMatch) {
     const key = `${entry.songId}|${entry.chartInfo.playstyle}|${entry.chartInfo.difficulty_name}|${entry.chartInfo.difficulty_level}`;
-    const match = matchMap.get(key);
+    let match: MusicdbMatch | null = matchMap.get(key) ?? null;
+    
+    // FALLBACK: If ID match fails, try matching by song name
+    if (!match) {
+      const songName = extractSongName(entry.item);
+      if (songName) {
+        match = await matchByNameAndChart(
+          supabase,
+          songName,
+          entry.chartInfo.playstyle,
+          entry.chartInfo.difficulty_name,
+          entry.chartInfo.difficulty_level
+        );
+        if (match) {
+          nameMatchFallbackCount++;
+        }
+      }
+    } else {
+      idMatchCount++;
+    }
     
     if (!match) {
       const songName = extractSongName(entry.item);
       unmatchedSongs.push({ 
         name: songName, 
         difficulty: `${entry.chartInfo.playstyle} ${entry.chartInfo.difficulty_name} ${entry.chartInfo.difficulty_level}`,
-        reason: 'no_match_by_id' 
+        reason: 'no_match_by_id_or_name' 
       });
       continue;
     }
@@ -635,6 +657,8 @@ async function processPhaseII(
       source_type: 'phaseii',
     });
   }
+  
+  console.log(`PhaseII matching: ${idMatchCount} by ID, ${nameMatchFallbackCount} by name fallback`);
   
   // Process entries without song.id (fallback to name matching)
   for (const entry of itemsWithoutSongId) {
