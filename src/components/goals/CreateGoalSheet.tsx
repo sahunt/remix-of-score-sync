@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
+import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { X, Save, ChevronDown } from 'lucide-react';
+import { X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GoalPreviewCard } from './GoalPreviewCard';
 import { TargetSelector } from './TargetSelector';
@@ -294,15 +292,20 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="max-h-[90vh]">
-        <DrawerHeader className="border-b border-border flex items-center justify-between px-4 py-3">
-          <Button variant="ghost" size="icon" onClick={handleClose} className="h-8 w-8">
-            <X className="h-4 w-4" />
-          </Button>
-          <DrawerTitle className="text-base font-semibold">New Goal</DrawerTitle>
-          <div className="w-8" />
-        </DrawerHeader>
+        {/* Header matching filter sheet style */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#4A4E61]">
+          <button
+            onClick={handleClose}
+            className="p-2 text-white hover:text-muted-foreground transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <h2 className="text-lg font-semibold text-white">New Goal</h2>
+          <div className="w-10" /> {/* Spacer for centering */}
+        </div>
 
-        <div className="px-4 py-4 space-y-3 overflow-y-auto">
+        <div className="px-7 py-6 space-y-6 overflow-y-auto">
           {/* Live Preview Card */}
           <GoalPreviewCard
             name={displayName}
@@ -313,6 +316,17 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
             matchingTotal={0}
             currentProgress={0}
           />
+
+          {/* Goal name input - matching filter name input style */}
+          <div className="flex items-center h-[52px] rounded-[10px] bg-[#262937] px-6">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={generateName() || "Enter goal name..."}
+              className="flex-1 bg-transparent text-white placeholder:text-muted-foreground/50 outline-none"
+            />
+          </div>
 
           {/* Step 1: Target Selection */}
           <div>
@@ -375,40 +389,28 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
               onClick={() => setExpandedStep(3)}
             />
             {expandedStep === 3 && (
-              <div className="mt-3 p-4 rounded-[10px] bg-[#262937] animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+              <div className="mt-3 p-4 rounded-[10px] bg-[#262937] animate-in fade-in slide-in-from-top-2 duration-200">
                 <GoalModeToggle
                   mode={goalMode}
                   count={goalCount}
                   onModeChange={setGoalMode}
                   onCountChange={setGoalCount}
                 />
-
-                {/* Optional: Custom Name */}
-                <div className="space-y-2 pt-2 border-t border-border">
-                  <Label htmlFor="goal-name" className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Custom Name (optional)
-                  </Label>
-                  <Input
-                    id="goal-name"
-                    placeholder={generateName() || "Enter goal name..."}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="rounded-[10px] bg-[#3B3F51] border-transparent"
-                  />
-                </div>
               </div>
             )}
           </div>
 
-          {/* Save Button - Always visible */}
-          <Button
-            onClick={handleSave}
-            disabled={!canSave || createGoal.isPending}
-            className="w-full rounded-[10px]"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {createGoal.isPending ? 'Saving...' : 'Save Goal'}
-          </Button>
+          {/* Action buttons - matching filter sheet style */}
+          <div className="space-y-3 pt-2">
+            <Button
+              onClick={handleSave}
+              disabled={!canSave || createGoal.isPending}
+              className="w-full h-11 rounded-[10px]"
+              iconLeft="favorite"
+            >
+              {createGoal.isPending ? 'Saving...' : 'Save Goal'}
+            </Button>
+          </div>
         </div>
       </DrawerContent>
     </Drawer>
