@@ -117,6 +117,16 @@ function getBetterScore(a: number | null, b: number | null): number | null {
 }
 
 // ============================================================================
+// JSON Sanitization - Handle malformed JSON with control characters
+// ============================================================================
+
+function sanitizeJsonString(content: string): string {
+  // Remove control characters (ASCII 0-31) except for allowed whitespace (tab, newline, carriage return)
+  // This fixes "Bad control character in string literal" errors
+  return content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
+// ============================================================================
 // Source Detection
 // ============================================================================
 
@@ -132,7 +142,9 @@ function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
   // Check for JSON formats (PhaseII)
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
-      const parsed = JSON.parse(trimmed);
+      // Sanitize JSON before parsing to handle control characters
+      const sanitized = sanitizeJsonString(trimmed);
+      const parsed = JSON.parse(sanitized);
       
       // Log the structure for debugging
       if (Array.isArray(parsed)) {
@@ -162,6 +174,9 @@ function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
       return 'phaseii';
     } catch (err) {
       console.error('JSON parse error in detection:', err);
+      // If it looks like JSON but failed to parse, still try as phaseii
+      // The processing step will do more robust parsing
+      return 'phaseii';
     }
   }
   
@@ -463,7 +478,9 @@ async function processPhaseII(
   
   let parsed: any;
   try {
-    parsed = JSON.parse(content.trim());
+    // Sanitize JSON to remove control characters before parsing
+    const sanitized = sanitizeJsonString(content.trim());
+    parsed = JSON.parse(sanitized);
   } catch (err) {
     console.error('PhaseII JSON parse error:', err);
     return { scores, sourceType: 'phaseii', unmatchedSongs: [{ name: null, difficulty: null, reason: 'invalid_json' }] };
