@@ -132,7 +132,7 @@ export default function Home() {
         <header className="pt-[75px] pb-4">
           {/* Avatar and greeting */}
           <div className="flex items-start gap-2 mb-4">
-            <UserAvatar size={40} className="mt-1" />
+            <UserAvatar size={40} className="mt-1" linkToProfile />
           </div>
           
           {/* Two-line greeting */}

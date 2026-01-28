@@ -206,6 +206,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_profiles: {
+        Row: {
+          created_at: string
+          ddr_username: string | null
+          display_name: string | null
+          id: string
+          twelve_ms_mode: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ddr_username?: string | null
+          display_name?: string | null
+          id?: string
+          twelve_ms_mode?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ddr_username?: string | null
+          display_name?: string | null
+          id?: string
+          twelve_ms_mode?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_scores: {
         Row: {
           chart_id: number | null

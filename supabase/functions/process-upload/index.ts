@@ -618,6 +618,28 @@ interface PhaseIIEntry {
   timestamp: string | null;
 }
 
+// Extract username from PhaseII export (typically in the file header or global data)
+function extractPhaseIIUsername(content: string): string | null {
+  // Look for "name":"USERNAME" pattern in the header/global section
+  const nameMatch = content.match(/"name"\s*:\s*"([^"]+)"/);
+  if (nameMatch) {
+    // Avoid matching song names by checking if it's in a global context
+    // PhaseII exports typically have the player name near the start
+    const position = nameMatch.index || 0;
+    if (position < 500) { // If found in first 500 chars, likely player name
+      return nameMatch[1];
+    }
+  }
+  
+  // Also try "playerName" or "userName"
+  const playerNameMatch = content.match(/"(?:playerName|userName|user)"\s*:\s*"([^"]+)"/i);
+  if (playerNameMatch) {
+    return playerNameMatch[1];
+  }
+  
+  return null;
+}
+
 function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skippedCount: number } {
   const entries: PhaseIIEntry[] = [];
   let skippedCount = 0;
@@ -1165,6 +1187,47 @@ async function smartUpsertScores(
 }
 
 // ============================================================================
+// Upsert DDR Username to User Profiles
+// ============================================================================
+
+async function upsertDdrUsername(
+  supabase: any,
+  userId: string,
+  ddrUsername: string | null
+): Promise<void> {
+  if (!ddrUsername) return;
+  
+  try {
+    // Only set ddr_username if not already set
+    const { data: existing } = await supabase
+      .from('user_profiles')
+      .select('ddr_username')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (existing?.ddr_username) {
+      console.log(`DDR username already set for user ${userId}: ${existing.ddr_username}`);
+      return;
+    }
+    
+    const { error } = await supabase
+      .from('user_profiles')
+      .upsert(
+        { user_id: userId, ddr_username: ddrUsername },
+        { onConflict: 'user_id' }
+      );
+    
+    if (error) {
+      console.error('Error upserting ddr_username:', error);
+    } else {
+      console.log(`Set ddr_username for user ${userId}: ${ddrUsername}`);
+    }
+  } catch (err) {
+    console.error('Error upserting ddr_username:', err);
+  }
+}
+
+// ============================================================================
 // Background Processing Function
 // ============================================================================
 
@@ -1182,6 +1245,13 @@ async function processUploadInBackground(
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
   try {
+    // Extract username from content if PhaseII
+    let extractedUsername: string | null = null;
+    if (sourceType === 'phaseii') {
+      extractedUsername = extractPhaseIIUsername(content);
+      console.log(`Extracted username from PhaseII: ${extractedUsername}`);
+    }
+    
     // Process based on source type
     let parseResult: ParseResult;
     
@@ -1235,6 +1305,11 @@ async function processUploadInBackground(
       parseResult.scores,
       existingScores
     );
+    
+    // Upsert DDR username to user_profiles if extracted
+    if (extractedUsername) {
+      await upsertDdrUsername(supabase, userId, extractedUsername);
+    }
 
     // Update upload record with summary
     const totalRows = parseResult.scores.length + parseResult.unmatchedSongs.length;

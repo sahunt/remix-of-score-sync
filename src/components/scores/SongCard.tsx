@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
 import { HaloSparkle, type HaloType } from '@/components/ui/HaloSparkle';
+import { use12MSMode } from '@/hooks/use12MSMode';
 
 interface SongCardProps {
   name: string;
@@ -101,14 +102,17 @@ export function SongCard({
   halo,
   className
 }: SongCardProps) {
+  const { transformHalo } = use12MSMode();
   const flareType = flareNumberToType(flare);
-  const haloType = normalizeHaloType(halo);
+  // Apply 12MS transformation to halo for display
+  const transformedHalo = transformHalo(halo);
+  const haloType = normalizeHaloType(transformedHalo);
   const difficultyClass = getDifficultyColorClass(difficultyLevel);
 
   return (
     <div className={cn('w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative', className)}>
-      {/* Top halo bar */}
-      <div className="h-1 w-full absolute top-0 left-0 rounded-t-sm" style={getHaloBarStyle(halo)} />
+      {/* Top halo bar - use transformed halo for display */}
+      <div className="h-1 w-full absolute top-0 left-0 rounded-t-sm" style={getHaloBarStyle(transformedHalo)} />
 
       {/* Main content - pt-[14px] pb-2 to center content in dark area below the 4px bar */}
       <div className="flex items-center gap-3 px-3 pt-[14px] pb-2">

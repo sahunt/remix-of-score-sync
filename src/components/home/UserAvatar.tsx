@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { createAvatar } from '@dicebear/core';
 import { funEmoji } from '@dicebear/collection';
 import { useAuth } from '@/hooks/useAuth';
@@ -6,9 +7,10 @@ import { useAuth } from '@/hooks/useAuth';
 interface UserAvatarProps {
   size?: number;
   className?: string;
+  linkToProfile?: boolean;
 }
 
-export function UserAvatar({ size = 48, className = '' }: UserAvatarProps) {
+export function UserAvatar({ size = 48, className = '', linkToProfile = false }: UserAvatarProps) {
   const { user } = useAuth();
 
   const avatarSvg = useMemo(() => {
@@ -21,7 +23,7 @@ export function UserAvatar({ size = 48, className = '' }: UserAvatarProps) {
     return avatar.toDataUri();
   }, [user?.id, size]);
 
-  return (
+  const avatarImg = (
     <img
       src={avatarSvg}
       alt="User avatar"
@@ -30,4 +32,14 @@ export function UserAvatar({ size = 48, className = '' }: UserAvatarProps) {
       className={`rounded-full ${className}`}
     />
   );
+
+  if (linkToProfile) {
+    return (
+      <Link to="/profile" className="cursor-pointer">
+        {avatarImg}
+      </Link>
+    );
+  }
+
+  return avatarImg;
 }
