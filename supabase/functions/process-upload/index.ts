@@ -699,43 +699,24 @@ async function processPhaseII(
     }))
   );
   
-  // Process entries with song.id - try ID match first, then fall back to name match
+  // Process entries with song.id - ID-based matching ONLY
   let idMatchCount = 0;
-  let nameMatchFallbackCount = 0;
   
   for (const entry of entriesToMatch) {
     const key = `${entry.songId}|${entry.chartInfo.playstyle}|${entry.chartInfo.difficulty_name}|${entry.chartInfo.difficulty_level}`;
-    let match: MusicdbMatch | null = matchMap.get(key) ?? null;
-    
-    // FALLBACK: If ID match fails, try matching by song name
-    if (!match) {
-      const songName = extractSongName(entry.item);
-      if (songName) {
-        match = await matchByNameAndChart(
-          supabase,
-          songName,
-          entry.chartInfo.playstyle,
-          entry.chartInfo.difficulty_name,
-          entry.chartInfo.difficulty_level
-        );
-        if (match) {
-          nameMatchFallbackCount++;
-        }
-      }
-    } else {
-      idMatchCount++;
-    }
+    const match = matchMap.get(key) ?? null;
     
     if (!match) {
       const songName = extractSongName(entry.item);
       unmatchedSongs.push({ 
         name: songName, 
         difficulty: `${entry.chartInfo.playstyle} ${entry.chartInfo.difficulty_name} ${entry.chartInfo.difficulty_level}`,
-        reason: 'no_match_by_id_or_name' 
+        reason: 'no_match_by_id' 
       });
       continue;
     }
     
+    idMatchCount++;
     scores.push({
       musicdb_id: match.id,
       chart_id: match.chart_id,
@@ -753,46 +734,15 @@ async function processPhaseII(
     });
   }
   
-  console.log(`PhaseII matching: ${idMatchCount} by ID, ${nameMatchFallbackCount} by name fallback`);
+  console.log(`PhaseII matching: ${idMatchCount} matched by ID`);
   
-  // Process entries without song.id (fallback to name matching)
+  // Entries without song.id cannot be matched - mark as unmatched
   for (const entry of itemsWithoutSongId) {
     const songName = extractSongName(entry.item);
-    let match: MusicdbMatch | null = null;
-    
-    if (songName) {
-      match = await matchByNameAndChart(
-        supabase,
-        songName,
-        entry.chartInfo.playstyle,
-        entry.chartInfo.difficulty_name,
-        entry.chartInfo.difficulty_level
-      );
-    }
-    
-    if (!match) {
-      unmatchedSongs.push({ 
-        name: songName, 
-        difficulty: `${entry.chartInfo.playstyle} ${entry.chartInfo.difficulty_name} ${entry.chartInfo.difficulty_level}`,
-        reason: 'no_match' 
-      });
-      continue;
-    }
-    
-    scores.push({
-      musicdb_id: match.id,
-      chart_id: match.chart_id,
-      song_id: match.song_id,
-      playstyle: entry.chartInfo.playstyle,
-      difficulty_name: entry.chartInfo.difficulty_name,
-      difficulty_level: entry.chartInfo.difficulty_level,
-      score: extractScore(entry.item),
-      timestamp: entry.item.timestamp || entry.item.playedAt || entry.item.date || null,
-      username: entry.item.username || entry.item.playerName || null,
-      rank: extractRank(entry.item),
-      flare: extractFlare(entry.item),
-      halo: extractHalo(entry.item),
-      source_type: 'phaseii',
+    unmatchedSongs.push({ 
+      name: songName, 
+      difficulty: `${entry.chartInfo.playstyle} ${entry.chartInfo.difficulty_name} ${entry.chartInfo.difficulty_level}`,
+      reason: 'missing_song_id' 
     });
   }
   
