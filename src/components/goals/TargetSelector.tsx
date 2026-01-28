@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
-import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
 
 interface TargetSelectorProps {
   targetType: 'lamp' | 'grade' | 'flare' | 'score' | null;
@@ -44,15 +44,7 @@ const FLARE_OPTIONS = [
   { value: '1', label: 'I' },
 ];
 
-// Common score thresholds for quick selection
-const SCORE_PRESETS = [
-  { value: '1000000', label: '1,000,000' },
-  { value: '990000', label: '990,000' },
-  { value: '980000', label: '980,000' },
-  { value: '970000', label: '970,000' },
-  { value: '950000', label: '950,000' },
-  { value: '900000', label: '900,000' },
-];
+const STEP = 10000;
 
 type Category = 'lamp' | 'grade' | 'flare' | 'score';
 
@@ -65,7 +57,11 @@ const CATEGORIES: { value: Category; label: string }[] = [
 
 export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(targetType);
-  const [customScore, setCustomScore] = useState('');
+  
+  // Initialize score value from targetValue or default
+  const currentScoreValue = targetType === 'score' && targetValue 
+    ? parseInt(targetValue) 
+    : 950000;
 
   // Sync selected category with external targetType changes
   useEffect(() => {
@@ -76,23 +72,21 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
 
   const handleCategoryClick = (category: Category) => {
     setSelectedCategory(category);
+    // Set a default value when switching to score
+    if (category === 'score' && targetType !== 'score') {
+      onTargetChange('score', '950000');
+    }
   };
 
   const handleSelect = (type: Category, value: string) => {
     onTargetChange(type, value);
   };
 
-  const handleCustomScoreSubmit = () => {
-    const numericValue = customScore.replace(/,/g, '');
-    if (numericValue && !isNaN(parseInt(numericValue))) {
-      onTargetChange('score', numericValue);
-      setCustomScore('');
-    }
-  };
-
-  const formatScoreInput = (value: string) => {
-    const digits = value.replace(/\D/g, '');
-    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const formatScore = (val: number) => val.toLocaleString();
+  
+  const parseScore = (str: string) => {
+    const num = parseInt(str.replace(/,/g, ''), 10);
+    return isNaN(num) ? 0 : Math.min(1000000, Math.max(0, num));
   };
 
   const isSelected = (type: string, value: string) =>
@@ -183,53 +177,27 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
             </div>
           )}
 
-          {/* Score Options */}
+          {/* Score Options - Slider UI */}
           {selectedCategory === 'score' && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                {SCORE_PRESETS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handleSelect('score', option.value)}
-                    className={cn(
-                      "h-[44px] px-2 rounded-[10px] text-sm font-medium transition-all duration-200",
-                      isSelected('score', option.value)
-                        ? "bg-primary/20 border-2 border-primary text-foreground"
-                        : "bg-[#4A4E61] border-2 border-transparent text-white hover:bg-[#555a6e]"
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom score input */}
-              <div className="flex items-center gap-2">
-                <Input
-                  type="text"
-                  placeholder="Custom score..."
-                  value={customScore}
-                  onChange={(e) => setCustomScore(formatScoreInput(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleCustomScoreSubmit();
-                    }
-                  }}
-                  className="flex-1 rounded-[10px] bg-[#4A4E61] border-transparent"
-                />
-                <button
-                  onClick={handleCustomScoreSubmit}
-                  disabled={!customScore}
-                  className={cn(
-                    "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all",
-                    customScore
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-muted text-muted-foreground cursor-not-allowed"
-                  )}
-                >
-                  Set
-                </button>
-              </div>
+            <div className="space-y-4">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={formatScore(currentScoreValue)}
+                onChange={(e) => {
+                  const newVal = parseScore(e.target.value);
+                  onTargetChange('score', String(newVal));
+                }}
+                className="w-full h-[44px] rounded-[10px] bg-[#4A4E61] px-5 text-white text-center text-lg font-medium outline-none focus:ring-2 focus:ring-primary"
+              />
+              <Slider
+                value={[currentScoreValue]}
+                onValueChange={([val]) => onTargetChange('score', String(val))}
+                min={0}
+                max={1000000}
+                step={STEP}
+                className="w-full"
+              />
             </div>
           )}
         </div>
