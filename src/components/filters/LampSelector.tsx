@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { LAMP_OPTIONS } from './filterTypes';
+import { use12MSMode } from '@/hooks/use12MSMode';
 
 interface LampSelectorProps {
   value: string[];
@@ -18,6 +19,7 @@ const LAMP_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 export function LampSelector({ value, onChange }: LampSelectorProps) {
+  const { transformHaloLabel } = use12MSMode();
   const selectedLamps = Array.isArray(value) ? value : [value];
 
   const toggleLamp = (lamp: string) => {
@@ -34,6 +36,8 @@ export function LampSelector({ value, onChange }: LampSelectorProps) {
       {LAMP_OPTIONS.map((option) => {
         const isSelected = selectedLamps.includes(option.value);
         const colors = LAMP_COLORS[option.value];
+        // Transform the label for display
+        const displayLabel = transformHaloLabel(option.label.toUpperCase()) || option.label.toUpperCase();
         
         return (
           <button
@@ -46,7 +50,7 @@ export function LampSelector({ value, onChange }: LampSelectorProps) {
                 : 'bg-[#3B3F51] text-white hover:bg-[#454a5e]'
             )}
           >
-            {option.label.toUpperCase()}
+            {displayLabel}
           </button>
         );
       })}

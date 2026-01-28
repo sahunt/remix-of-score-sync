@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { FlareChip } from '@/components/ui/FlareChip';
 import { FLARE_OPTIONS } from '@/components/filters/filterTypes';
+import { use12MSMode } from '@/hooks/use12MSMode';
 
 interface TargetSelectorProps {
   targetType: 'lamp' | 'grade' | 'flare' | 'score' | null;
@@ -46,6 +47,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
 ];
 
 export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
+  const { transformHaloLabel } = use12MSMode();
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(targetType);
   
   // Initialize score value from targetValue or default
@@ -123,22 +125,25 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
           {/* Lamp Options */}
           {selectedCategory === 'lamp' && (
             <div className="grid grid-cols-3 gap-2">
-              {LAMP_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => handleSelect('lamp', option.value)}
-                  className={cn(
-                    "h-[44px] px-3 rounded-[10px] text-sm font-medium transition-all duration-200",
-                    "flex items-center justify-center gap-2",
-                    isSelected('lamp', option.value)
-                      ? "bg-primary/20 border-2 border-primary text-foreground"
-                      : "bg-[#4A4E61] border-2 border-transparent text-white hover:bg-[#555a6e]"
-                  )}
-                >
-                  <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", option.dotClass)} />
-                  {option.label}
-                </button>
-              ))}
+              {LAMP_OPTIONS.map((option) => {
+                const displayLabel = transformHaloLabel(option.label) || option.label;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => handleSelect('lamp', option.value)}
+                    className={cn(
+                      "h-[44px] px-3 rounded-[10px] text-sm font-medium transition-all duration-200",
+                      "flex items-center justify-center gap-2",
+                      isSelected('lamp', option.value)
+                        ? "bg-primary/20 border-2 border-primary text-foreground"
+                        : "bg-[#4A4E61] border-2 border-transparent text-white hover:bg-[#555a6e]"
+                    )}
+                  >
+                    <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", option.dotClass)} />
+                    {displayLabel}
+                  </button>
+                );
+              })}
             </div>
           )}
 

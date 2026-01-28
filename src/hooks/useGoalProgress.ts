@@ -56,18 +56,22 @@ const LAMP_ORDER = ['mfc', 'pfc', 'gfc', 'fc', 'life4', 'clear', 'fail', null] a
 const GRADE_ORDER = ['AAA', 'AA+', 'AA', 'AA-', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'E'] as const;
 
 // Check if a score meets the target
+// reverseTransformHalo is used for 12MS mode: transforms the visual target back to the DB value
 export function meetsTarget(
   score: ScoreWithSong,
   targetType: 'lamp' | 'grade' | 'flare' | 'score',
-  targetValue: string
+  targetValue: string,
+  reverseTransformHalo?: (target: string | null) => string | null
 ): boolean {
   if (score.isUnplayed) return false;
 
   switch (targetType) {
     case 'lamp': {
       if (!score.halo) return false;
+      // Apply reverse transformation if provided (for 12MS mode)
+      const effectiveTarget = reverseTransformHalo ? reverseTransformHalo(targetValue) : targetValue;
       const currentIndex = LAMP_ORDER.indexOf(score.halo.toLowerCase() as any);
-      const targetIndex = LAMP_ORDER.indexOf(targetValue.toLowerCase() as any);
+      const targetIndex = LAMP_ORDER.indexOf((effectiveTarget || targetValue).toLowerCase() as any);
       return currentIndex !== -1 && targetIndex !== -1 && currentIndex <= targetIndex;
     }
     case 'grade': {
@@ -189,11 +193,13 @@ export function getProximityLabel(
 }
 
 // Hook to calculate goal progress from scores
+// reverseTransformHalo is used for 12MS mode goal matching
 export function useGoalProgress(
   goal: Goal | null,
   scores: ScoreWithSong[],
   allCharts: ChartInfo[] = [],
-  isLoading: boolean = false
+  isLoading: boolean = false,
+  reverseTransformHalo?: (target: string | null) => string | null
 ): GoalProgressResult {
   return useMemo(() => {
     if (!goal || isLoading) {
@@ -213,11 +219,11 @@ export function useGoalProgress(
 
     // Split into completed vs not completed
     const completedSongs = matchingScores.filter(s => 
-      meetsTarget(s, goal.target_type, goal.target_value)
+      meetsTarget(s, goal.target_type, goal.target_value, reverseTransformHalo)
     );
 
     const incompleteSongs = matchingScores.filter(s => 
-      !meetsTarget(s, goal.target_type, goal.target_value)
+      !meetsTarget(s, goal.target_type, goal.target_value, reverseTransformHalo)
     );
 
     // Sort incomplete by proximity (closest to goal first)
@@ -249,5 +255,5 @@ export function useGoalProgress(
       suggestedSongs,
       isLoading,
     };
-  }, [goal, scores, allCharts, isLoading]);
+  }, [goal, scores, allCharts, isLoading, reverseTransformHalo]);
 }
