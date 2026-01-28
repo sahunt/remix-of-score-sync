@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
-type UploadState = 'idle' | 'uploading' | 'success' | 'error';
+type UploadState = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
 
 interface UnmatchedSong {
   name: string | null;
@@ -36,22 +36,30 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
 
-  // Check the latest upload status from the database
-  const checkUploadStatus = useCallback(async (): Promise<UploadResult | null> => {
-    if (!user) return null;
+  // Poll for upload status
+  const pollUploadStatus = useCallback(async (uploadId: string) => {
+    if (!user) return;
     
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('uploads')
-      .select('id, parse_status, parse_summary')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .select('id, parse_status, parse_summary, parse_error')
+      .eq('id', uploadId)
       .maybeSingle();
     
-    if (data?.parse_status === 'parsed' && data.parse_summary) {
+    if (error) {
+      console.error('Poll error:', error);
+      return;
+    }
+    
+    if (!data) return;
+    
+    if (data.parse_status === 'parsed' && data.parse_summary) {
+      // Success!
       const summary = data.parse_summary as any;
-      return {
+      const uploadResult: UploadResult = {
         total_rows: summary.total_rows ?? 0,
         mapped_rows: summary.mapped_rows ?? 0,
         skipped_rows: summary.skipped_rows ?? 0,
@@ -61,9 +69,72 @@ export default function UploadPage() {
         source_type: summary.source_type,
         unmatched_songs: summary.unmatched_songs,
       };
+      
+      setResult(uploadResult);
+      setState('success');
+      setCurrentUploadId(null);
+      
+      // Clear polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      
+      toast({
+        title: 'Upload Complete',
+        description: `Mapped ${uploadResult.mapped_rows} of ${uploadResult.total_rows} rows`,
+      });
+      
+      await refetch();
+    } else if (data.parse_status === 'failed') {
+      // Failed
+      setErrorMessage(data.parse_error || 'Processing failed');
+      setState('error');
+      setCurrentUploadId(null);
+      
+      // Clear polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      
+      toast({
+        variant: 'destructive',
+        title: 'Upload Failed',
+        description: data.parse_error || 'An error occurred while processing your file',
+      });
     }
-    return null;
-  }, [user]);
+    // If still 'processing' or 'pending', continue polling
+  }, [user, toast, refetch]);
+
+  // Start polling when we have an upload ID
+  useEffect(() => {
+    if (currentUploadId && state === 'processing') {
+      // Poll immediately
+      pollUploadStatus(currentUploadId);
+      
+      // Then poll every 2 seconds
+      pollIntervalRef.current = window.setInterval(() => {
+        pollUploadStatus(currentUploadId);
+      }, 2000);
+      
+      return () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      };
+    }
+  }, [currentUploadId, state, pollUploadStatus]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   const handleUpload = useCallback(async (file: File) => {
     if (!user) return;
@@ -71,6 +142,7 @@ export default function UploadPage() {
     setState('uploading');
     setResult(null);
     setErrorMessage(null);
+    setCurrentUploadId(null);
 
     try {
       // 1. Upload raw file to storage
@@ -84,7 +156,7 @@ export default function UploadPage() {
       // 2. Read file content
       const content = await file.text();
 
-      // 3. Call edge function to parse and process
+      // 3. Call edge function to start processing
       const { data, error } = await supabase.functions.invoke('process-upload', {
         body: {
           file_name: file.name,
@@ -95,45 +167,19 @@ export default function UploadPage() {
         },
       });
 
-      if (error) {
-        // Check if it's a timeout/network error - the upload may have still succeeded
-        if (error.message?.includes('Failed to fetch') || error.message?.includes('network')) {
-          // Wait a moment then check the database for the result
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          const dbResult = await checkUploadStatus();
-          if (dbResult) {
-            setResult(dbResult);
-            setState('success');
-            toast({
-              title: 'Upload Complete',
-              description: `Mapped ${dbResult.mapped_rows} of ${dbResult.total_rows} rows (recovered from timeout)`,
-            });
-            await refetch();
-            return;
-          }
-        }
-        throw error;
+      if (error) throw error;
+
+      // Edge function returns immediately with upload_id and status: 'processing'
+      if (data?.upload_id) {
+        setCurrentUploadId(data.upload_id);
+        setState('processing');
+        toast({
+          title: 'Processing Started',
+          description: 'Your file is being processed. This may take a moment.',
+        });
+      } else {
+        throw new Error('No upload ID received');
       }
-
-      setResult({
-        total_rows: data.total_rows ?? 0,
-        mapped_rows: data.mapped_rows ?? 0,
-        skipped_rows: data.skipped_rows ?? 0,
-        inserted: data.inserted,
-        updated: data.updated,
-        unchanged: data.unchanged,
-        source_type: data.source_type,
-        unmatched_songs: data.unmatched_songs,
-      });
-
-      setState('success');
-      toast({
-        title: 'Upload Complete',
-        description: `Mapped ${data.mapped_rows} of ${data.total_rows} rows`,
-      });
-
-      // Refresh last upload
-      await refetch();
     } catch (err: any) {
       console.error('Upload error:', err);
       setErrorMessage(err.message ?? 'Failed to process upload');
@@ -144,7 +190,7 @@ export default function UploadPage() {
         description: err.message ?? 'An error occurred while processing your file',
       });
     }
-  }, [user, toast, refetch, checkUploadStatus]);
+  }, [user, toast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -171,6 +217,11 @@ export default function UploadPage() {
     setState('idle');
     setResult(null);
     setErrorMessage(null);
+    setCurrentUploadId(null);
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
   };
 
   return (
@@ -220,9 +271,17 @@ export default function UploadPage() {
 
             {state === 'uploading' && (
               <div className="flex flex-col items-center justify-center py-12">
+                <Icon name="cloud_upload" size={40} className="mb-3 animate-pulse text-primary" />
+                <p className="font-medium">Uploading file...</p>
+                <p className="text-sm text-muted-foreground">Please wait</p>
+              </div>
+            )}
+
+            {state === 'processing' && (
+              <div className="flex flex-col items-center justify-center py-12">
                 <Icon name="sync" size={40} className="mb-3 animate-spin text-primary" />
-                <p className="font-medium">Processing your file...</p>
-                <p className="text-sm text-muted-foreground">This may take a moment</p>
+                <p className="font-medium">Processing your scores...</p>
+                <p className="text-sm text-muted-foreground">Matching songs to catalog. This may take a moment.</p>
               </div>
             )}
 
