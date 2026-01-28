@@ -3,7 +3,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X, Save, Plus, ChevronDown } from 'lucide-react';
+import { X, Save, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GoalPreviewCard } from './GoalPreviewCard';
 import { TargetSelector } from './TargetSelector';
@@ -97,10 +97,22 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   // Track which step is expanded (only one at a time)
   const [expandedStep, setExpandedStep] = useState<1 | 2 | 3>(1);
 
+  // Initialize default criteria rule
+  const defaultRule: FilterRule = {
+    id: generateRuleId(),
+    type: 'level',
+    operator: getDefaultOperator('level'),
+    value: getDefaultValue('level'),
+  };
+
   // Reset state when sheet opens
   useEffect(() => {
     if (open) {
       setExpandedStep(1);
+      // Initialize with a default rule if empty
+      if (criteriaRules.length === 0) {
+        setCriteriaRules([defaultRule]);
+      }
     }
   }, [open]);
 
@@ -161,16 +173,6 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   };
 
   const displayName = name || generateName();
-
-  const handleAddRule = () => {
-    const newRule: FilterRule = {
-      id: generateRuleId(),
-      type: 'level',
-      operator: getDefaultOperator('level'),
-      value: getDefaultValue('level'),
-    };
-    setCriteriaRules([...criteriaRules, newRule]);
-  };
 
   const handleUpdateRule = (index: number, updatedRule: FilterRule) => {
     const newRules = [...criteriaRules];
@@ -336,21 +338,12 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
               onClick={() => setExpandedStep(2)}
             />
             {expandedStep === 2 && (
-              <div className="mt-3 p-4 rounded-[10px] bg-[#262937] animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
                 <p className="text-xs text-muted-foreground mb-3">
                   Optional: Filter which charts count toward this goal
                 </p>
                 
-                {criteriaRules.length === 0 ? (
-                  <Button
-                    variant="outline"
-                    onClick={handleAddRule}
-                    className="w-full rounded-[10px] border-dashed border-muted-foreground/30 text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add filter
-                  </Button>
-                ) : (
+                {criteriaRules.length > 0 && (
                   <FilterRuleRow
                     rule={criteriaRules[0]}
                     onChange={(updatedRule) => handleUpdateRule(0, updatedRule)}
