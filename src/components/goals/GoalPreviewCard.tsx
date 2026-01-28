@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils';
 import { GoalBadge, GoalType } from '@/components/home/GoalBadge';
+import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
+import { FLARE_OPTIONS } from '@/components/filters/filterTypes';
 
 interface GoalPreviewCardProps {
   name?: string;
@@ -20,6 +22,19 @@ function getBadgeType(targetType: string | null | undefined, targetValue: string
     if (value === 'gfc') return 'gfc';
   }
   return null;
+}
+
+// Get flare type from target value
+function getFlareType(targetValue: string | null | undefined): FlareType | null {
+  if (!targetValue) return null;
+  const numValue = parseInt(targetValue);
+  if (isNaN(numValue)) {
+    // Check if it's "EX"
+    if (targetValue.toUpperCase() === 'EX') return 'ex';
+    return null;
+  }
+  const flareOption = FLARE_OPTIONS.find(f => f.value === numValue);
+  return flareOption?.flareType ?? null;
 }
 
 // Get progress bar color based on target
@@ -48,6 +63,7 @@ export function GoalPreviewCard({
   currentProgress = 0,
 }: GoalPreviewCardProps) {
   const badgeType = getBadgeType(targetType, targetValue);
+  const flareType = targetType === 'flare' ? getFlareType(targetValue) : null;
   const progressBarClass = getProgressBarClass(targetType, targetValue);
   
   // Calculate display values
@@ -71,6 +87,8 @@ export function GoalPreviewCard({
       {/* Badge */}
       {badgeType ? (
         <GoalBadge type={badgeType} />
+      ) : flareType ? (
+        <FlareChip type={flareType} className="h-6" />
       ) : targetValue ? (
         <div className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-xs font-medium text-foreground">
           {targetValue.toUpperCase()}
