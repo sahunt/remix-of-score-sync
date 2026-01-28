@@ -272,16 +272,17 @@ export default function Profile() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-
-            <Button
-              variant="outline"
-              onClick={handleLogout}
-              className="w-full"
-            >
-              Log Out
-            </Button>
           </div>
         </ProfileSection>
+
+        {/* Log Out Button - Outside of cards */}
+        <Button
+          variant="outline"
+          onClick={handleLogout}
+          className="w-full"
+        >
+          Log Out
+        </Button>
       </div>
     </div>
   );
