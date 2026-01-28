@@ -6,11 +6,12 @@ interface LevelSelectorProps {
   value: number[] | [number, number];
   onChange: (value: number[] | [number, number]) => void;
   isBetween: boolean;
+  singleSelect?: boolean;
 }
 
 const LEVELS = Array.from({ length: 19 }, (_, i) => i + 1);
 
-export function LevelSelector({ value, onChange, isBetween }: LevelSelectorProps) {
+export function LevelSelector({ value, onChange, isBetween, singleSelect = false }: LevelSelectorProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<'min' | 'max' | null>(null);
 
@@ -74,11 +75,17 @@ export function LevelSelector({ value, onChange, isBetween }: LevelSelectorProps
   const selectedLevels = Array.isArray(value) ? value : [value];
 
   const toggleLevel = (level: number) => {
-    if (selectedLevels.includes(level)) {
-      // Allow deselecting to empty
-      onChange(selectedLevels.filter(l => l !== level));
+    if (singleSelect) {
+      // Single select mode: just set the one value
+      const isCurrentlySelected = selectedLevels.length === 1 && selectedLevels[0] === level;
+      onChange(isCurrentlySelected ? [] : [level]);
     } else {
-      onChange([...selectedLevels, level].sort((a, b) => a - b));
+      // Multi-select mode
+      if (selectedLevels.includes(level)) {
+        onChange(selectedLevels.filter(l => l !== level));
+      } else {
+        onChange([...selectedLevels, level].sort((a, b) => a - b));
+      }
     }
   };
 
