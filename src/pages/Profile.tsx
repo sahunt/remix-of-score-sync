@@ -190,7 +190,7 @@ export default function Profile() {
       {/* Content card */}
       <div className="relative -mt-10 rounded-t-[40px] bg-background min-h-[calc(100vh-120px)] px-7 pt-8 pb-32 space-y-4">
         {/* Display Name Section */}
-        <ProfileSection number={1} title="Display Name" defaultOpen>
+        <ProfileSection title="Display Name" defaultOpen>
           <div className="space-y-3">
             <Input
               value={displayName || (usernameLoading ? '' : username || '')}
@@ -210,7 +210,7 @@ export default function Profile() {
         </ProfileSection>
 
         {/* Change Password Section */}
-        <ProfileSection number={2} title="Change Password">
+        <ProfileSection title="Change Password">
           <div className="space-y-3">
             <Input
               type="password"
@@ -242,7 +242,7 @@ export default function Profile() {
         </ProfileSection>
 
         {/* Danger Zone Section */}
-        <ProfileSection number={3} title="Danger Zone" variant="danger">
+        <ProfileSection title="Danger Zone" variant="danger">
           <div className="space-y-3">
             <AlertDialog>
               <AlertDialogTrigger asChild>
