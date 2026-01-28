@@ -779,9 +779,9 @@ async function smartUpsertScores(
   let updated = 0;
   let skipped = 0;
   
-  // Separate new records from updates
-  const toInsert: any[] = [];
-  const toUpdate: Array<{ id: string; data: any }> = [];
+  // CRITICAL: Deduplicate scores by musicdb_id, keeping the best values
+  // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" errors
+  const deduplicatedScores = new Map<number, ScoreRecord>();
   
   for (const score of scores) {
     if (!score.musicdb_id) {
@@ -789,7 +789,31 @@ async function smartUpsertScores(
       continue;
     }
     
-    const existing = existingScores.get(score.musicdb_id);
+    const existingInBatch = deduplicatedScores.get(score.musicdb_id);
+    if (!existingInBatch) {
+      deduplicatedScores.set(score.musicdb_id, score);
+    } else {
+      // Merge: keep the best values from both records
+      deduplicatedScores.set(score.musicdb_id, {
+        ...existingInBatch,
+        score: getBetterScore(existingInBatch.score, score.score),
+        halo: getBetterHalo(existingInBatch.halo, score.halo),
+        flare: getBetterFlare(existingInBatch.flare, score.flare),
+        rank: getBetterRank(existingInBatch.rank, score.rank),
+        // Keep the most recent timestamp
+        timestamp: score.timestamp || existingInBatch.timestamp,
+      });
+    }
+  }
+  
+  console.log(`Deduplicated ${scores.length} score entries to ${deduplicatedScores.size} unique charts`);
+  
+  // Separate new records from updates
+  const toInsert: any[] = [];
+  const toUpdate: Array<{ id: string; data: any }> = [];
+  
+  for (const score of deduplicatedScores.values()) {
+    const existing = existingScores.get(score.musicdb_id!);
     
     if (!existing) {
       toInsert.push({
