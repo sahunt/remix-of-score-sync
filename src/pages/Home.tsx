@@ -54,8 +54,11 @@ function GoalCardWithProgress({
     return 'pfc' as const;
   };
 
-  // Use musicdb total for the denominator
-  const total = musicDbTotal > 0 ? musicDbTotal : progress.total;
+  // For "count" mode, use goal_count as the denominator
+  // For "all" mode, use musicdb total (all matching charts)
+  const total = goal.goal_mode === 'count' 
+    ? (goal.goal_count ?? 0) 
+    : (musicDbTotal > 0 ? musicDbTotal : progress.total);
 
   return (
     <GoalCard
