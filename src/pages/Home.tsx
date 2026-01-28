@@ -4,6 +4,7 @@ import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useGoals } from '@/hooks/useGoals';
 import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
+import { useMusicDbCount } from '@/hooks/useMusicDbCount';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import rainbowBg from '@/assets/rainbow-bg.png';
 import type { Goal } from '@/hooks/useGoalProgress';
+import type { FilterRule } from '@/components/filters/filterTypes';
 
 // Component to render a goal card with real progress
 function GoalCardWithProgress({ 
@@ -31,6 +33,14 @@ function GoalCardWithProgress({
   isLoadingScores: boolean;
   reverseTransformHalo: (target: string | null) => string | null;
 }) {
+  // Get total from musicdb based on goal criteria
+  const { data: musicDbData } = useMusicDbCount(
+    goal.criteria_rules as FilterRule[],
+    goal.criteria_match_mode,
+    true
+  );
+  const musicDbTotal = musicDbData?.total ?? 0;
+
   const progress = useGoalProgress(goal, scores, [], isLoadingScores, reverseTransformHalo);
 
   // Map target type to goal card type
@@ -44,13 +54,16 @@ function GoalCardWithProgress({
     return 'pfc' as const;
   };
 
+  // Use musicdb total for the denominator
+  const total = musicDbTotal > 0 ? musicDbTotal : progress.total;
+
   return (
     <GoalCard
       id={goal.id}
       title={goal.name}
       type={getGoalCardType()}
       current={progress.current}
-      total={progress.total}
+      total={total}
     />
   );
 }

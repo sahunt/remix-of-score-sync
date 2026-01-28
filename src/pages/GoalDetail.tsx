@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGoal, useGoals } from '@/hooks/useGoals';
 import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
+import { useMusicDbCount } from '@/hooks/useMusicDbCount';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,6 +12,7 @@ import { GoalCard } from '@/components/home/GoalCard';
 import { GoalSongTabs } from '@/components/goals/GoalSongTabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import type { FilterRule } from '@/components/filters/filterTypes';
 
 export default function GoalDetail() {
   const { goalId } = useParams<{ goalId: string }>();
@@ -23,6 +25,14 @@ export default function GoalDetail() {
 
   // Fetch the goal
   const { data: goal, isLoading: goalLoading } = useGoal(goalId);
+
+  // Get total from musicdb based on goal criteria
+  const { data: musicDbData } = useMusicDbCount(
+    (goal?.criteria_rules as FilterRule[]) ?? [],
+    goal?.criteria_match_mode ?? 'all',
+    !!goal
+  );
+  const musicDbTotal = musicDbData?.total ?? 0;
 
   // Fetch user scores
   const { data: scores = [], isLoading: scoresLoading } = useQuery({
@@ -133,7 +143,7 @@ export default function GoalDetail() {
             title={goal.name}
             type={getGoalCardType()}
             current={progress.current}
-            total={progress.total}
+            total={musicDbTotal > 0 ? musicDbTotal : progress.total}
           />
         </div>
 
