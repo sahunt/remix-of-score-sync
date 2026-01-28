@@ -1,8 +1,9 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState } from 'react';
 import { CompletedSongsList } from './CompletedSongsList';
 import { RemainingSongsList } from './RemainingSongsList';
 import { SuggestionsList } from './SuggestionsList';
 import type { Goal, ScoreWithSong } from '@/hooks/useGoalProgress';
+import { cn } from '@/lib/utils';
 
 interface GoalSongTabsProps {
   goal: Goal;
@@ -20,32 +21,53 @@ export function GoalSongTabs({
   isLoading,
 }: GoalSongTabsProps) {
   const isCountMode = goal.goal_mode === 'count';
-  const secondTabLabel = isCountMode ? 'Suggestions' : 'Remaining';
-  const secondTabCount = isCountMode ? suggestedSongs.length : remainingSongs.length;
+  const firstTabLabel = isCountMode ? 'Suggestions' : 'Remaining';
+  const firstTabCount = isCountMode ? suggestedSongs.length : remainingSongs.length;
+  
+  // Default to "remaining" (first tab)
+  const [activeTab, setActiveTab] = useState<'remaining' | 'completed'>('remaining');
 
   return (
-    <Tabs defaultValue="completed" className="w-full">
-      <TabsList className="w-full grid grid-cols-2 h-12 bg-muted/50 rounded-[10px] p-1">
-        <TabsTrigger 
-          value="completed" 
-          className="rounded-[8px] data-[state=active]:bg-background data-[state=active]:shadow-sm"
+    <div className="w-full space-y-4">
+      {/* Toggle matching MatchModeToggle design */}
+      <div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
+        {/* Sliding background indicator */}
+        <div
+          className={cn(
+            'absolute top-1.5 bottom-1.5 rounded-[8px] bg-primary transition-all duration-300 ease-out',
+            activeTab === 'remaining' 
+              ? 'left-1.5 right-[calc(50%+1.5px)]' 
+              : 'left-[calc(50%+1.5px)] right-1.5'
+          )}
+        />
+        
+        <button
+          onClick={() => setActiveTab('remaining')}
+          className={cn(
+            'relative z-10 flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-all duration-300 ease-out',
+            activeTab === 'remaining'
+              ? 'text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground/70'
+          )}
+        >
+          {firstTabLabel} ({firstTabCount})
+        </button>
+        <button
+          onClick={() => setActiveTab('completed')}
+          className={cn(
+            'relative z-10 flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-all duration-300 ease-out',
+            activeTab === 'completed'
+              ? 'text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground/70'
+          )}
         >
           Completed ({completedSongs.length})
-        </TabsTrigger>
-        <TabsTrigger 
-          value="remaining" 
-          className="rounded-[8px] data-[state=active]:bg-background data-[state=active]:shadow-sm"
-        >
-          {secondTabLabel} ({secondTabCount})
-        </TabsTrigger>
-      </TabsList>
+        </button>
+      </div>
 
-      <TabsContent value="completed" className="mt-4">
-        <CompletedSongsList songs={completedSongs} isLoading={isLoading} />
-      </TabsContent>
-
-      <TabsContent value="remaining" className="mt-4">
-        {isCountMode ? (
+      {/* Tab content */}
+      {activeTab === 'remaining' ? (
+        isCountMode ? (
           <SuggestionsList 
             songs={suggestedSongs} 
             goal={goal}
@@ -57,8 +79,10 @@ export function GoalSongTabs({
             goal={goal}
             isLoading={isLoading} 
           />
-        )}
-      </TabsContent>
-    </Tabs>
+        )
+      ) : (
+        <CompletedSongsList songs={completedSongs} isLoading={isLoading} />
+      )}
+    </div>
   );
 }
