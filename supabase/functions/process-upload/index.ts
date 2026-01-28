@@ -296,13 +296,14 @@ async function batchMatchBySongId(
   // Get unique song IDs
   const songIds = [...new Set(entries.map(e => e.songId))];
   
-  // Batch fetch all potential matches
-  // IMPORTANT: Remove default 1000 row limit to ensure all charts are fetched
+  // Batch fetch all potential matches for the given song IDs
+  // Note: This only fetches charts for songs in the current upload, not all 10k+ charts
+  // Using a very high limit to ensure we get all charts (typically ~8 charts per song)
   const { data, error } = await supabase
     .from('musicdb')
     .select('id, song_id, chart_id, playstyle, difficulty_name, difficulty_level')
     .in('song_id', songIds)
-    .limit(10000); // Override default 1000 limit
+    .limit(50000); // Safe upper bound: even 5000 unique songs × 10 charts = 50000
   
   if (error) {
     console.error('batchMatchBySongId error:', error);
