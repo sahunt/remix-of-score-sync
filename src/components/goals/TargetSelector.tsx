@@ -48,7 +48,8 @@ const CATEGORIES: { value: Category; label: string }[] = [
 
 export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
   const { transformHaloLabel } = use12MSMode();
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(targetType);
+  // Default to 'lamp' so the options panel is visible by default
+  const [selectedCategory, setSelectedCategory] = useState<Category>(targetType ?? 'lamp');
   
   // Initialize score value from targetValue or default
   const currentScoreValue = targetType === 'score' && targetValue 
