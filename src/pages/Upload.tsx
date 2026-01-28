@@ -37,6 +37,34 @@ export default function UploadPage() {
   const [result, setResult] = useState<UploadResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Check the latest upload status from the database
+  const checkUploadStatus = useCallback(async (): Promise<UploadResult | null> => {
+    if (!user) return null;
+    
+    const { data } = await supabase
+      .from('uploads')
+      .select('id, parse_status, parse_summary')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (data?.parse_status === 'parsed' && data.parse_summary) {
+      const summary = data.parse_summary as any;
+      return {
+        total_rows: summary.total_rows ?? 0,
+        mapped_rows: summary.mapped_rows ?? 0,
+        skipped_rows: summary.skipped_rows ?? 0,
+        inserted: summary.inserted,
+        updated: summary.updated,
+        unchanged: summary.unchanged,
+        source_type: summary.source_type,
+        unmatched_songs: summary.unmatched_songs,
+      };
+    }
+    return null;
+  }, [user]);
+
   const handleUpload = useCallback(async (file: File) => {
     if (!user) return;
 
@@ -67,7 +95,25 @@ export default function UploadPage() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a timeout/network error - the upload may have still succeeded
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('network')) {
+          // Wait a moment then check the database for the result
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const dbResult = await checkUploadStatus();
+          if (dbResult) {
+            setResult(dbResult);
+            setState('success');
+            toast({
+              title: 'Upload Complete',
+              description: `Mapped ${dbResult.mapped_rows} of ${dbResult.total_rows} rows (recovered from timeout)`,
+            });
+            await refetch();
+            return;
+          }
+        }
+        throw error;
+      }
 
       setResult({
         total_rows: data.total_rows ?? 0,
@@ -98,7 +144,7 @@ export default function UploadPage() {
         description: err.message ?? 'An error occurred while processing your file',
       });
     }
-  }, [user, toast, refetch]);
+  }, [user, toast, refetch, checkUploadStatus]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
