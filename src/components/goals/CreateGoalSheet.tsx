@@ -105,14 +105,23 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     value: getDefaultValue('level'),
   };
 
-  // Reset state when sheet opens
+  // Reset form completely when sheet opens
   useEffect(() => {
     if (open) {
+      // Reset all form state to initial values
+      setName('');
+      setTargetType(null);
+      setTargetValue(null);
+      setGoalMode('all');
+      setGoalCount(10);
+      setCriteriaRules([{
+        id: generateRuleId(),
+        type: 'level',
+        operator: getDefaultOperator('level'),
+        value: getDefaultValue('level'),
+      }]);
+      setCriteriaMatchMode('all');
       setExpandedStep(1);
-      // Initialize with a default rule if empty
-      if (criteriaRules.length === 0) {
-        setCriteriaRules([defaultRule]);
-      }
     }
   }, [open]);
 
