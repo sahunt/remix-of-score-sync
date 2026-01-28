@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Drawer, DrawerContent } from '@/components/ui/drawer';
+import { Drawer, DrawerContent, DrawerPortal, DrawerOverlay } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -291,21 +291,24 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh]">
-        {/* Header matching filter sheet style */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#4A4E61]">
-          <button
-            onClick={handleClose}
-            className="p-2 text-white hover:text-muted-foreground transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-6 w-6" />
-          </button>
-          <h2 className="text-lg font-semibold text-white">New Goal</h2>
-          <div className="w-10" /> {/* Spacer for centering */}
-        </div>
+      <DrawerPortal>
+        <DrawerOverlay className="fixed inset-0 bg-black/60" />
+        <DrawerContent hideHandle className="fixed bottom-0 left-0 right-0 mt-24 flex h-auto max-h-[85vh] flex-col rounded-t-[20px] bg-[#3B3F51] border-0 outline-none">
+          <div className="flex-1 overflow-y-auto px-7 pb-8 pt-4">
+            {/* Header matching filter sheet style */}
+            <div className="flex items-center justify-between -mx-7 -mt-4 px-5 py-4 border-b border-[#4A4E61]">
+              <button
+                onClick={handleClose}
+                className="p-2 text-white hover:text-muted-foreground transition-colors"
+                aria-label="Close"
+              >
+                <X className="h-6 w-6" />
+              </button>
+              <h2 className="text-lg font-semibold text-white">New Goal</h2>
+              <div className="w-10" /> {/* Spacer for centering */}
+            </div>
 
-        <div className="px-7 py-6 space-y-6 overflow-y-auto">
+            <div className="space-y-6 pt-6">
           {/* Live Preview Card */}
           <GoalPreviewCard
             name={displayName}
@@ -411,8 +414,10 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
               {createGoal.isPending ? 'Saving...' : 'Save Goal'}
             </Button>
           </div>
-        </div>
-      </DrawerContent>
+            </div>
+          </div>
+        </DrawerContent>
+      </DrawerPortal>
     </Drawer>
   );
 }

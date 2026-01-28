@@ -12,7 +12,7 @@ export function GoalModeToggle({ mode, count, onModeChange, onCountChange }: Goa
   return (
     <div className="space-y-3">
       {/* Mode toggle - matches MatchModeToggle styling */}
-      <div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
+      <div className="relative flex items-center rounded-[10px] bg-[#3B3F51] p-1.5">
         {/* Sliding background indicator */}
         <div
           className={cn(
