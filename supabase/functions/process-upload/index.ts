@@ -365,6 +365,26 @@ function parseSanbaiFlare(flare: string | null | undefined): number | null {
 }
 
 // ============================================================================
+// Sanbai Name Normalization - Handle formatting differences between sources
+// ============================================================================
+
+/**
+ * Normalize song names for matching:
+ * - Convert escaped double-quotes "" to single "
+ * - Remove spaces before parentheses: "Name (Suffix)" -> "Name(Suffix)"
+ * - Trim whitespace
+ */
+function normalizeSanbaiName(name: string): string {
+  return name
+    // Convert escaped double-quotes to single quotes
+    .replace(/""/g, '"')
+    // Remove space before opening parenthesis
+    .replace(/\s+\(/g, '(')
+    // Trim
+    .trim();
+}
+
+// ============================================================================
 // Matching Functions - BATCHED for performance
 // ============================================================================
 
@@ -463,22 +483,30 @@ async function batchMatchBySanbaiId(
   return matchMap;
 }
 
-// Batch match by name and chart for fallback matching
+// Batch match by name and chart for fallback matching (Sanbai only)
+// Uses normalization to handle formatting differences between Sanbai exports and musicdb
 async function batchMatchByNameAndChart(
   supabase: any,
   entries: Array<{ songName: string; playstyle: string; difficultyName: string; difficultyLevel: number }>
 ): Promise<Map<string, MusicdbMatch>> {
   if (entries.length === 0) return new Map();
   
-  // Get unique song names
-  const uniqueNames = [...new Set(entries.map(e => e.songName.toLowerCase()))];
-  console.log(`batchMatchByNameAndChart: attempting to match ${uniqueNames.length} unique song names`);
+  // Normalize names for matching and get unique
+  const normalizedNamesMap = new Map<string, string>(); // original lowercase -> normalized lowercase
+  for (const e of entries) {
+    const original = e.songName.toLowerCase();
+    const normalized = normalizeSanbaiName(e.songName).toLowerCase();
+    normalizedNamesMap.set(original, normalized);
+  }
+  
+  const uniqueNormalizedNames = [...new Set(normalizedNamesMap.values())];
+  console.log(`batchMatchByNameAndChart: attempting to match ${uniqueNormalizedNames.length} unique song names (after normalization)`);
   
   const BATCH_SIZE = 50;
   const allData: any[] = [];
   
-  for (let i = 0; i < uniqueNames.length; i += BATCH_SIZE) {
-    const batchNames = uniqueNames.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < uniqueNormalizedNames.length; i += BATCH_SIZE) {
+    const batchNames = uniqueNormalizedNames.slice(i, i + BATCH_SIZE);
     
     // Use ilike for case-insensitive matching - need to do one by one for ilike
     for (const name of batchNames) {
@@ -500,10 +528,12 @@ async function batchMatchByNameAndChart(
   
   console.log(`batchMatchByNameAndChart: got ${allData.length} potential matches`);
   
-  // Create lookup map: name|playstyle|difficulty_name|difficulty_level -> match
+  // Create lookup map using NORMALIZED names: normalized_name|playstyle|difficulty_name|difficulty_level -> match
   const matchMap = new Map<string, MusicdbMatch>();
   for (const row of allData) {
-    const key = `${row.name?.toLowerCase()}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
+    // Store both the original db name (normalized) and the normalized version
+    const dbNameNormalized = normalizeSanbaiName(row.name || '').toLowerCase();
+    const key = `${dbNameNormalized}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
     matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
   }
   
@@ -1146,7 +1176,9 @@ async function processSanbai(
         continue;
       }
       
-      const nameKey = `${row.songName.toLowerCase()}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}|${row.rating}`;
+      // Use normalized name for lookup (matching how batchMatchByNameAndChart stores keys)
+      const normalizedName = normalizeSanbaiName(row.songName).toLowerCase();
+      const nameKey = `${normalizedName}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}|${row.rating}`;
       const match = nameMatchMap.get(nameKey);
       
       if (match) {
