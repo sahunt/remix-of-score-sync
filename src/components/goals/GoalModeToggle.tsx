@@ -11,15 +11,25 @@ interface GoalModeToggleProps {
 export function GoalModeToggle({ mode, count, onModeChange, onCountChange }: GoalModeToggleProps) {
   return (
     <div className="space-y-3">
-      {/* Mode toggle */}
-      <div className="flex rounded-[10px] bg-muted p-1">
+      {/* Mode toggle - matches MatchModeToggle styling */}
+      <div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
+        {/* Sliding background indicator */}
+        <div
+          className={cn(
+            'absolute top-1.5 bottom-1.5 rounded-[8px] bg-primary transition-all duration-300 ease-out',
+            mode === 'all' 
+              ? 'left-1.5 right-[calc(50%+1.5px)]' 
+              : 'left-[calc(50%+1.5px)] right-1.5'
+          )}
+        />
+        
         <button
           onClick={() => onModeChange('all')}
           className={cn(
-            "flex-1 py-2 px-4 rounded-[8px] text-sm font-medium transition-all",
+            'relative z-10 flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-all duration-300 ease-out',
             mode === 'all'
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              ? 'text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground/70'
           )}
         >
           All matching
@@ -27,10 +37,10 @@ export function GoalModeToggle({ mode, count, onModeChange, onCountChange }: Goa
         <button
           onClick={() => onModeChange('count')}
           className={cn(
-            "flex-1 py-2 px-4 rounded-[8px] text-sm font-medium transition-all",
+            'relative z-10 flex-1 rounded-[8px] h-10 px-4 text-sm font-medium transition-all duration-300 ease-out',
             mode === 'count'
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              ? 'text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground/70'
           )}
         >
           Count
@@ -47,7 +57,7 @@ export function GoalModeToggle({ mode, count, onModeChange, onCountChange }: Goa
 
       {/* Count input (only for count mode) */}
       {mode === 'count' && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <span className="text-sm text-muted-foreground">Target:</span>
           <Input
             type="number"
@@ -55,7 +65,7 @@ export function GoalModeToggle({ mode, count, onModeChange, onCountChange }: Goa
             max={1000}
             value={count}
             onChange={(e) => onCountChange(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-24 rounded-[10px]"
+            className="w-24 rounded-[10px] bg-[#3B3F51] border-transparent"
           />
           <span className="text-sm text-muted-foreground">songs</span>
         </div>
