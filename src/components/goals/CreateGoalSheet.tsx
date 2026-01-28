@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Drawer, DrawerContent, DrawerPortal, DrawerOverlay } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { X, ChevronDown } from 'lucide-react';
@@ -16,6 +16,9 @@ import {
 } from '@/components/filters/filterTypes';
 import { useGoals } from '@/hooks/useGoals';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useFilterResults } from '@/hooks/useFilterResults';
 
 interface CreateGoalSheetProps {
   open: boolean;
@@ -82,6 +85,33 @@ function formatCriteriaSummary(rules: FilterRule[]): string {
 export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const { createGoal } = useGoals();
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Fetch user scores for real-time matching
+  const [userScores, setUserScores] = useState<Array<{
+    score: number | null;
+    difficulty_level: number | null;
+    difficulty_name: string | null;
+    rank: string | null;
+    halo: string | null;
+    flare: number | null;
+    musicdb: { name: string | null; artist: string | null } | null;
+  }>>([]);
+
+  useEffect(() => {
+    if (open && user) {
+      const fetchScores = async () => {
+        const { data } = await supabase
+          .from('user_scores')
+          .select('score, difficulty_level, difficulty_name, rank, halo, flare, musicdb(name, artist)')
+          .eq('user_id', user.id);
+        if (data) {
+          setUserScores(data);
+        }
+      };
+      fetchScores();
+    }
+  }, [open, user]);
 
   // Form state
   const [name, setName] = useState('');
@@ -125,6 +155,45 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
 
   // Completion states
   const isStep1Complete = Boolean(targetType && targetValue);
+
+  // Calculate matching scores based on criteria rules
+  const { count: matchingTotal, filteredScores } = useFilterResults(
+    userScores,
+    criteriaRules,
+    criteriaMatchMode
+  );
+
+  // Calculate current progress (scores that already meet the target)
+  const currentProgress = useMemo(() => {
+    if (!targetType || !targetValue) return 0;
+    
+    return filteredScores.filter(score => {
+      switch (targetType) {
+        case 'lamp': {
+          const lampHierarchy = ['clear', 'life4', 'fc', 'gfc', 'pfc', 'mfc'];
+          const targetIndex = lampHierarchy.indexOf(targetValue.toLowerCase());
+          const scoreIndex = lampHierarchy.indexOf((score.halo ?? '').toLowerCase());
+          return scoreIndex >= targetIndex && targetIndex >= 0;
+        }
+        case 'grade': {
+          const gradeHierarchy = ['D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'AA-', 'AA', 'AA+', 'AAA'];
+          const targetIndex = gradeHierarchy.indexOf(targetValue);
+          const scoreIndex = gradeHierarchy.indexOf(score.rank ?? '');
+          return scoreIndex >= targetIndex && targetIndex >= 0;
+        }
+        case 'flare': {
+          const targetFlare = parseInt(targetValue);
+          return (score.flare ?? 0) >= targetFlare;
+        }
+        case 'score': {
+          const targetScore = parseInt(targetValue);
+          return (score.score ?? 0) >= targetScore;
+        }
+        default:
+          return false;
+      }
+    }).length;
+  }, [filteredScores, targetType, targetValue]);
 
   // Generate auto-name based on selections
   const generateName = () => {
@@ -316,8 +385,8 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
             targetValue={targetValue}
             goalMode={goalMode}
             goalCount={goalCount}
-            matchingTotal={0}
-            currentProgress={0}
+            matchingTotal={matchingTotal}
+            currentProgress={currentProgress}
           />
 
           {/* Goal name input - matching filter name input style */}
