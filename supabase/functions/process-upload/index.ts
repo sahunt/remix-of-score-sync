@@ -736,8 +736,8 @@ async function smartUpsertScores(
   scores: ScoreRecord[],
   existingScores: Map<number, ExistingScore>
 ): Promise<UpsertResult> {
-  const toInsert: any[] = [];
-  const toUpdate: { id: string; data: any }[] = [];
+  let inserted = 0;
+  let updated = 0;
   let skipped = 0;
   
   for (const score of scores) {
@@ -749,24 +749,36 @@ async function smartUpsertScores(
     const existing = existingScores.get(score.musicdb_id);
     
     if (!existing) {
-      // No existing score - insert new record
-      toInsert.push({
-        user_id: userId,
-        upload_id: uploadId,
-        musicdb_id: score.musicdb_id,
-        chart_id: score.chart_id,
-        song_id: score.song_id,
-        playstyle: score.playstyle,
-        difficulty_name: score.difficulty_name,
-        difficulty_level: score.difficulty_level,
-        score: score.score,
-        timestamp: score.timestamp,
-        username: score.username,
-        rank: score.rank,
-        flare: score.flare,
-        halo: score.halo,
-        source_type: score.source_type,
-      });
+      // No existing score - insert new record using upsert to handle race conditions
+      const { error: insertError } = await supabase
+        .from('user_scores')
+        .upsert({
+          user_id: userId,
+          upload_id: uploadId,
+          musicdb_id: score.musicdb_id,
+          chart_id: score.chart_id,
+          song_id: score.song_id,
+          playstyle: score.playstyle,
+          difficulty_name: score.difficulty_name,
+          difficulty_level: score.difficulty_level,
+          score: score.score,
+          timestamp: score.timestamp,
+          username: score.username,
+          rank: score.rank,
+          flare: score.flare,
+          halo: score.halo,
+          source_type: score.source_type,
+        }, {
+          onConflict: 'user_id,musicdb_id',
+          ignoreDuplicates: false, // Update if exists
+        });
+      
+      if (insertError) {
+        console.error('Upsert error:', insertError);
+        // Continue with other scores
+      } else {
+        inserted++;
+      }
     } else {
       // Existing score - compute the best values
       const bestScore = getBetterScore(existing.score, score.score);
@@ -781,55 +793,39 @@ async function smartUpsertScores(
       const rankImproved = bestRank !== existing.rank;
       
       if (scoreImproved || haloImproved || flareImproved || rankImproved) {
-        toUpdate.push({
-          id: existing.id,
-          data: {
+        const { error: updateError } = await supabase
+          .from('user_scores')
+          .update({
             score: bestScore,
             halo: bestHalo,
             flare: bestFlare,
             rank: bestRank,
             upload_id: uploadId, // Track which upload caused the update
-          },
-        });
+          })
+          .eq('id', existing.id);
+        
+        if (updateError) {
+          console.error('Update error:', updateError);
+          // Continue with other updates
+        } else {
+          updated++;
+        }
       } else {
         skipped++;
       }
     }
   }
   
-  // Batch insert new records
-  if (toInsert.length > 0) {
-    const { error: insertError } = await supabase
-      .from('user_scores')
-      .insert(toInsert);
-    
-    if (insertError) {
-      console.error('Insert error:', insertError);
-      throw new Error(`Failed to insert scores: ${insertError.message}`);
-    }
-    console.log(`Inserted ${toInsert.length} new scores`);
+  if (inserted > 0) {
+    console.log(`Inserted ${inserted} new scores`);
   }
-  
-  // Update existing records one by one (Supabase doesn't support batch update)
-  for (const update of toUpdate) {
-    const { error: updateError } = await supabase
-      .from('user_scores')
-      .update(update.data)
-      .eq('id', update.id);
-    
-    if (updateError) {
-      console.error('Update error:', updateError);
-      // Continue with other updates
-    }
-  }
-  
-  if (toUpdate.length > 0) {
-    console.log(`Updated ${toUpdate.length} existing scores with improvements`);
+  if (updated > 0) {
+    console.log(`Updated ${updated} existing scores with improvements`);
   }
   
   return {
-    inserted: toInsert.length,
-    updated: toUpdate.length,
+    inserted,
+    updated,
     skipped,
   };
 }
