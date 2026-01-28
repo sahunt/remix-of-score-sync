@@ -123,21 +123,46 @@ function getBetterScore(a: number | null, b: number | null): number | null {
 function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
   const trimmed = content.trim();
   
-  // PhaseII: JSON with headers/data structure
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (parsed.headers && parsed.data) return 'phaseii';
-      if (Array.isArray(parsed) && parsed[0]?.song?.chart) return 'phaseii';
-    } catch {
-      // Not valid JSON
-    }
-  }
-  
-  // Sanbai: TSV with "Song ID" header
+  // Check for Sanbai TSV first (has "Song ID" header with tabs)
   const firstLine = trimmed.split('\n')[0];
   if (firstLine.includes('Song ID') && firstLine.includes('\t')) {
     return 'sanbai';
+  }
+  
+  // Check for JSON formats (PhaseII)
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      
+      // Log the structure for debugging
+      if (Array.isArray(parsed)) {
+        console.log(`JSON array with ${parsed.length} items`);
+        if (parsed.length > 0) {
+          console.log('First item keys:', Object.keys(parsed[0] || {}));
+          // PhaseII exports DDR scores as array with score objects
+          // Check for common DDR score fields
+          const first = parsed[0];
+          if (first?.song || first?.chart || first?.score !== undefined || 
+              first?.points !== undefined || first?.difficulty || first?.lamp ||
+              first?.flareRank !== undefined || first?.flareSkill !== undefined) {
+            return 'phaseii';
+          }
+        }
+      } else if (typeof parsed === 'object') {
+        console.log('JSON object keys:', Object.keys(parsed));
+        // Check for headers/data structure
+        if (parsed.headers && parsed.data) return 'phaseii';
+        // Check if it's a wrapper object with an array
+        if (parsed.scores && Array.isArray(parsed.scores)) return 'phaseii';
+        if (parsed.data && Array.isArray(parsed.data)) return 'phaseii';
+      }
+      
+      // If it's valid JSON but we don't recognize the structure, 
+      // still try to process it as PhaseII
+      return 'phaseii';
+    } catch (err) {
+      console.error('JSON parse error in detection:', err);
+    }
   }
   
   return 'unknown';
@@ -321,8 +346,113 @@ async function fetchExistingScores(
 }
 
 // ============================================================================
-// PhaseII Processing
+// PhaseII Processing - Flexible JSON parser for various DDR score formats
 // ============================================================================
+
+// Extract song name from various possible field names
+function extractSongName(item: any): string | null {
+  return item.song?.name || item.songName || item.name || item.title || 
+         item.song?.title || item.musicTitle || null;
+}
+
+// Extract chart/difficulty info from various field formats
+function extractChartInfo(item: any): { playstyle: string; difficulty_name: string; difficulty_level: number } | null {
+  // Try nested song.chart format: "SP CHALLENGE - 14"
+  if (item.song?.chart) {
+    const match = item.song.chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
+    if (match) {
+      return {
+        playstyle: match[1],
+        difficulty_name: match[2].toUpperCase(),
+        difficulty_level: parseInt(match[3])
+      };
+    }
+  }
+  
+  // Try separate chart field: "SP EXPERT - 15"
+  if (item.chart) {
+    const match = item.chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
+    if (match) {
+      return {
+        playstyle: match[1],
+        difficulty_name: match[2].toUpperCase(),
+        difficulty_level: parseInt(match[3])
+      };
+    }
+  }
+  
+  // Try difficulty field with level: { difficulty: "EXPERT", level: 15, playStyle: "SP" }
+  if (item.difficulty && (item.level !== undefined || item.difficultyLevel !== undefined)) {
+    const level = item.level ?? item.difficultyLevel ?? 0;
+    const playstyle = item.playStyle || item.playstyle || item.style || 'SP';
+    return {
+      playstyle: playstyle.toUpperCase(),
+      difficulty_name: String(item.difficulty).toUpperCase(),
+      difficulty_level: parseInt(level)
+    };
+  }
+  
+  // Try diffLv format (array index based)
+  // This is less common but some exports use it
+  
+  return null;
+}
+
+// Extract score value from various field names
+function extractScore(item: any): number | null {
+  const raw = item.points ?? item.score ?? item.highScore ?? item.exScore ?? null;
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') return raw;
+  // Remove commas: "999,910" -> 999910
+  return parseInt(String(raw).replace(/,/g, '')) || null;
+}
+
+// Extract halo/lamp from various field names
+function extractHalo(item: any): string | null {
+  const raw = item.data?.halo || item.halo || item.lamp || item.clearLamp || 
+              item.fullComboType || item.fcType || null;
+  if (!raw) return null;
+  
+  const normalized = String(raw).toUpperCase();
+  const map: Record<string, string> = {
+    'MARVELOUS FULL COMBO': 'mfc',
+    'MFC': 'mfc',
+    'PERFECT FULL COMBO': 'pfc',
+    'PFC': 'pfc',
+    'GREAT FULL COMBO': 'gfc',
+    'GFC': 'gfc',
+    'GOOD FULL COMBO': 'fc',
+    'FULL COMBO': 'fc',
+    'FC': 'fc',
+    'LIFE4': 'life4',
+    'LIFE 4': 'life4',
+    'CLEAR': 'clear',
+    'FAILED': 'fail',
+    'FAIL': 'fail',
+  };
+  return map[normalized] || 'clear';
+}
+
+// Extract flare from various field names  
+function extractFlare(item: any): number | null {
+  const raw = item.data?.flare ?? item.flare ?? item.flareRank ?? item.flareSkill ?? null;
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') return raw;
+  
+  // Handle roman numerals or "EX"
+  const romanMap: Record<string, number> = {
+    'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+    'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+    'EX': 10
+  };
+  const upper = String(raw).toUpperCase().trim();
+  return romanMap[upper] ?? (parseInt(raw) || null);
+}
+
+// Extract rank/grade from various field names
+function extractRank(item: any): string | null {
+  return item.data?.rank || item.rank || item.grade || item.letterGrade || null;
+}
 
 async function processPhaseII(
   supabase: any,
@@ -339,28 +469,49 @@ async function processPhaseII(
     return { scores, sourceType: 'phaseii', unmatchedSongs: [{ name: null, difficulty: null, reason: 'invalid_json' }] };
   }
   
-  // Handle both { data: [...] } and [...] formats
-  const dataArray = parsed.data || (Array.isArray(parsed) ? parsed : []);
+  // Handle various wrapper formats
+  let dataArray: any[];
+  if (Array.isArray(parsed)) {
+    dataArray = parsed;
+  } else if (parsed.data && Array.isArray(parsed.data)) {
+    dataArray = parsed.data;
+  } else if (parsed.scores && Array.isArray(parsed.scores)) {
+    dataArray = parsed.scores;
+  } else if (parsed.results && Array.isArray(parsed.results)) {
+    dataArray = parsed.results;
+  } else {
+    // Maybe the object itself contains score fields?
+    dataArray = [parsed];
+  }
   
   console.log(`Processing ${dataArray.length} PhaseII entries`);
   
+  // Log first item structure for debugging
+  if (dataArray.length > 0) {
+    const sample = dataArray[0];
+    console.log('Sample item structure:', JSON.stringify(sample, null, 2).substring(0, 500));
+  }
+  
   for (const item of dataArray) {
-    const song = item.song;
-    if (!song?.chart || !song?.name) {
-      unmatchedSongs.push({ name: song?.name ?? null, difficulty: null, reason: 'missing_chart_or_name' });
+    const songName = extractSongName(item);
+    const chartInfo = extractChartInfo(item);
+    
+    if (!songName) {
+      console.log('Skipping item - no song name found:', JSON.stringify(item).substring(0, 200));
+      unmatchedSongs.push({ name: null, difficulty: null, reason: 'missing_song_name' });
       continue;
     }
     
-    const chartInfo = parsePhaseIIChart(song.chart);
     if (!chartInfo) {
-      unmatchedSongs.push({ name: song.name, difficulty: song.chart, reason: 'invalid_chart_format' });
+      console.log('Skipping item - no chart info found:', songName);
+      unmatchedSongs.push({ name: songName, difficulty: null, reason: 'missing_chart_info' });
       continue;
     }
     
     // Match to musicdb by name + playstyle + difficulty_name + level
     const match = await matchByNameAndChart(
       supabase,
-      song.name,
+      songName,
       chartInfo.playstyle,
       chartInfo.difficulty_name,
       chartInfo.difficulty_level
@@ -368,7 +519,7 @@ async function processPhaseII(
     
     if (!match) {
       unmatchedSongs.push({ 
-        name: song.name, 
+        name: songName, 
         difficulty: `${chartInfo.playstyle} ${chartInfo.difficulty_name} ${chartInfo.difficulty_level}`, 
         reason: 'no_match' 
       });
@@ -382,12 +533,12 @@ async function processPhaseII(
       playstyle: chartInfo.playstyle,
       difficulty_name: chartInfo.difficulty_name,
       difficulty_level: chartInfo.difficulty_level,
-      score: parsePhaseIIScore(item.points),
-      timestamp: item.timestamp || null,
-      username: item.username || null,
-      rank: item.data?.rank || null,
-      flare: item.data?.flare ?? null,
-      halo: normalizePhaseIIHalo(item.data?.halo),
+      score: extractScore(item),
+      timestamp: item.timestamp || item.playedAt || item.date || null,
+      username: item.username || item.playerName || null,
+      rank: extractRank(item),
+      flare: extractFlare(item),
+      halo: extractHalo(item),
       source_type: 'phaseii',
     });
   }
