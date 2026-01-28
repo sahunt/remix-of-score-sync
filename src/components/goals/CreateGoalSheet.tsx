@@ -43,6 +43,9 @@ function formatTargetDisplay(targetType: TargetType | null, targetValue: string 
     const flareOption = FLARE_OPTIONS.find(f => f.value === parseInt(targetValue));
     return flareOption ? `Flare ${flareOption.flareType.toUpperCase()}` : targetValue;
   }
+  if (targetType === 'score') {
+    return parseInt(targetValue).toLocaleString();
+  }
   return targetValue;
 }
 
@@ -118,6 +121,12 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     // Format target display
     let target = formatTargetDisplay(targetType, targetValue);
     
+    // For score targets, use "Score X+" format for the prefix
+    const isScoreTarget = targetType === 'score';
+    if (isScoreTarget) {
+      target = `${target}+`;
+    }
+    
     // Build criteria description from rules
     let criteriaDesc = '';
     
@@ -148,17 +157,10 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       }
     }
     
-    // Look for score criteria
-    const scoreRule = criteriaRules.find(r => r.type === 'score');
-    let scoreSuffix = '';
-    if (scoreRule && typeof scoreRule.value === 'number') {
-      scoreSuffix = ` with score ≥ ${scoreRule.value.toLocaleString()}`;
-    }
-    
-    // Look for flare criteria
+    // Look for flare criteria (only if not a flare target)
     const flareRule = criteriaRules.find(r => r.type === 'flare');
     let flareSuffix = '';
-    if (flareRule && Array.isArray(flareRule.value) && flareRule.value.length > 0) {
+    if (flareRule && Array.isArray(flareRule.value) && flareRule.value.length > 0 && targetType !== 'flare') {
       const flareVals = flareRule.value as number[];
       const flareLabels = flareVals.map(v => FLARE_OPTIONS.find(f => f.value === v)?.flareType || String(v));
       flareSuffix = ` with Flare ${flareLabels.join('/')}`;
@@ -168,10 +170,11 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       criteriaDesc = ' songs';
     }
 
+    // Build final name based on goal mode
     if (goalMode === 'all') {
-      return `${target} all${criteriaDesc}${scoreSuffix}${flareSuffix}`;
+      return `${target} on all${criteriaDesc}${flareSuffix}`;
     } else {
-      return `${target} ${goalCount}${criteriaDesc}${scoreSuffix}${flareSuffix}`;
+      return `${target} on ${goalCount}${criteriaDesc}${flareSuffix}`;
     }
   };
 
