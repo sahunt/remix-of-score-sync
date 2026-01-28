@@ -94,7 +94,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
   return (
     <div className="space-y-3">
       {/* Category Tab Bar */}
-      <div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
+      <div className="relative flex items-center rounded-[10px] bg-[#3B3F51] p-1.5">
         {/* Sliding background indicator */}
         <div
           className="absolute top-1.5 bottom-1.5 rounded-[8px] bg-primary transition-all duration-300 ease-out"
