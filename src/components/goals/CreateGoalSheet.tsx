@@ -3,7 +3,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X, Save, Plus, Check, ChevronDown, Pencil } from 'lucide-react';
+import { X, Save, Plus, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GoalPreviewCard } from './GoalPreviewCard';
 import { TargetSelector } from './TargetSelector';
@@ -94,38 +94,18 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const [criteriaRules, setCriteriaRules] = useState<FilterRule[]>([]);
   const [criteriaMatchMode, setCriteriaMatchMode] = useState<'all' | 'any'>('all');
 
-  // Edit states for each section
-  const [editingTarget, setEditingTarget] = useState(true);
-  const [editingCriteria, setEditingCriteria] = useState(false);
-  const [editingMode, setEditingMode] = useState(false);
-  
-  // Track if we've already auto-advanced from step 1 (prevents re-triggering on edit)
-  const [hasAdvancedFromStep1, setHasAdvancedFromStep1] = useState(false);
+  // Track which step is expanded (only one at a time)
+  const [expandedStep, setExpandedStep] = useState<1 | 2 | 3>(1);
 
-  // Reset edit states when sheet opens
+  // Reset state when sheet opens
   useEffect(() => {
     if (open) {
-      setEditingTarget(true);
-      setEditingCriteria(false);
-      setEditingMode(false);
-      setHasAdvancedFromStep1(false);
+      setExpandedStep(1);
     }
   }, [open]);
 
   // Completion states
   const isStep1Complete = Boolean(targetType && targetValue);
-
-  // Auto-advance: when target is selected for the FIRST time, show step 2
-  useEffect(() => {
-    if (isStep1Complete && editingTarget && !hasAdvancedFromStep1) {
-      const timer = setTimeout(() => {
-        setEditingTarget(false);
-        setEditingCriteria(true);
-        setHasAdvancedFromStep1(true);
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [isStep1Complete, editingTarget, hasAdvancedFromStep1]);
 
   // Generate auto-name based on selections
   const generateName = () => {
@@ -202,11 +182,6 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     setCriteriaRules(criteriaRules.filter((_, i) => i !== index));
   };
 
-  const handleContinueFromCriteria = () => {
-    setEditingCriteria(false);
-    setEditingMode(true);
-  };
-
   const handleSave = async () => {
     if (!targetType || !targetValue) {
       toast({
@@ -252,9 +227,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     setGoalCount(10);
     setCriteriaRules([]);
     setCriteriaMatchMode('all');
-    setEditingTarget(true);
-    setEditingCriteria(false);
-    setEditingMode(false);
+    setExpandedStep(1);
   };
 
   const handleClose = () => {
@@ -263,49 +236,48 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
 
   const canSave = targetType && targetValue;
 
-  // Completed step summary component
-  const CompletedStep = ({ 
+  // Collapsible step header component
+  const StepHeader = ({ 
     stepNumber, 
-    title, 
-    summary, 
-    onEdit 
-  }: { 
-    stepNumber: number; 
-    title: string; 
-    summary: string; 
-    onEdit: () => void;
-  }) => (
-    <div className="flex items-center gap-3 p-4 rounded-[10px] bg-[#262937]/50">
-      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
-        <Check className="w-4 h-4 text-primary-foreground" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-primary truncate">{summary}</p>
-      </div>
-      <button
-        onClick={onEdit}
-        className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <Pencil className="w-4 h-4" />
-      </button>
-    </div>
-  );
-
-  // Active step header component
-  const ActiveStepHeader = ({ 
-    stepNumber, 
-    title 
+    title,
+    summary,
+    isExpanded,
+    onClick
   }: { 
     stepNumber: number; 
     title: string;
+    summary?: string;
+    isExpanded: boolean;
+    onClick: () => void;
   }) => (
-    <div className="flex items-center gap-3 mb-3">
-      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center text-sm font-semibold text-primary-foreground">
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 p-4 rounded-[10px] transition-all",
+        isExpanded 
+          ? "bg-[#262937] border-2 border-primary/30" 
+          : "bg-[#262937]/50 border-2 border-transparent hover:bg-[#262937]/70"
+      )}
+    >
+      <div className={cn(
+        "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-semibold",
+        isExpanded 
+          ? "bg-primary text-primary-foreground" 
+          : "bg-muted text-muted-foreground"
+      )}>
         {stepNumber}
       </div>
-      <p className="text-sm font-medium text-foreground">{title}</p>
-    </div>
+      <div className="flex-1 text-left">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {!isExpanded && summary && (
+          <p className="text-xs text-primary truncate">{summary}</p>
+        )}
+      </div>
+      <ChevronDown className={cn(
+        "w-5 h-5 text-muted-foreground transition-transform duration-200",
+        isExpanded && "rotate-180"
+      )} />
+    </button>
   );
 
   return (
@@ -319,7 +291,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
           <div className="w-8" />
         </DrawerHeader>
 
-        <div className="px-4 py-4 space-y-4 overflow-y-auto">
+        <div className="px-4 py-4 space-y-3 overflow-y-auto">
           {/* Live Preview Card */}
           <GoalPreviewCard
             name={displayName}
@@ -332,136 +304,108 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
           />
 
           {/* Step 1: Target Selection */}
-          {editingTarget ? (
-            <div className="p-4 rounded-[10px] bg-[#262937] border-2 border-primary/30">
-              <ActiveStepHeader stepNumber={1} title="What do you want to achieve?" />
-              <TargetSelector
-                targetType={targetType}
-                targetValue={targetValue}
-                onTargetChange={(type, value) => {
-                  setTargetType(type);
-                  setTargetValue(value);
-                }}
-              />
-            </div>
-          ) : isStep1Complete ? (
-            <CompletedStep
+          <div>
+            <StepHeader
               stepNumber={1}
-              title="Target"
-              summary={formatTargetDisplay(targetType, targetValue)}
-              onEdit={() => {
-                setEditingTarget(true);
-                setEditingCriteria(false);
-                setEditingMode(false);
-              }}
+              title="What do you want to achieve?"
+              summary={isStep1Complete ? formatTargetDisplay(targetType, targetValue) : undefined}
+              isExpanded={expandedStep === 1}
+              onClick={() => setExpandedStep(1)}
             />
-          ) : null}
-
-          {/* Step 2: Criteria (shows after step 1 complete) */}
-          {isStep1Complete && (
-            <>
-              {editingCriteria ? (
-                <div className="p-4 rounded-[10px] bg-[#262937] border-2 border-primary/30">
-                  <ActiveStepHeader stepNumber={2} title="On which charts?" />
-                  <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">
-                      Optional: Filter which charts count toward this goal
-                    </p>
-                    
-                    {criteriaRules.length === 0 ? (
-                      <Button
-                        variant="outline"
-                        onClick={handleAddRule}
-                        className="w-full rounded-[10px] border-dashed border-muted-foreground/30 text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add filter
-                      </Button>
-                    ) : (
-                      <FilterRuleRow
-                        rule={criteriaRules[0]}
-                        onChange={(updatedRule) => handleUpdateRule(0, updatedRule)}
-                        onRemove={() => handleRemoveRule(0)}
-                        showRemove={true}
-                      />
-                    )}
-
-                    <Button
-                      onClick={handleContinueFromCriteria}
-                      className="w-full rounded-[10px]"
-                    >
-                      Continue
-                    </Button>
-                  </div>
-                </div>
-              ) : !editingTarget ? (
-                <CompletedStep
-                  stepNumber={2}
-                  title="Charts"
-                  summary={formatCriteriaSummary(criteriaRules)}
-                  onEdit={() => {
-                    setEditingTarget(false);
-                    setEditingCriteria(true);
-                    setEditingMode(false);
+            {expandedStep === 1 && (
+              <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <TargetSelector
+                  targetType={targetType}
+                  targetValue={targetValue}
+                  onTargetChange={(type, value) => {
+                    setTargetType(type);
+                    setTargetValue(value);
                   }}
                 />
-              ) : null}
-            </>
-          )}
+              </div>
+            )}
+          </div>
 
-          {/* Step 3: Goal Mode (shows after step 2 complete) */}
-          {isStep1Complete && !editingTarget && !editingCriteria && (
-            <>
-              {editingMode ? (
-                <div className="p-4 rounded-[10px] bg-[#262937] border-2 border-primary/30">
-                  <ActiveStepHeader stepNumber={3} title="How many?" />
-                  <div className="space-y-4">
-                    <GoalModeToggle
-                      mode={goalMode}
-                      count={goalCount}
-                      onModeChange={setGoalMode}
-                      onCountChange={setGoalCount}
-                    />
+          {/* Step 2: Criteria */}
+          <div>
+            <StepHeader
+              stepNumber={2}
+              title="On which charts?"
+              summary={formatCriteriaSummary(criteriaRules)}
+              isExpanded={expandedStep === 2}
+              onClick={() => setExpandedStep(2)}
+            />
+            {expandedStep === 2 && (
+              <div className="mt-3 p-4 rounded-[10px] bg-[#262937] animate-in fade-in slide-in-from-top-2 duration-200">
+                <p className="text-xs text-muted-foreground mb-3">
+                  Optional: Filter which charts count toward this goal
+                </p>
+                
+                {criteriaRules.length === 0 ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleAddRule}
+                    className="w-full rounded-[10px] border-dashed border-muted-foreground/30 text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add filter
+                  </Button>
+                ) : (
+                  <FilterRuleRow
+                    rule={criteriaRules[0]}
+                    onChange={(updatedRule) => handleUpdateRule(0, updatedRule)}
+                    onRemove={() => handleRemoveRule(0)}
+                    showRemove={true}
+                  />
+                )}
+              </div>
+            )}
+          </div>
 
-                    {/* Optional: Custom Name */}
-                    <div className="space-y-2 pt-2 border-t border-border">
-                      <Label htmlFor="goal-name" className="text-xs text-muted-foreground uppercase tracking-wide">
-                        Custom Name (optional)
-                      </Label>
-                      <Input
-                        id="goal-name"
-                        placeholder={generateName() || "Enter goal name..."}
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="rounded-[10px] bg-[#3B3F51] border-transparent"
-                      />
-                    </div>
-
-                    {/* Save Button */}
-                    <Button
-                      onClick={handleSave}
-                      disabled={!canSave || createGoal.isPending}
-                      className="w-full rounded-[10px]"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {createGoal.isPending ? 'Saving...' : 'Save Goal'}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <CompletedStep
-                  stepNumber={3}
-                  title="Goal Type"
-                  summary={goalMode === 'all' ? 'All matching' : `${goalCount} songs`}
-                  onEdit={() => {
-                    setEditingTarget(false);
-                    setEditingCriteria(false);
-                    setEditingMode(true);
-                  }}
+          {/* Step 3: Goal Mode */}
+          <div>
+            <StepHeader
+              stepNumber={3}
+              title="How many?"
+              summary={goalMode === 'all' ? 'All matching charts' : `${goalCount} charts`}
+              isExpanded={expandedStep === 3}
+              onClick={() => setExpandedStep(3)}
+            />
+            {expandedStep === 3 && (
+              <div className="mt-3 p-4 rounded-[10px] bg-[#262937] animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+                <GoalModeToggle
+                  mode={goalMode}
+                  count={goalCount}
+                  onModeChange={setGoalMode}
+                  onCountChange={setGoalCount}
                 />
-              )}
-            </>
-          )}
+
+                {/* Optional: Custom Name */}
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <Label htmlFor="goal-name" className="text-xs text-muted-foreground uppercase tracking-wide">
+                    Custom Name (optional)
+                  </Label>
+                  <Input
+                    id="goal-name"
+                    placeholder={generateName() || "Enter goal name..."}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="rounded-[10px] bg-[#3B3F51] border-transparent"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Save Button - Always visible */}
+          <Button
+            onClick={handleSave}
+            disabled={!canSave || createGoal.isPending}
+            className="w-full rounded-[10px]"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {createGoal.isPending ? 'Saving...' : 'Save Goal'}
+          </Button>
         </div>
       </DrawerContent>
     </Drawer>
