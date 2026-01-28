@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { use12MSMode } from '@/hooks/use12MSMode';
+
 import { useUsername } from '@/hooks/useUsername';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ const DISPLAY_NAME_REGEX = /^[a-zA-Z0-9 _'\-]{3,30}$/;
 export default function Profile() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { is12MSMode, toggle12MSMode, loading: modeLoading } = use12MSMode();
+  
   const { username, loading: usernameLoading, refetch: refetchUsername } = useUsername();
   const queryClient = useQueryClient();
 
@@ -212,26 +212,6 @@ export default function Profile() {
           </div>
         </section>
 
-        {/* 12MS Mode Section */}
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold text-white mb-3">12MS Mode</h2>
-          <div className="flex items-center justify-between bg-[#3B3F51] rounded-[10px] p-4">
-            <div className="flex-1">
-              <Label htmlFor="12ms-mode" className="text-white font-medium">
-                Enable 12MS Mode
-              </Label>
-              <p className="text-sm text-muted-foreground mt-1">
-                Display halos as 12MS equivalents (PFC→MFC, FC→GFC, GFC→PFC)
-              </p>
-            </div>
-            <Switch
-              id="12ms-mode"
-              checked={is12MSMode}
-              onCheckedChange={toggle12MSMode}
-              disabled={modeLoading}
-            />
-          </div>
-        </section>
 
         {/* Change Password Section */}
         <section className="mb-8">
