@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
 
 interface TargetSelectorProps {
   targetType: 'lamp' | 'grade' | 'flare' | 'score' | null;
@@ -45,9 +46,20 @@ const FLARE_OPTIONS = [
   { value: '1', label: 'I' },
 ];
 
-type Category = 'lamp' | 'grade' | 'flare' | null;
+// Common score thresholds for quick selection
+const SCORE_PRESETS = [
+  { value: '1000000', label: '1,000,000' },
+  { value: '990000', label: '990,000' },
+  { value: '980000', label: '980,000' },
+  { value: '970000', label: '970,000' },
+  { value: '950000', label: '950,000' },
+  { value: '900000', label: '900,000' },
+];
+
+type Category = 'lamp' | 'grade' | 'flare' | 'score' | null;
 
 export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
+  const [customScore, setCustomScore] = useState('');
   const [expandedCategory, setExpandedCategory] = useState<Category>(
     targetType === 'score' ? null : targetType
   );
@@ -59,6 +71,24 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
     onTargetChange(type, value);
   };
 
+  const handleScoreSelect = (value: string) => {
+    onTargetChange('score', value);
+  };
+
+  const handleCustomScoreSubmit = () => {
+    const numericValue = customScore.replace(/,/g, '');
+    if (numericValue && !isNaN(parseInt(numericValue))) {
+      onTargetChange('score', numericValue);
+    }
+  };
+
+  const formatScoreInput = (value: string) => {
+    // Remove non-digits
+    const digits = value.replace(/\D/g, '');
+    // Format with commas
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
   const getSelectedLabel = (category: Category): string | null => {
     if (targetType !== category || !targetValue) return null;
     
@@ -67,6 +97,9 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
     }
     if (category === 'grade') {
       return GRADE_OPTIONS.find(o => o.value === targetValue)?.label ?? null;
+    }
+    if (category === 'score') {
+      return parseInt(targetValue).toLocaleString();
     }
     if (category === 'flare') {
       const opt = FLARE_OPTIONS.find(o => o.value === targetValue);
@@ -193,6 +226,57 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
               {option.label}
             </button>
           ))}
+        </div>
+      </CategorySection>
+
+      {/* Score targets */}
+      <CategorySection category="score" title="Score (950,000+, etc.)">
+        <div className="space-y-3">
+          {/* Quick presets */}
+          <div className="flex flex-wrap gap-2">
+            {SCORE_PRESETS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleScoreSelect(option.value)}
+                className={cn(
+                  "h-[40px] px-3 rounded-[10px] text-sm font-medium transition-all duration-200",
+                  isSelected('score', option.value)
+                    ? "bg-primary/20 border-2 border-primary text-foreground"
+                    : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          
+          {/* Custom score input */}
+          <div className="flex items-center gap-2">
+            <Input
+              type="text"
+              placeholder="Custom score..."
+              value={customScore}
+              onChange={(e) => setCustomScore(formatScoreInput(e.target.value))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleCustomScoreSubmit();
+                }
+              }}
+              className="flex-1 rounded-[10px] bg-[#3B3F51] border-transparent"
+            />
+            <button
+              onClick={handleCustomScoreSubmit}
+              disabled={!customScore}
+              className={cn(
+                "h-[40px] px-4 rounded-[10px] text-sm font-medium transition-all",
+                customScore
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "bg-muted text-muted-foreground cursor-not-allowed"
+              )}
+            >
+              Set
+            </button>
+          </div>
         </div>
       </CategorySection>
     </div>
