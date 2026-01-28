@@ -46,7 +46,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
 ];
 
 export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(targetType || 'lamp');
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(targetType);
   
   // Initialize score value from targetValue or default
   const currentScoreValue = targetType === 'score' && targetValue 
@@ -83,18 +83,18 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
     targetType === type && targetValue === value;
 
   return (
-    <div className="space-y-4">
-      {/* Category Chip Bar - matches filter pattern */}
-      <div className="flex flex-wrap gap-2">
+    <div className="space-y-3">
+      {/* Category Tab Bar */}
+      <div className="grid grid-cols-4 gap-2">
         {CATEGORIES.map((category) => (
           <button
             key={category.value}
             onClick={() => handleCategoryClick(category.value)}
             className={cn(
-              "h-10 px-5 rounded-[10px] text-sm font-medium transition-all duration-200",
+              "h-[44px] rounded-[10px] text-sm font-medium transition-all duration-200",
               selectedCategory === category.value
                 ? "bg-primary text-primary-foreground"
-                : "bg-transparent text-muted-foreground hover:text-foreground"
+                : "bg-card border-2 border-transparent text-foreground hover:bg-muted"
             )}
           >
             {category.label}
@@ -102,9 +102,9 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
         ))}
       </div>
 
-      {/* Options - directly in the same card, no nested background */}
+      {/* Options Panel */}
       {selectedCategory && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="p-3 rounded-[10px] bg-[#3B3F51] animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Lamp Options */}
           {selectedCategory === 'lamp' && (
             <div className="grid grid-cols-3 gap-2">
@@ -117,7 +117,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
                     "flex items-center justify-center gap-2",
                     isSelected('lamp', option.value)
                       ? "bg-primary/20 border-2 border-primary text-foreground"
-                      : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
+                      : "bg-[#4A4E61] border-2 border-transparent text-white hover:bg-[#555a6e]"
                   )}
                 >
                   <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", option.dotClass)} />
@@ -138,7 +138,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
                     "h-[44px] px-2 rounded-[10px] text-sm font-medium transition-all duration-200",
                     isSelected('grade', option.value)
                       ? "bg-primary/20 border-2 border-primary text-foreground"
-                      : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
+                      : "bg-[#4A4E61] border-2 border-transparent text-white hover:bg-[#555a6e]"
                   )}
                 >
                   {option.label}
@@ -158,7 +158,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
                     "rounded-[10px] p-2 transition-all duration-200",
                     isSelected('flare', String(option.value))
                       ? "bg-primary/20 ring-2 ring-primary"
-                      : "bg-[#3B3F51] hover:bg-[#454a5e]"
+                      : "bg-[#4A4E61] hover:bg-[#555a6e]"
                   )}
                 >
                   <FlareChip type={option.flareType} className="h-5" />
@@ -178,7 +178,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
                   const newVal = parseScore(e.target.value);
                   onTargetChange('score', String(newVal));
                 }}
-                className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white text-center text-lg font-medium outline-none focus:ring-2 focus:ring-primary"
+                className="w-full h-[44px] rounded-[10px] bg-[#4A4E61] px-5 text-white text-center text-lg font-medium outline-none focus:ring-2 focus:ring-primary"
               />
               <Slider
                 value={[currentScoreValue]}
