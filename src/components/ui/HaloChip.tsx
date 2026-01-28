@@ -20,13 +20,15 @@ const haloAssets: Record<HaloType, string> = {
 interface HaloChipProps {
   type: HaloType;
   className?: string;
+  /** Skip 12MS transformation - use for goal badges where the target itself shouldn't change */
+  skipTransform?: boolean;
 }
 
-export function HaloChip({ type, className }: HaloChipProps) {
+export function HaloChip({ type, className, skipTransform = false }: HaloChipProps) {
   const { transformHalo } = use12MSMode();
   
-  // Apply 12MS transformation to the type
-  const transformedType = (transformHalo(type) || type) as HaloType;
+  // Apply 12MS transformation unless skipped (e.g., for goal badges)
+  const transformedType = skipTransform ? type : ((transformHalo(type) || type) as HaloType);
   const asset = haloAssets[transformedType];
 
   return (
