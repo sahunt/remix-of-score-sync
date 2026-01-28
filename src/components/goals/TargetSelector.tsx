@@ -110,7 +110,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
               "h-[44px] rounded-[10px] text-sm font-medium transition-all duration-200",
               selectedCategory === category.value
                 ? "bg-primary text-primary-foreground"
-                : "bg-[#E5E5E5] text-[#1a1a1a] hover:bg-[#d5d5d5]"
+                : "bg-card border-2 border-transparent text-foreground hover:bg-muted"
             )}
           >
             {category.label}
