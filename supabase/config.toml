@@ -1,1 +1,4 @@
 project_id = "cjosawtrjeyqavdsffuy"
+
+[functions.import-musicdb]
+verify_jwt = false
