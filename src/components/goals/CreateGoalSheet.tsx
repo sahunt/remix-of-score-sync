@@ -3,11 +3,11 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X, Save, Plus } from 'lucide-react';
+import { X, Save, Plus, Check, ChevronDown, Pencil } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { GoalPreviewCard } from './GoalPreviewCard';
 import { TargetSelector } from './TargetSelector';
 import { GoalModeToggle } from './GoalModeToggle';
-import { GoalStepCard } from './GoalStepCard';
 import { FilterRuleRow } from '@/components/filters/FilterRuleRow';
 import { RuleConnectorChip } from '@/components/filters/RuleConnectorChip';
 import { MatchModeToggle } from '@/components/filters/MatchModeToggle';
@@ -27,7 +27,6 @@ interface CreateGoalSheetProps {
 }
 
 type TargetType = 'lamp' | 'grade' | 'flare' | 'score';
-type StepNumber = 1 | 2 | 3;
 
 // Helper to format target display name
 function formatTargetDisplay(targetType: TargetType | null, targetValue: string | null): string {
@@ -44,7 +43,7 @@ function formatTargetDisplay(targetType: TargetType | null, targetValue: string 
     return flareOption ? `Flare ${flareOption.flareType.toUpperCase()}` : targetValue;
   }
   if (targetType === 'score') {
-    return parseInt(targetValue).toLocaleString();
+    return parseInt(targetValue).toLocaleString() + '+';
   }
   return targetValue;
 }
@@ -97,40 +96,43 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const [criteriaRules, setCriteriaRules] = useState<FilterRule[]>([]);
   const [criteriaMatchMode, setCriteriaMatchMode] = useState<'all' | 'any'>('all');
 
-  // Step state
-  const [currentStep, setCurrentStep] = useState<StepNumber>(1);
+  // Edit states for each section
+  const [editingTarget, setEditingTarget] = useState(true);
+  const [editingCriteria, setEditingCriteria] = useState(false);
+  const [editingMode, setEditingMode] = useState(false);
 
-  // Auto-advance to step 2 when target is selected
+  // Reset edit states when sheet opens
   useEffect(() => {
-    if (targetType && targetValue && currentStep === 1) {
-      // Small delay for visual feedback
-      const timer = setTimeout(() => setCurrentStep(2), 300);
-      return () => clearTimeout(timer);
+    if (open) {
+      setEditingTarget(true);
+      setEditingCriteria(false);
+      setEditingMode(false);
     }
-  }, [targetType, targetValue, currentStep]);
+  }, [open]);
 
   // Completion states
   const isStep1Complete = Boolean(targetType && targetValue);
-  const isStep2Complete = true; // Always complete (optional step)
-  const isStep3Complete = true; // Always has default
+
+  // Auto-advance: when target is selected, show step 2
+  useEffect(() => {
+    if (isStep1Complete && editingTarget) {
+      const timer = setTimeout(() => {
+        setEditingTarget(false);
+        setEditingCriteria(true);
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isStep1Complete, editingTarget]);
 
   // Generate auto-name based on selections
   const generateName = () => {
     if (!targetValue) return '';
     
-    // Format target display
     let target = formatTargetDisplay(targetType, targetValue);
-    
-    // For score targets, use "Score X+" format for the prefix
-    const isScoreTarget = targetType === 'score';
-    if (isScoreTarget) {
-      target = `${target}+`;
-    }
     
     // Build criteria description from rules
     let criteriaDesc = '';
     
-    // Look for level rules
     const levelRule = criteriaRules.find(r => r.type === 'level');
     if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
       const levels = levelRule.value as number[];
@@ -146,7 +148,6 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       }
     }
     
-    // Look for difficulty rules
     const diffRule = criteriaRules.find(r => r.type === 'difficulty');
     if (diffRule && Array.isArray(diffRule.value) && diffRule.value.length > 0) {
       const diffs = diffRule.value as string[];
@@ -157,7 +158,6 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       }
     }
     
-    // Look for flare criteria (only if not a flare target)
     const flareRule = criteriaRules.find(r => r.type === 'flare');
     let flareSuffix = '';
     if (flareRule && Array.isArray(flareRule.value) && flareRule.value.length > 0 && targetType !== 'flare') {
@@ -170,7 +170,6 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       criteriaDesc = ' songs';
     }
 
-    // Build final name based on goal mode
     if (goalMode === 'all') {
       return `${target} on all${criteriaDesc}${flareSuffix}`;
     } else {
@@ -200,6 +199,11 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     setCriteriaRules(criteriaRules.filter((_, i) => i !== index));
   };
 
+  const handleContinueFromCriteria = () => {
+    setEditingCriteria(false);
+    setEditingMode(true);
+  };
+
   const handleSave = async () => {
     if (!targetType || !targetValue) {
       toast({
@@ -226,7 +230,6 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
         description: "Your new goal has been saved.",
       });
 
-      // Reset form and close
       resetForm();
       onOpenChange(false);
     } catch (error) {
@@ -246,7 +249,9 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     setGoalCount(10);
     setCriteriaRules([]);
     setCriteriaMatchMode('all');
-    setCurrentStep(1);
+    setEditingTarget(true);
+    setEditingCriteria(false);
+    setEditingMode(false);
   };
 
   const handleClose = () => {
@@ -255,10 +260,50 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
 
   const canSave = targetType && targetValue;
 
-  // Get step summaries
-  const step1Summary = isStep1Complete ? formatTargetDisplay(targetType, targetValue) : undefined;
-  const step2Summary = formatCriteriaSummary(criteriaRules);
-  const step3Summary = goalMode === 'all' ? 'All matching' : `${goalCount} songs`;
+  // Completed step summary component
+  const CompletedStep = ({ 
+    stepNumber, 
+    title, 
+    summary, 
+    onEdit 
+  }: { 
+    stepNumber: number; 
+    title: string; 
+    summary: string; 
+    onEdit: () => void;
+  }) => (
+    <div className="flex items-center gap-3 p-4 rounded-[10px] bg-[#262937]/50">
+      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
+        <Check className="w-4 h-4 text-primary-foreground" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-xs text-primary truncate">{summary}</p>
+      </div>
+      <button
+        onClick={onEdit}
+        className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Pencil className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
+  // Active step header component
+  const ActiveStepHeader = ({ 
+    stepNumber, 
+    title 
+  }: { 
+    stepNumber: number; 
+    title: string;
+  }) => (
+    <div className="flex items-center gap-3 mb-3">
+      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center text-sm font-semibold text-primary-foreground">
+        {stepNumber}
+      </div>
+      <p className="text-sm font-medium text-foreground">{title}</p>
+    </div>
+  );
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -268,7 +313,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
             <X className="h-4 w-4" />
           </Button>
           <DrawerTitle className="text-base font-semibold">New Goal</DrawerTitle>
-          <div className="w-8" /> {/* Spacer for centering */}
+          <div className="w-8" />
         </DrawerHeader>
 
         <div className="px-4 py-4 space-y-4 overflow-y-auto">
@@ -284,120 +329,150 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
           />
 
           {/* Step 1: Target Selection */}
-          <GoalStepCard
-            stepNumber={1}
-            title="What do you want to achieve?"
-            summary={step1Summary}
-            isComplete={isStep1Complete}
-            isExpanded={currentStep === 1}
-            onToggle={() => setCurrentStep(1)}
-          >
-            <TargetSelector
-              targetType={targetType}
-              targetValue={targetValue}
-              onTargetChange={(type, value) => {
-                setTargetType(type);
-                setTargetValue(value);
-              }}
-            />
-          </GoalStepCard>
-
-          {/* Step 2: Criteria (Optional) */}
-          <GoalStepCard
-            stepNumber={2}
-            title="On which charts?"
-            summary={step2Summary}
-            isComplete={isStep2Complete}
-            isExpanded={currentStep === 2}
-            onToggle={() => setCurrentStep(2)}
-            disabled={!isStep1Complete}
-          >
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Optional: Add rules to filter which charts count toward this goal
-              </p>
-              
-              {/* Match mode toggle - show when 2+ rules */}
-              {criteriaRules.length >= 2 && (
-                <MatchModeToggle
-                  value={criteriaMatchMode}
-                  onChange={setCriteriaMatchMode}
-                />
-              )}
-
-              {/* Rules list */}
-              <div className="space-y-0">
-                {criteriaRules.map((rule, index) => (
-                  <div key={rule.id}>
-                    {/* Show connector chip between rules */}
-                    {index > 0 && (
-                      <RuleConnectorChip mode={criteriaMatchMode} />
-                    )}
-                    <FilterRuleRow
-                      rule={rule}
-                      onChange={(updatedRule) => handleUpdateRule(index, updatedRule)}
-                      onRemove={() => handleRemoveRule(index)}
-                      showRemove={true}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Add rule button */}
-              <Button
-                variant="outline"
-                onClick={handleAddRule}
-                className="w-full rounded-[10px] border-dashed border-muted-foreground/30 text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add criteria
-              </Button>
-            </div>
-          </GoalStepCard>
-
-          {/* Step 3: Goal Mode */}
-          <GoalStepCard
-            stepNumber={3}
-            title="How many?"
-            summary={step3Summary}
-            isComplete={isStep3Complete}
-            isExpanded={currentStep === 3}
-            onToggle={() => setCurrentStep(3)}
-            disabled={!isStep1Complete}
-          >
-            <GoalModeToggle
-              mode={goalMode}
-              count={goalCount}
-              onModeChange={setGoalMode}
-              onCountChange={setGoalCount}
-            />
-          </GoalStepCard>
-
-          {/* Optional: Custom Name */}
-          {isStep1Complete && (
-            <div className="space-y-2 pt-2">
-              <Label htmlFor="goal-name" className="text-xs text-muted-foreground uppercase tracking-wide">
-                Custom Name (optional)
-              </Label>
-              <Input
-                id="goal-name"
-                placeholder={generateName() || "Enter goal name..."}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="rounded-[10px] bg-[#3B3F51] border-transparent"
+          {editingTarget ? (
+            <div className="p-4 rounded-[10px] bg-[#262937] border-2 border-primary/30">
+              <ActiveStepHeader stepNumber={1} title="What do you want to achieve?" />
+              <TargetSelector
+                targetType={targetType}
+                targetValue={targetValue}
+                onTargetChange={(type, value) => {
+                  setTargetType(type);
+                  setTargetValue(value);
+                }}
               />
             </div>
+          ) : isStep1Complete ? (
+            <CompletedStep
+              stepNumber={1}
+              title="Target"
+              summary={formatTargetDisplay(targetType, targetValue)}
+              onEdit={() => {
+                setEditingTarget(true);
+                setEditingCriteria(false);
+                setEditingMode(false);
+              }}
+            />
+          ) : null}
+
+          {/* Step 2: Criteria (shows after step 1 complete) */}
+          {isStep1Complete && (
+            <>
+              {editingCriteria ? (
+                <div className="p-4 rounded-[10px] bg-[#262937] border-2 border-primary/30">
+                  <ActiveStepHeader stepNumber={2} title="On which charts?" />
+                  <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      Optional: Add rules to filter which charts count toward this goal
+                    </p>
+                    
+                    {criteriaRules.length >= 2 && (
+                      <MatchModeToggle
+                        value={criteriaMatchMode}
+                        onChange={setCriteriaMatchMode}
+                      />
+                    )}
+
+                    <div className="space-y-0">
+                      {criteriaRules.map((rule, index) => (
+                        <div key={rule.id}>
+                          {index > 0 && (
+                            <RuleConnectorChip mode={criteriaMatchMode} />
+                          )}
+                          <FilterRuleRow
+                            rule={rule}
+                            onChange={(updatedRule) => handleUpdateRule(index, updatedRule)}
+                            onRemove={() => handleRemoveRule(index)}
+                            showRemove={true}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      onClick={handleAddRule}
+                      className="w-full rounded-[10px] border-dashed border-muted-foreground/30 text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add criteria
+                    </Button>
+
+                    <Button
+                      onClick={handleContinueFromCriteria}
+                      className="w-full rounded-[10px]"
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </div>
+              ) : !editingTarget ? (
+                <CompletedStep
+                  stepNumber={2}
+                  title="Charts"
+                  summary={formatCriteriaSummary(criteriaRules)}
+                  onEdit={() => {
+                    setEditingTarget(false);
+                    setEditingCriteria(true);
+                    setEditingMode(false);
+                  }}
+                />
+              ) : null}
+            </>
           )}
 
-          {/* Save Button */}
-          <Button
-            onClick={handleSave}
-            disabled={!canSave || createGoal.isPending}
-            className="w-full rounded-[10px]"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {createGoal.isPending ? 'Saving...' : 'Save Goal'}
-          </Button>
+          {/* Step 3: Goal Mode (shows after step 2 complete) */}
+          {isStep1Complete && !editingTarget && !editingCriteria && (
+            <>
+              {editingMode ? (
+                <div className="p-4 rounded-[10px] bg-[#262937] border-2 border-primary/30">
+                  <ActiveStepHeader stepNumber={3} title="How many?" />
+                  <div className="space-y-4">
+                    <GoalModeToggle
+                      mode={goalMode}
+                      count={goalCount}
+                      onModeChange={setGoalMode}
+                      onCountChange={setGoalCount}
+                    />
+
+                    {/* Optional: Custom Name */}
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <Label htmlFor="goal-name" className="text-xs text-muted-foreground uppercase tracking-wide">
+                        Custom Name (optional)
+                      </Label>
+                      <Input
+                        id="goal-name"
+                        placeholder={generateName() || "Enter goal name..."}
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="rounded-[10px] bg-[#3B3F51] border-transparent"
+                      />
+                    </div>
+
+                    {/* Save Button */}
+                    <Button
+                      onClick={handleSave}
+                      disabled={!canSave || createGoal.isPending}
+                      className="w-full rounded-[10px]"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {createGoal.isPending ? 'Saving...' : 'Save Goal'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <CompletedStep
+                  stepNumber={3}
+                  title="Goal Type"
+                  summary={goalMode === 'all' ? 'All matching' : `${goalCount} songs`}
+                  onEdit={() => {
+                    setEditingTarget(false);
+                    setEditingCriteria(false);
+                    setEditingMode(true);
+                  }}
+                />
+              )}
+            </>
+          )}
         </div>
       </DrawerContent>
     </Drawer>

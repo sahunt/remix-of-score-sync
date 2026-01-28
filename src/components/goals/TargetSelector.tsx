@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useState, useEffect } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface TargetSelectorProps {
@@ -56,190 +55,168 @@ const SCORE_PRESETS = [
   { value: '900000', label: '900,000' },
 ];
 
-type Category = 'lamp' | 'grade' | 'flare' | 'score' | null;
+type Category = 'lamp' | 'grade' | 'flare' | 'score';
+
+const CATEGORIES: { value: Category; label: string; description: string }[] = [
+  { value: 'lamp', label: 'Lamp', description: 'FC, PFC, MFC, etc.' },
+  { value: 'grade', label: 'Grade', description: 'AAA, AA, A, etc.' },
+  { value: 'flare', label: 'Flare', description: 'EX, IX, VIII, etc.' },
+  { value: 'score', label: 'Score', description: '950,000+, etc.' },
+];
 
 export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(targetType);
   const [customScore, setCustomScore] = useState('');
-  const [expandedCategory, setExpandedCategory] = useState<Category>(
-    targetType === 'score' ? null : targetType
-  );
 
-  const isSelected = (type: string, value: string) => 
-    targetType === type && targetValue === value;
+  // Sync category with external targetType changes
+  useEffect(() => {
+    if (targetType) {
+      setSelectedCategory(targetType);
+    }
+  }, [targetType]);
 
-  const handleSelect = (type: 'lamp' | 'grade' | 'flare', value: string) => {
-    onTargetChange(type, value);
+  const handleCategorySelect = (category: Category) => {
+    setSelectedCategory(category);
   };
 
-  const handleScoreSelect = (value: string) => {
-    onTargetChange('score', value);
+  const handleBack = () => {
+    setSelectedCategory(null);
+  };
+
+  const handleSelect = (type: Category, value: string) => {
+    onTargetChange(type, value);
   };
 
   const handleCustomScoreSubmit = () => {
     const numericValue = customScore.replace(/,/g, '');
     if (numericValue && !isNaN(parseInt(numericValue))) {
       onTargetChange('score', numericValue);
+      setCustomScore('');
     }
   };
 
   const formatScoreInput = (value: string) => {
-    // Remove non-digits
     const digits = value.replace(/\D/g, '');
-    // Format with commas
     return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   };
 
-  const getSelectedLabel = (category: Category): string | null => {
-    if (targetType !== category || !targetValue) return null;
-    
-    if (category === 'lamp') {
-      return LAMP_OPTIONS.find(o => o.value === targetValue)?.label ?? null;
-    }
-    if (category === 'grade') {
-      return GRADE_OPTIONS.find(o => o.value === targetValue)?.label ?? null;
-    }
-    if (category === 'score') {
-      return parseInt(targetValue).toLocaleString();
-    }
-    if (category === 'flare') {
-      const opt = FLARE_OPTIONS.find(o => o.value === targetValue);
-      return opt ? `Flare ${opt.label}` : null;
-    }
-    return null;
-  };
+  const isSelected = (type: string, value: string) => 
+    targetType === type && targetValue === value;
 
-  const CategorySection = ({
-    category,
-    title,
-    children,
-  }: {
-    category: Category;
-    title: string;
-    children: React.ReactNode;
-  }) => {
-    const isExpanded = expandedCategory === category;
-    const selectedLabel = getSelectedLabel(category);
-    const hasSelection = targetType === category && targetValue;
-
+  // Phase 1: Category selection
+  if (!selectedCategory) {
     return (
-      <Collapsible
-        open={isExpanded}
-        onOpenChange={() => setExpandedCategory(isExpanded ? null : category)}
-      >
-        <CollapsibleTrigger className="w-full">
-          <div
+      <div className="grid grid-cols-2 gap-2">
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.value}
+            onClick={() => handleCategorySelect(cat.value)}
             className={cn(
-              "flex items-center justify-between p-3 rounded-[10px] transition-all",
-              hasSelection
-                ? "bg-primary/10 border border-primary/30"
-                : "bg-[#3B3F51] border border-transparent hover:bg-[#454a5e]"
+              "flex flex-col items-start p-4 rounded-[10px] transition-all duration-200 text-left",
+              "bg-[#3B3F51] border-2 border-transparent hover:bg-[#454a5e] hover:border-primary/30"
             )}
           >
-            <div className="flex items-center gap-2">
-              <span className={cn(
-                "text-sm font-medium",
-                hasSelection ? "text-foreground" : "text-muted-foreground"
-              )}>
-                {title}
-              </span>
-              {selectedLabel && !isExpanded && (
-                <span className="text-xs text-primary font-medium">
-                  • {selectedLabel}
-                </span>
-              )}
-            </div>
-            <ChevronDown
-              className={cn(
-                "w-4 h-4 text-muted-foreground transition-transform duration-200",
-                isExpanded && "rotate-180"
-              )}
-            />
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out">
-          <div className="pt-3 pb-1">
-            {children}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+            <span className="text-base font-semibold text-foreground">{cat.label}</span>
+            <span className="text-xs text-muted-foreground">{cat.description}</span>
+          </button>
+        ))}
+      </div>
     );
-  };
+  }
 
+  // Phase 2: Value selection within category
   return (
-    <div className="space-y-2">
-      {/* Lamp targets */}
-      <CategorySection category="lamp" title="Lamp (FC, PFC, etc.)">
-        <div className="flex flex-wrap gap-2">
-          {LAMP_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleSelect('lamp', option.value)}
-              className={cn(
-                "h-[40px] px-3 rounded-[10px] text-sm font-medium transition-all duration-200",
-                "flex items-center gap-2",
-                isSelected('lamp', option.value)
-                  ? "bg-primary/20 border-2 border-primary text-foreground"
-                  : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
-              )}
-            >
-              <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", option.dotClass)} />
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </CategorySection>
+    <div className="space-y-3">
+      {/* Back button with category name */}
+      <button
+        onClick={handleBack}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ChevronLeft className="w-4 h-4" />
+        <span>Back to categories</span>
+      </button>
 
-      {/* Grade targets */}
-      <CategorySection category="grade" title="Grade (AAA, AA, etc.)">
-        <div className="flex flex-wrap gap-2">
-          {GRADE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleSelect('grade', option.value)}
-              className={cn(
-                "h-[40px] px-3 rounded-[10px] text-sm font-medium transition-all duration-200",
-                isSelected('grade', option.value)
-                  ? "bg-primary/20 border-2 border-primary text-foreground"
-                  : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
+      {/* Category-specific options */}
+      {selectedCategory === 'lamp' && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-foreground">Choose a lamp target</p>
+          <div className="flex flex-wrap gap-2">
+            {LAMP_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleSelect('lamp', option.value)}
+                className={cn(
+                  "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all duration-200",
+                  "flex items-center gap-2",
+                  isSelected('lamp', option.value)
+                    ? "bg-primary/20 border-2 border-primary text-foreground"
+                    : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
+                )}
+              >
+                <span className={cn("w-2.5 h-2.5 rounded-full flex-shrink-0", option.dotClass)} />
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </CategorySection>
+      )}
 
-      {/* Flare targets */}
-      <CategorySection category="flare" title="Flare (EX, IX, etc.)">
-        <div className="flex flex-wrap gap-2">
-          {FLARE_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleSelect('flare', option.value)}
-              className={cn(
-                "h-[40px] px-3 rounded-[10px] text-sm font-medium transition-all duration-200",
-                isSelected('flare', option.value)
-                  ? "bg-primary/20 border-2 border-primary text-foreground"
-                  : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
+      {selectedCategory === 'grade' && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-foreground">Choose a grade target</p>
+          <div className="flex flex-wrap gap-2">
+            {GRADE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleSelect('grade', option.value)}
+                className={cn(
+                  "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all duration-200",
+                  isSelected('grade', option.value)
+                    ? "bg-primary/20 border-2 border-primary text-foreground"
+                    : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </CategorySection>
+      )}
 
-      {/* Score targets */}
-      <CategorySection category="score" title="Score (950,000+, etc.)">
+      {selectedCategory === 'flare' && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-foreground">Choose a flare target</p>
+          <div className="flex flex-wrap gap-2">
+            {FLARE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleSelect('flare', option.value)}
+                className={cn(
+                  "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all duration-200",
+                  isSelected('flare', option.value)
+                    ? "bg-primary/20 border-2 border-primary text-foreground"
+                    : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedCategory === 'score' && (
         <div className="space-y-3">
+          <p className="text-sm font-medium text-foreground">Choose a score target</p>
+          
           {/* Quick presets */}
           <div className="flex flex-wrap gap-2">
             {SCORE_PRESETS.map((option) => (
               <button
                 key={option.value}
-                onClick={() => handleScoreSelect(option.value)}
+                onClick={() => handleSelect('score', option.value)}
                 className={cn(
-                  "h-[40px] px-3 rounded-[10px] text-sm font-medium transition-all duration-200",
+                  "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all duration-200",
                   isSelected('score', option.value)
                     ? "bg-primary/20 border-2 border-primary text-foreground"
                     : "bg-[#3B3F51] border-2 border-transparent text-white hover:bg-[#454a5e]"
@@ -254,7 +231,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
           <div className="flex items-center gap-2">
             <Input
               type="text"
-              placeholder="Custom score..."
+              placeholder="Or enter custom score..."
               value={customScore}
               onChange={(e) => setCustomScore(formatScoreInput(e.target.value))}
               onKeyDown={(e) => {
@@ -268,7 +245,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
               onClick={handleCustomScoreSubmit}
               disabled={!customScore}
               className={cn(
-                "h-[40px] px-4 rounded-[10px] text-sm font-medium transition-all",
+                "h-[44px] px-4 rounded-[10px] text-sm font-medium transition-all",
                 customScore
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-muted text-muted-foreground cursor-not-allowed"
@@ -278,7 +255,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
             </button>
           </div>
         </div>
-      </CategorySection>
+      )}
     </div>
   );
 }
