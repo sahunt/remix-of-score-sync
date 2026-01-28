@@ -117,20 +117,49 @@ function getBetterScore(a: number | null, b: number | null): number | null {
 }
 
 // ============================================================================
-// JSON Sanitization - Handle malformed JSON with control characters
+// JSON Sanitization - Handle malformed JSON with control characters & bad Unicode
 // ============================================================================
 
 function sanitizeJsonString(content: string): string {
+  // Step 1: Remove BOM if present
+  let sanitized = content.replace(/^\uFEFF/, '');
+  
+  // Step 2: Replace common problematic Unicode characters
+  // These are often corrupted UTF-8 sequences that break JSON parsing
+  sanitized = sanitized
+    // Remove null bytes
+    .replace(/\x00/g, '')
+    // Replace other control characters (except tab, newline, carriage return)
+    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    // Handle escaped newlines in strings that might cause issues
+    .replace(/\\n(?=[^"]*"[^"]*$)/gm, ' ');
+  
+  // Step 3: Process character by character to handle strings properly
   const chars: string[] = [];
   let inString = false;
   let escaped = false;
   
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
-    const code = content.charCodeAt(i);
+  for (let i = 0; i < sanitized.length; i++) {
+    const char = sanitized[i];
+    const code = sanitized.charCodeAt(i);
     
     if (escaped) {
-      chars.push(char);
+      // Handle specific escape sequences
+      if (char === 'n' || char === 'r' || char === 't' || char === '"' || 
+          char === '\\' || char === '/' || char === 'b' || char === 'f') {
+        chars.push(char);
+      } else if (char === 'u') {
+        // Unicode escape - pass through and grab next 4 chars
+        chars.push(char);
+        const unicode = sanitized.substring(i + 1, i + 5);
+        if (/^[0-9a-fA-F]{4}$/.test(unicode)) {
+          chars.push(unicode);
+          i += 4;
+        }
+      } else {
+        // Invalid escape - just keep the character without backslash
+        chars.push(char);
+      }
       escaped = false;
       continue;
     }
@@ -147,24 +176,67 @@ function sanitizeJsonString(content: string): string {
       continue;
     }
     
-    if (inString && code < 32) {
-      if (code === 9) {
-        chars.push('\\t');
-      } else if (code === 10) {
-        chars.push('\\n');
-      } else if (code === 13) {
-        chars.push('\\r');
-      } else {
+    if (inString) {
+      // Inside string: escape control characters
+      if (code < 32) {
+        if (code === 9) {
+          chars.push('\\t');
+        } else if (code === 10) {
+          chars.push('\\n');
+        } else if (code === 13) {
+          chars.push('\\r');
+        }
+        // Skip other control characters
         continue;
       }
-    } else if (!inString && code < 32 && code !== 9 && code !== 10 && code !== 13) {
-      continue;
+      
+      // Handle high surrogate without low surrogate (broken UTF-16)
+      if (code >= 0xD800 && code <= 0xDBFF) {
+        const nextCode = sanitized.charCodeAt(i + 1);
+        if (nextCode < 0xDC00 || nextCode > 0xDFFF) {
+          // Broken surrogate pair - replace with replacement character
+          chars.push('\uFFFD');
+          continue;
+        }
+      }
+      // Handle lone low surrogate
+      if (code >= 0xDC00 && code <= 0xDFFF) {
+        const prevCode = sanitized.charCodeAt(i - 1);
+        if (prevCode < 0xD800 || prevCode > 0xDBFF) {
+          chars.push('\uFFFD');
+          continue;
+        }
+      }
+      
+      chars.push(char);
     } else {
+      // Outside string: skip control characters except whitespace
+      if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+        continue;
+      }
       chars.push(char);
     }
   }
   
   return chars.join('');
+}
+
+// More aggressive sanitization that handles totally corrupted files
+function aggressiveSanitizeJson(content: string): string {
+  // First try normal sanitization
+  let sanitized = sanitizeJsonString(content);
+  
+  // If that doesn't work, try more aggressive fixes
+  // Remove any character sequences that aren't valid JSON
+  sanitized = sanitized
+    // Fix unescaped quotes in strings (common issue)
+    .replace(/([^\\])"([^:,\[\]{}]*)"([^:,\[\]{}]*?)"/g, '$1"$2\\"$3"')
+    // Remove any remaining null bytes
+    .replace(/\0/g, '')
+    // Replace sequences of weird characters with placeholder
+    .replace(/[\u0080-\u009F]/g, '');
+    
+  return sanitized;
 }
 
 // ============================================================================
@@ -535,8 +607,31 @@ async function processPhaseII(
     const sanitized = sanitizeJsonString(content.trim());
     parsed = JSON.parse(sanitized);
   } catch (err) {
-    console.error('PhaseII JSON parse error:', err);
-    return { scores, sourceType: 'phaseii', unmatchedSongs: [{ name: null, difficulty: null, reason: 'invalid_json' }] };
+    console.error('PhaseII JSON parse error (first attempt):', err);
+    // Try aggressive sanitization as fallback
+    try {
+      console.log('Attempting aggressive JSON sanitization...');
+      const aggressivelySanitized = aggressiveSanitizeJson(content.trim());
+      parsed = JSON.parse(aggressivelySanitized);
+      console.log('Aggressive sanitization succeeded');
+    } catch (err2) {
+      console.error('PhaseII JSON parse error (aggressive attempt):', err2);
+      // Final fallback: try to extract just the data array
+      const dataMatch = content.match(/"data"\s*:\s*(\[[\s\S]*?\])\s*}/);
+      if (dataMatch) {
+        try {
+          console.log('Attempting to extract data array directly...');
+          const dataArrayStr = sanitizeJsonString(dataMatch[1]);
+          parsed = { data: JSON.parse(dataArrayStr) };
+          console.log('Data array extraction succeeded');
+        } catch (err3) {
+          console.error('PhaseII JSON parse error (data extraction):', err3);
+          return { scores, sourceType: 'phaseii', unmatchedSongs: [{ name: null, difficulty: null, reason: 'invalid_json' }] };
+        }
+      } else {
+        return { scores, sourceType: 'phaseii', unmatchedSongs: [{ name: null, difficulty: null, reason: 'invalid_json' }] };
+      }
+    }
   }
   
   let dataArray: any[];
