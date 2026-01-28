@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { GoalBadge, GoalType } from './GoalBadge';
+import { use12MSMode } from '@/hooks/use12MSMode';
 import { cn } from '@/lib/utils';
 
 interface GoalCardProps {
@@ -28,7 +29,11 @@ export function GoalCard({
   className,
 }: GoalCardProps) {
   const navigate = useNavigate();
+  const { transformHalo } = use12MSMode();
   const progressPercent = total > 0 ? (current / total) * 100 : 0;
+
+  // Transform the type for visual display (badge and progress bar)
+  const transformedType = (transformHalo(type) || type) as GoalType;
 
   const handleClick = () => {
     if (clickable && id) {
@@ -52,7 +57,7 @@ export function GoalCard({
         }
       }}
     >
-      {/* Badge */}
+      {/* Badge - uses original type, HaloChip transforms internally */}
       <GoalBadge type={type} />
       
       {/* Title */}
@@ -63,10 +68,10 @@ export function GoalCard({
         {current}/{total} completed
       </p>
       
-      {/* Progress bar */}
+      {/* Progress bar - uses transformed type for visual color */}
       <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
         <div 
-          className={`h-full rounded-full transition-all duration-500 ${progressColorMap[type]}`}
+          className={`h-full rounded-full transition-all duration-500 ${progressColorMap[transformedType]}`}
           style={{ width: `${progressPercent}%` }}
         />
       </div>

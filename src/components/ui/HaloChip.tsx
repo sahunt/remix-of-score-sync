@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { use12MSMode } from '@/hooks/use12MSMode';
 
 import haloFc from '@/assets/halos/halo_fc.svg';
 import haloGfc from '@/assets/halos/halo_gfc.svg';
@@ -22,12 +23,16 @@ interface HaloChipProps {
 }
 
 export function HaloChip({ type, className }: HaloChipProps) {
-  const asset = haloAssets[type];
+  const { transformHalo } = use12MSMode();
+  
+  // Apply 12MS transformation to the type
+  const transformedType = (transformHalo(type) || type) as HaloType;
+  const asset = haloAssets[transformedType];
 
   return (
     <img
       src={asset}
-      alt={type.toUpperCase()}
+      alt={transformedType.toUpperCase()}
       className={cn('h-[14px] w-auto', className)}
     />
   );

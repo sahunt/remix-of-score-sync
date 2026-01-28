@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGoal, useGoals } from '@/hooks/useGoals';
 import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
+import { use12MSMode } from '@/hooks/use12MSMode';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,6 +17,7 @@ export default function GoalDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { deleteGoal } = useGoals();
+  const { reverseTransformHalo } = use12MSMode();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -52,8 +54,8 @@ export default function GoalDetail() {
     enabled: !!user?.id,
   });
 
-  // Calculate progress
-  const progress = useGoalProgress(goal ?? null, scores, [], scoresLoading);
+  // Calculate progress with 12MS mode transformation
+  const progress = useGoalProgress(goal ?? null, scores, [], scoresLoading, reverseTransformHalo);
 
   const handleBack = () => {
     navigate('/home');

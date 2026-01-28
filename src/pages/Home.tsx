@@ -4,6 +4,7 @@ import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useGoals } from '@/hooks/useGoals';
 import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
+import { use12MSMode } from '@/hooks/use12MSMode';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,13 +23,15 @@ import type { Goal } from '@/hooks/useGoalProgress';
 function GoalCardWithProgress({ 
   goal, 
   scores, 
-  isLoadingScores 
+  isLoadingScores,
+  reverseTransformHalo
 }: { 
   goal: Goal; 
   scores: ScoreWithSong[];
   isLoadingScores: boolean;
+  reverseTransformHalo: (target: string | null) => string | null;
 }) {
-  const progress = useGoalProgress(goal, scores, [], isLoadingScores);
+  const progress = useGoalProgress(goal, scores, [], isLoadingScores, reverseTransformHalo);
 
   // Map target type to goal card type
   const getGoalCardType = () => {
@@ -58,6 +61,7 @@ export default function Home() {
   const { isVisible } = useScrollDirection({ threshold: 15 });
   const { user } = useAuth();
   const { goals, isLoading: goalsLoading } = useGoals();
+  const { reverseTransformHalo } = use12MSMode();
   const [createGoalOpen, setCreateGoalOpen] = useState(false);
 
   // Fetch user scores for progress calculation
@@ -172,6 +176,7 @@ export default function Home() {
                 goal={goal}
                 scores={scores}
                 isLoadingScores={scoresLoading}
+                reverseTransformHalo={reverseTransformHalo}
               />
             ))
           )}

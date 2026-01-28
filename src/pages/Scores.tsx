@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { use12MSMode } from '@/hooks/use12MSMode';
 import { supabase } from '@/integrations/supabase/client';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
@@ -116,6 +117,7 @@ function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
 
 export default function Scores() {
   const { user } = useAuth();
+  const { transformHaloLabel } = use12MSMode();
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -186,14 +188,14 @@ export default function Scores() {
 
     return [
       { label: 'Total', value: total },
-      { label: 'MFC', value: mfc },
-      { label: 'PFC', value: pfc },
+      { label: transformHaloLabel('MFC') || 'MFC', value: mfc },
+      { label: transformHaloLabel('PFC') || 'PFC', value: pfc },
       { label: 'AAA', value: aaa },
       { label: 'Clear', value: clear },
       { label: 'Fail', value: fail },
       { label: '', value: noPlay, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
     ];
-  }, [scores, selectedLevel]);
+  }, [scores, selectedLevel, transformHaloLabel]);
 
   // Filter and sort scores for display
   const displayedScores = useMemo(() => {

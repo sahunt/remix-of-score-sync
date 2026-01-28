@@ -6,6 +6,8 @@ interface TwelveMSModeContextType {
   is12MSMode: boolean;
   toggle12MSMode: () => void;
   transformHalo: (halo: string | null) => string | null;
+  transformHaloLabel: (label: string | null) => string | null;
+  reverseTransformHalo: (target: string | null) => string | null;
   loading: boolean;
 }
 
@@ -23,6 +25,40 @@ function getTransformedHalo(halo: string | null, isActive: boolean): string | nu
   };
   
   return transformMap[normalized] || halo;
+}
+
+// Transform labels (preserves case pattern)
+function getTransformedLabel(label: string | null, isActive: boolean): string | null {
+  if (!label || !isActive) return label;
+  
+  const transformMap: Record<string, string> = {
+    'PFC': 'MFC',
+    'pfc': 'mfc',
+    'Pfc': 'Mfc',
+    'FC': 'GFC',
+    'fc': 'gfc',
+    'Fc': 'Gfc',
+    'GFC': 'PFC',
+    'gfc': 'pfc',
+    'Gfc': 'Pfc',
+  };
+  
+  return transformMap[label] || label;
+}
+
+// Reverse transformation: given a visual target, returns what DB value would display as that target
+// e.g., in 12MS mode, visual "PFC" comes from actual "GFC" in DB
+function getReverseTransformedHalo(target: string | null, isActive: boolean): string | null {
+  if (!target || !isActive) return target;
+  
+  const normalized = target.toLowerCase();
+  const reverseMap: Record<string, string> = {
+    'mfc': 'pfc',  // Visual MFC comes from actual PFC
+    'pfc': 'gfc',  // Visual PFC comes from actual GFC
+    'gfc': 'fc',   // Visual GFC comes from actual FC
+  };
+  
+  return reverseMap[normalized] || target;
 }
 
 export function TwelveMSModeProvider({ children }: { children: ReactNode }) {
@@ -87,9 +123,18 @@ export function TwelveMSModeProvider({ children }: { children: ReactNode }) {
   };
 
   const transformHalo = (halo: string | null) => getTransformedHalo(halo, is12MSMode);
+  const transformHaloLabel = (label: string | null) => getTransformedLabel(label, is12MSMode);
+  const reverseTransformHalo = (target: string | null) => getReverseTransformedHalo(target, is12MSMode);
 
   return (
-    <TwelveMSModeContext.Provider value={{ is12MSMode, toggle12MSMode, transformHalo, loading }}>
+    <TwelveMSModeContext.Provider value={{ 
+      is12MSMode, 
+      toggle12MSMode, 
+      transformHalo, 
+      transformHaloLabel, 
+      reverseTransformHalo, 
+      loading 
+    }}>
       {children}
     </TwelveMSModeContext.Provider>
   );

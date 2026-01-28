@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import mfcSparkle from '@/assets/halos/sparkle_mfc.svg';
+import { use12MSMode } from '@/hooks/use12MSMode';
 
 export type HaloType = 'fc' | 'gfc' | 'life4' | 'mfc' | 'pfc';
 
@@ -18,8 +19,13 @@ interface HaloSparkleProps {
 }
 
 export function HaloSparkle({ type, className }: HaloSparkleProps) {
+  const { transformHalo } = use12MSMode();
+  
+  // Apply 12MS transformation to the type
+  const transformedType = (transformHalo(type) || type) as HaloType;
+
   // For MFC, use the special imported SVG
-  if (type === 'mfc') {
+  if (transformedType === 'mfc') {
     return (
       <img
         src={mfcSparkle}
@@ -31,7 +37,7 @@ export function HaloSparkle({ type, className }: HaloSparkleProps) {
     );
   }
 
-  const color = haloColors[type];
+  const color = haloColors[transformedType];
 
   return (
     <svg
