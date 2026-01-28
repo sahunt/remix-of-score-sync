@@ -124,15 +124,24 @@ function sanitizeJsonString(content: string): string {
   // Step 1: Remove BOM if present
   let sanitized = content.replace(/^\uFEFF/, '');
   
-  // Step 2: Replace common problematic Unicode characters
-  // These are often corrupted UTF-8 sequences that break JSON parsing
-  sanitized = sanitized
-    // Remove null bytes
-    .replace(/\x00/g, '')
-    // Replace other control characters (except tab, newline, carriage return)
-    .replace(/[\x01-\x08\x0B\x0C\x0E-\x1F]/g, '')
-    // Handle escaped newlines in strings that might cause issues
-    .replace(/\\n(?=[^"]*"[^"]*$)/gm, ' ');
+  // Step 2: Remove ALL control characters (0x00-0x1F except tab/newline/carriage return)
+  // This handles characters like 0x05 (ENQ) that appear in PhaseII exports
+  const cleanedChars: string[] = [];
+  for (let i = 0; i < sanitized.length; i++) {
+    const code = sanitized.charCodeAt(i);
+    // Skip control characters except tab (9), newline (10), carriage return (13)
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+      continue; // Skip this character entirely
+    }
+    // Also skip DEL character (127) and other problematic characters
+    if (code === 127) {
+      continue;
+    }
+    cleanedChars.push(sanitized[i]);
+  }
+  sanitized = cleanedChars.join('');
+  
+  console.log(`Sanitization removed ${content.length - sanitized.length} control characters`);
   
   // Step 3: Process character by character to handle strings properly
   const chars: string[] = [];
