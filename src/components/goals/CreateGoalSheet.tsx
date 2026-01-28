@@ -315,7 +315,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
               onClick={() => setExpandedStep(1)}
             />
             {expandedStep === 1 && (
-              <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="mt-3 p-4 rounded-[10px] bg-[#262937] animate-in fade-in slide-in-from-top-2 duration-200">
                 <TargetSelector
                   targetType={targetType}
                   targetValue={targetValue}
@@ -338,7 +338,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
               onClick={() => setExpandedStep(2)}
             />
             {expandedStep === 2 && (
-              <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="mt-3 p-4 rounded-[10px] bg-[#262937] animate-in fade-in slide-in-from-top-2 duration-200">
                 <p className="text-xs text-muted-foreground mb-3">
                   Optional: Filter which charts count toward this goal
                 </p>
@@ -348,7 +348,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
                     rule={criteriaRules[0]}
                     onChange={(updatedRule) => handleUpdateRule(0, updatedRule)}
                     onRemove={() => handleRemoveRule(0)}
-                    showRemove={true}
+                    showRemove={false}
                   />
                 )}
               </div>
