@@ -743,9 +743,16 @@ function extractFieldsFromBlock(block: string): PhaseIIEntry {
   
   // Extract points - "points":"999,880" or "points":999880
   let points: string | null = null;
-  const pointsMatch = block.match(/"points"\s*:\s*"?([^",}\s]+)"?/);
-  if (pointsMatch) {
-    points = pointsMatch[1];
+  // Try quoted format first: "points":"999,880"
+  const quotedPointsMatch = block.match(/"points"\s*:\s*"([^"]+)"/);
+  if (quotedPointsMatch) {
+    points = quotedPointsMatch[1];
+  } else {
+    // Fallback to unquoted number: "points":999880
+    const unquotedPointsMatch = block.match(/"points"\s*:\s*(\d+)/);
+    if (unquotedPointsMatch) {
+      points = unquotedPointsMatch[1];
+    }
   }
   
   // Extract data.halo - look for "data":{..."halo":"PERFECT FULL COMBO"...}
