@@ -2,99 +2,61 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { FilterRule } from '@/components/filters/filterTypes';
 
-interface MusicDbChart {
-  id: number;
-  difficulty_level: number | null;
-  difficulty_name: string | null;
-  name: string | null;
-}
-
 /**
- * Matches a chart from musicdb against a filter rule.
- * Note: musicdb charts don't have score/flare/lamp/grade - those are user score data.
- * Only level, difficulty, and title can be matched against the catalog.
+ * Builds a Supabase query with filters applied server-side.
+ * This avoids row limits by letting the database do the filtering and counting.
  */
-function chartMatchesRule(chart: MusicDbChart, rule: FilterRule): boolean {
-  const { type, operator, value } = rule;
+async function getFilteredCount(
+  rules: FilterRule[],
+  matchMode: 'all' | 'any'
+): Promise<number> {
+  // Extract level and difficulty filters (the only ones that apply to musicdb)
+  const levelRule = rules.find(r => r.type === 'level');
+  const difficultyRule = rules.find(r => r.type === 'difficulty');
 
-  // Skip empty values
-  if (value === null || value === undefined) return true;
-  if (value === '') return true;
-  if (Array.isArray(value) && value.length === 0) return true;
+  // Build base query - use head:true to only get count, not rows
+  let query = supabase
+    .from('musicdb')
+    .select('*', { count: 'exact', head: true })
+    .not('difficulty_level', 'is', null);
 
-  // Handle numeric multi-select (level)
-  const compareNumericMulti = (actual: number | null, target: number | number[] | [number, number]): boolean => {
-    if (actual === null) return false;
-    
-    // Range comparison for "is_between"
-    if (operator === 'is_between' && Array.isArray(target) && target.length === 2) {
-      const [min, max] = target as [number, number];
-      return actual >= Math.min(min, max) && actual <= Math.max(min, max);
+  // Apply level filter server-side
+  if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
+    const levels = levelRule.value as number[];
+    if (levelRule.operator === 'is') {
+      query = query.in('difficulty_level', levels);
+    } else if (levelRule.operator === 'is_not') {
+      // For "is_not", we need to exclude these levels
+      for (const level of levels) {
+        query = query.neq('difficulty_level', level);
+      }
     }
-    
-    // Multi-select array
-    if (Array.isArray(target)) {
-      if (target.length === 0) return true;
-      const matches = target.includes(actual);
-      return operator === 'is' ? matches : !matches;
-    }
-    
-    // Single value
-    switch (operator) {
-      case 'is': return actual === target;
-      case 'is_not': return actual !== target;
-      case 'less_than': return actual < target;
-      case 'greater_than': return actual > target;
-      default: return false;
-    }
-  };
-
-  // Handle string multi-select (difficulty)
-  const compareStringMulti = (actual: string | null, target: string | string[]): boolean => {
-    if (actual === null) return false;
-    const normalizedActual = actual.toLowerCase();
-    
-    if (Array.isArray(target)) {
-      if (target.length === 0) return true;
-      const matches = target.some(t => normalizedActual === t.toLowerCase());
-      return operator === 'is' ? matches : !matches;
-    }
-    
-    if (target === '') return true;
-    const normalizedTarget = target.toLowerCase();
-    switch (operator) {
-      case 'is': return normalizedActual === normalizedTarget;
-      case 'is_not': return normalizedActual !== normalizedTarget;
-      case 'contains': return normalizedActual.includes(normalizedTarget);
-      default: return false;
-    }
-  };
-
-  switch (type) {
-    case 'level': 
-      return compareNumericMulti(chart.difficulty_level, value as number | number[] | [number, number]);
-    case 'difficulty': 
-      return compareStringMulti(chart.difficulty_name, value as string | string[]);
-    case 'title': 
-      return compareStringMulti(chart.name, value as string);
-    // Score, flare, lamp, grade are user-score properties, not catalog properties
-    // For goal counting, we count all charts in catalog that match level/difficulty criteria
-    case 'score':
-    case 'flare':
-    case 'lamp':
-    case 'grade':
-      return true; // These don't filter the catalog, only user scores
-    case 'version':
-    case 'era':
-      return true; // Placeholder for future implementation
-    default:
-      return true;
+  } else if (levelRule && levelRule.operator === 'is_between' && Array.isArray(levelRule.value) && levelRule.value.length === 2) {
+    const [min, max] = levelRule.value as [number, number];
+    query = query.gte('difficulty_level', Math.min(min, max)).lte('difficulty_level', Math.max(min, max));
   }
+
+  // Apply difficulty filter server-side
+  if (difficultyRule && Array.isArray(difficultyRule.value) && difficultyRule.value.length > 0) {
+    const diffs = (difficultyRule.value as string[]).map(d => d.toUpperCase());
+    if (difficultyRule.operator === 'is') {
+      query = query.in('difficulty_name', diffs);
+    } else if (difficultyRule.operator === 'is_not') {
+      for (const diff of diffs) {
+        query = query.neq('difficulty_name', diff);
+      }
+    }
+  }
+
+  const { count, error } = await query;
+
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /**
  * Fetches the count of charts in musicdb that match the given criteria rules.
- * Used for goal total calculations.
+ * Uses server-side filtering and counting to avoid row limits.
  */
 export function useMusicDbCount(
   rules: FilterRule[],
@@ -104,32 +66,8 @@ export function useMusicDbCount(
   return useQuery({
     queryKey: ['musicdb-count', rules, matchMode],
     queryFn: async () => {
-      // Fetch ALL charts from musicdb - use explicit limit to bypass default 1000 row cap
-      const { data, error } = await supabase
-        .from('musicdb')
-        .select('id, difficulty_level, difficulty_name, name')
-        .not('difficulty_level', 'is', null)
-        .limit(50000); // Explicit limit - catalog has ~10k charts
-
-      if (error) throw error;
-
-      const charts = (data || []) as MusicDbChart[];
-      
-      // If no rules, count all charts
-      if (rules.length === 0) {
-        return { total: charts.length, charts };
-      }
-
-      // Filter charts by criteria rules
-      const matchingCharts = charts.filter((chart) => {
-        if (matchMode === 'all') {
-          return rules.every((rule) => chartMatchesRule(chart, rule));
-        } else {
-          return rules.some((rule) => chartMatchesRule(chart, rule));
-        }
-      });
-
-      return { total: matchingCharts.length, charts: matchingCharts };
+      const total = await getFilteredCount(rules, matchMode);
+      return { total, charts: [] }; // Charts array not needed for counting
     },
     enabled,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes since musicdb rarely changes
@@ -143,28 +81,5 @@ export async function fetchMusicDbCount(
   rules: FilterRule[],
   matchMode: 'all' | 'any' = 'all'
 ): Promise<number> {
-  // Fetch ALL charts - use explicit limit to bypass default 1000 row cap
-  const { data, error } = await supabase
-    .from('musicdb')
-    .select('id, difficulty_level, difficulty_name, name')
-    .not('difficulty_level', 'is', null)
-    .limit(50000); // Explicit limit - catalog has ~10k charts
-
-  if (error) throw error;
-
-  const charts = (data || []) as MusicDbChart[];
-  
-  if (rules.length === 0) {
-    return charts.length;
-  }
-
-  const matchingCharts = charts.filter((chart) => {
-    if (matchMode === 'all') {
-      return rules.every((rule) => chartMatchesRule(chart, rule));
-    } else {
-      return rules.some((rule) => chartMatchesRule(chart, rule));
-    }
-  });
-
-  return matchingCharts.length;
+  return getFilteredCount(rules, matchMode);
 }
