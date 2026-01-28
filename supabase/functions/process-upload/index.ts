@@ -958,7 +958,7 @@ Deno.serve(async (req) => {
         mapped_rows: 0,
         skipped_rows: parseResult.unmatchedSongs.length,
         source_type: parseResult.sourceType,
-        unmatched_songs: parseResult.unmatchedSongs.slice(0, 10),
+        unmatched_songs: parseResult.unmatchedSongs,
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1033,7 +1033,7 @@ Deno.serve(async (req) => {
       updated: upsertResult.updated,
       unchanged: upsertResult.skipped,
       source_type: parseResult.sourceType,
-      unmatched_songs: parseResult.unmatchedSongs.slice(0, 10),
+      unmatched_songs: parseResult.unmatchedSongs,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
