@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { Slider } from '@/components/ui/slider';
+import { FlareChip } from '@/components/ui/FlareChip';
+import { FLARE_OPTIONS } from '@/components/filters/filterTypes';
 
 interface TargetSelectorProps {
   targetType: 'lamp' | 'grade' | 'flare' | 'score' | null;
@@ -31,18 +33,6 @@ const GRADE_OPTIONS = [
   { value: 'B-', label: 'B-' },
 ];
 
-const FLARE_OPTIONS = [
-  { value: 'EX', label: 'EX' },
-  { value: '9', label: 'IX' },
-  { value: '8', label: 'VIII' },
-  { value: '7', label: 'VII' },
-  { value: '6', label: 'VI' },
-  { value: '5', label: 'V' },
-  { value: '4', label: 'IV' },
-  { value: '3', label: 'III' },
-  { value: '2', label: 'II' },
-  { value: '1', label: 'I' },
-];
 
 const STEP = 10000;
 
@@ -159,19 +149,19 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
 
           {/* Flare Options */}
           {selectedCategory === 'flare' && (
-            <div className="grid grid-cols-5 gap-2">
+            <div className="flex flex-wrap gap-2">
               {FLARE_OPTIONS.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => handleSelect('flare', option.value)}
+                  onClick={() => handleSelect('flare', String(option.value))}
                   className={cn(
-                    "h-[44px] px-2 rounded-[10px] text-sm font-medium transition-all duration-200",
-                    isSelected('flare', option.value)
-                      ? "bg-primary/20 border-2 border-primary text-foreground"
-                      : "bg-[#4A4E61] border-2 border-transparent text-white hover:bg-[#555a6e]"
+                    "rounded-[10px] p-2 transition-all duration-200",
+                    isSelected('flare', String(option.value))
+                      ? "bg-primary/20 ring-2 ring-primary"
+                      : "bg-[#4A4E61] hover:bg-[#555a6e]"
                   )}
                 >
-                  {option.label}
+                  <FlareChip type={option.flareType} className="h-5" />
                 </button>
               ))}
             </div>
