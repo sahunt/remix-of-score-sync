@@ -15,10 +15,12 @@ async function getFilteredCount(
   const difficultyRule = rules.find(r => r.type === 'difficulty');
 
   // Build base query - use head:true to only get count, not rows
+  // Filter to SP (Single Play) only - app doesn't support DP yet
   let query = supabase
     .from('musicdb')
     .select('*', { count: 'exact', head: true })
-    .not('difficulty_level', 'is', null);
+    .not('difficulty_level', 'is', null)
+    .eq('playstyle', 'SP');
 
   // Apply level filter server-side
   if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
