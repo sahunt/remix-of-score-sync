@@ -343,6 +343,30 @@ async function matchSanbaiChart(
   return data;
 }
 
+async function matchBySongIdAndChart(
+  supabase: any,
+  songId: number,
+  playstyle: string,
+  difficultyName: string,
+  difficultyLevel: number
+): Promise<MusicdbMatch | null> {
+  const { data, error } = await supabase
+    .from('musicdb')
+    .select('id, song_id, chart_id')
+    .eq('song_id', songId)
+    .eq('playstyle', playstyle)
+    .eq('difficulty_name', difficultyName)
+    .eq('difficulty_level', difficultyLevel)
+    .limit(1)
+    .maybeSingle();
+  
+  if (error) {
+    console.error('matchBySongIdAndChart error:', error);
+    return null;
+  }
+  return data;
+}
+
 async function matchByNameAndChart(
   supabase: any,
   songName: string,
@@ -566,35 +590,49 @@ async function processPhaseII(
   }
   
   for (const item of dataArray) {
-    const songName = extractSongName(item);
     const chartInfo = extractChartInfo(item);
     
-    if (!songName) {
-      console.log('Skipping item - no song name found:', JSON.stringify(item).substring(0, 200));
-      unmatchedSongs.push({ name: null, difficulty: null, reason: 'missing_song_name' });
-      continue;
-    }
-    
     if (!chartInfo) {
+      const songName = extractSongName(item);
       console.log('Skipping item - no chart info found:', songName);
       unmatchedSongs.push({ name: songName, difficulty: null, reason: 'missing_chart_info' });
       continue;
     }
     
-    // Match to musicdb by name + playstyle + difficulty_name + level
-    const match = await matchByNameAndChart(
-      supabase,
-      songName,
-      chartInfo.playstyle,
-      chartInfo.difficulty_name,
-      chartInfo.difficulty_level
-    );
+    // Primary matching strategy: Use song.id + chart info (bypasses encoding issues)
+    const phaseiiSongId = item.song?.id ?? null;
+    let match: MusicdbMatch | null = null;
+    
+    if (phaseiiSongId !== null && typeof phaseiiSongId === 'number') {
+      match = await matchBySongIdAndChart(
+        supabase,
+        phaseiiSongId,
+        chartInfo.playstyle,
+        chartInfo.difficulty_name,
+        chartInfo.difficulty_level
+      );
+    }
+    
+    // Fallback: Try name matching only if song.id matching failed
+    if (!match) {
+      const songName = extractSongName(item);
+      if (songName) {
+        match = await matchByNameAndChart(
+          supabase,
+          songName,
+          chartInfo.playstyle,
+          chartInfo.difficulty_name,
+          chartInfo.difficulty_level
+        );
+      }
+    }
     
     if (!match) {
+      const songName = extractSongName(item);
       unmatchedSongs.push({ 
         name: songName, 
-        difficulty: `${chartInfo.playstyle} ${chartInfo.difficulty_name} ${chartInfo.difficulty_level}`, 
-        reason: 'no_match' 
+        difficulty: `${chartInfo.playstyle} ${chartInfo.difficulty_name} ${chartInfo.difficulty_level}`,
+        reason: phaseiiSongId ? 'no_match_by_id' : 'no_match' 
       });
       continue;
     }
