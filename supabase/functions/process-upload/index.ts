@@ -485,57 +485,67 @@ async function batchMatchBySanbaiId(
 
 // Batch match by name and chart for fallback matching (Sanbai only)
 // Uses normalization to handle formatting differences between Sanbai exports and musicdb
+// Strategy: Fetch all musicdb charts once, build a normalized lookup map, then match in-memory
 async function batchMatchByNameAndChart(
   supabase: any,
   entries: Array<{ songName: string; playstyle: string; difficultyName: string; difficultyLevel: number }>
 ): Promise<Map<string, MusicdbMatch>> {
   if (entries.length === 0) return new Map();
   
-  // Normalize names for matching and get unique
-  const normalizedNamesMap = new Map<string, string>(); // original lowercase -> normalized lowercase
+  // Get unique normalized names we need to find
+  const uniqueNormalizedNames = new Set<string>();
   for (const e of entries) {
-    const original = e.songName.toLowerCase();
-    const normalized = normalizeSanbaiName(e.songName).toLowerCase();
-    normalizedNamesMap.set(original, normalized);
+    uniqueNormalizedNames.add(normalizeSanbaiName(e.songName).toLowerCase());
   }
+  console.log(`batchMatchByNameAndChart: attempting to match ${uniqueNormalizedNames.size} unique song names (after normalization)`);
   
-  const uniqueNormalizedNames = [...new Set(normalizedNamesMap.values())];
-  console.log(`batchMatchByNameAndChart: attempting to match ${uniqueNormalizedNames.length} unique song names (after normalization)`);
-  
-  const BATCH_SIZE = 50;
+  // Fetch ALL charts from musicdb (only ~10k records, manageable)
+  // This is more efficient than doing multiple queries with ILIKE
   const allData: any[] = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+  let hasMore = true;
   
-  for (let i = 0; i < uniqueNormalizedNames.length; i += BATCH_SIZE) {
-    const batchNames = uniqueNormalizedNames.slice(i, i + BATCH_SIZE);
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('musicdb')
+      .select('id, song_id, chart_id, name, playstyle, difficulty_name, difficulty_level')
+      .not('difficulty_level', 'is', null)
+      .range(offset, offset + PAGE_SIZE - 1);
     
-    // Use ilike for case-insensitive matching - need to do one by one for ilike
-    for (const name of batchNames) {
-      const { data, error } = await supabase
-        .from('musicdb')
-        .select('id, song_id, chart_id, name, playstyle, difficulty_name, difficulty_level')
-        .ilike('name', name);
-      
-      if (error) {
-        console.error(`batchMatchByNameAndChart error for ${name}:`, error);
-        continue;
-      }
-      
-      if (data) {
-        allData.push(...data);
-      }
+    if (error) {
+      console.error(`batchMatchByNameAndChart fetch error at offset ${offset}:`, error);
+      break;
+    }
+    
+    if (data && data.length > 0) {
+      allData.push(...data);
+      offset += PAGE_SIZE;
+      hasMore = data.length === PAGE_SIZE;
+    } else {
+      hasMore = false;
     }
   }
   
-  console.log(`batchMatchByNameAndChart: got ${allData.length} potential matches`);
+  console.log(`batchMatchByNameAndChart: fetched ${allData.length} total charts from musicdb`);
   
-  // Create lookup map using NORMALIZED names: normalized_name|playstyle|difficulty_name|difficulty_level -> match
+  // Build lookup map: normalized_name|playstyle|difficulty_name|difficulty_level -> match
+  // Only include charts whose normalized name matches one we're looking for
   const matchMap = new Map<string, MusicdbMatch>();
+  let matchCount = 0;
+  
   for (const row of allData) {
-    // Store both the original db name (normalized) and the normalized version
     const dbNameNormalized = normalizeSanbaiName(row.name || '').toLowerCase();
-    const key = `${dbNameNormalized}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
-    matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
+    
+    // Only add to map if this is a name we're looking for
+    if (uniqueNormalizedNames.has(dbNameNormalized)) {
+      const key = `${dbNameNormalized}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
+      matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
+      matchCount++;
+    }
   }
+  
+  console.log(`Name match map has ${matchMap.size} entries (from ${matchCount} chart matches)`);
   
   return matchMap;
 }
