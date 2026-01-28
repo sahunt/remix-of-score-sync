@@ -121,9 +121,53 @@ function getBetterScore(a: number | null, b: number | null): number | null {
 // ============================================================================
 
 function sanitizeJsonString(content: string): string {
-  // Remove control characters (ASCII 0-31) except for allowed whitespace (tab, newline, carriage return)
-  // This fixes "Bad control character in string literal" errors
-  return content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  // The issue is control characters INSIDE string literals
+  // We need to find strings and escape control characters within them
+  // Simpler approach: replace ALL control characters (except \n, \r, \t) with escaped versions
+  
+  // First, replace backslash with a placeholder to avoid double-escaping
+  let result = content;
+  
+  // Remove or escape control characters that break JSON parsing
+  // ASCII 0-8, 11-12, 14-31 are problematic (keeping \t=9, \n=10, \r=13)
+  result = result
+    .replace(/\x00/g, '')  // null
+    .replace(/\x01/g, '')  // SOH
+    .replace(/\x02/g, '')  // STX
+    .replace(/\x03/g, '')  // ETX
+    .replace(/\x04/g, '')  // EOT
+    .replace(/\x05/g, '')  // ENQ
+    .replace(/\x06/g, '')  // ACK
+    .replace(/\x07/g, '')  // BEL
+    .replace(/\x08/g, '')  // BS
+    // \x09 = tab, keep it
+    // \x0A = newline, keep it
+    .replace(/\x0B/g, '')  // VT
+    .replace(/\x0C/g, '')  // FF
+    // \x0D = carriage return, keep it
+    .replace(/\x0E/g, '')  // SO
+    .replace(/\x0F/g, '')  // SI
+    .replace(/\x10/g, '')  // DLE
+    .replace(/\x11/g, '')  // DC1
+    .replace(/\x12/g, '')  // DC2
+    .replace(/\x13/g, '')  // DC3
+    .replace(/\x14/g, '')  // DC4
+    .replace(/\x15/g, '')  // NAK
+    .replace(/\x16/g, '')  // SYN
+    .replace(/\x17/g, '')  // ETB
+    .replace(/\x18/g, '')  // CAN
+    .replace(/\x19/g, '')  // EM
+    .replace(/\x1A/g, '')  // SUB
+    .replace(/\x1B/g, '')  // ESC
+    .replace(/\x1C/g, '')  // FS
+    .replace(/\x1D/g, '')  // GS
+    .replace(/\x1E/g, '')  // RS
+    .replace(/\x1F/g, ''); // US
+  
+  // Also handle any DEL character
+  result = result.replace(/\x7F/g, '');
+  
+  return result;
 }
 
 // ============================================================================
