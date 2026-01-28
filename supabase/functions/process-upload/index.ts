@@ -43,6 +43,79 @@ interface MusicdbMatch {
   chart_id: number | null;
 }
 
+interface ExistingScore {
+  id: string;
+  musicdb_id: number;
+  score: number | null;
+  rank: string | null;
+  flare: number | null;
+  halo: string | null;
+}
+
+// ============================================================================
+// Ranking Helpers - Used to determine "better" values
+// ============================================================================
+
+// Halo ranking: clear < life4 < fc < gfc < pfc < mfc
+const HALO_RANK: Record<string, number> = {
+  'clear': 1,
+  'life4': 2,
+  'fc': 3,
+  'gfc': 4,
+  'pfc': 5,
+  'mfc': 6,
+};
+
+// Rank/Grade ranking: E < D < C < B < A < AA < AAA
+const GRADE_RANK: Record<string, number> = {
+  'E': 1,
+  'D': 2,
+  'D+': 3,
+  'C-': 4,
+  'C': 5,
+  'C+': 6,
+  'B-': 7,
+  'B': 8,
+  'B+': 9,
+  'A-': 10,
+  'A': 11,
+  'A+': 12,
+  'AA-': 13,
+  'AA': 14,
+  'AA+': 15,
+  'AAA': 16,
+};
+
+function getHaloRank(halo: string | null): number {
+  if (!halo) return 0;
+  return HALO_RANK[halo.toLowerCase()] ?? 0;
+}
+
+function getGradeRank(rank: string | null): number {
+  if (!rank) return 0;
+  return GRADE_RANK[rank.toUpperCase()] ?? 0;
+}
+
+function getBetterHalo(a: string | null, b: string | null): string | null {
+  return getHaloRank(a) >= getHaloRank(b) ? a : b;
+}
+
+function getBetterRank(a: string | null, b: string | null): string | null {
+  return getGradeRank(a) >= getGradeRank(b) ? a : b;
+}
+
+function getBetterFlare(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.max(a, b);
+}
+
+function getBetterScore(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.max(a, b);
+}
+
 // ============================================================================
 // Source Detection
 // ============================================================================
@@ -128,10 +201,11 @@ function parseSanbaiDifficulty(code: string): { playstyle: string; difficulty_na
 function normalizeSanbaiLamp(lamp: string | null | undefined): string | null {
   if (!lamp) return null;
   const normalized = lamp.toLowerCase().trim();
-  if (['mfc', 'pfc', 'gfc', 'fc', 'clear', 'fail'].includes(normalized)) {
+  if (['mfc', 'pfc', 'gfc', 'fc', 'clear', 'fail', 'life4'].includes(normalized)) {
     return normalized;
   }
-  // Handle "Life4" or other special lamps as clear
+  // Handle "Life4" or other special lamps as life4
+  if (normalized.includes('life')) return 'life4';
   return 'clear';
 }
 
@@ -213,6 +287,37 @@ async function discoverSanbaiSongId(
   } else {
     console.log(`Discovered sanbai_song_id ${sanbaiSongId} for song_id ${songId}`);
   }
+}
+
+// ============================================================================
+// Fetch Existing Scores for User
+// ============================================================================
+
+async function fetchExistingScores(
+  supabase: any,
+  userId: string,
+  musicdbIds: number[]
+): Promise<Map<number, ExistingScore>> {
+  if (musicdbIds.length === 0) return new Map();
+  
+  const { data, error } = await supabase
+    .from('user_scores')
+    .select('id, musicdb_id, score, rank, flare, halo')
+    .eq('user_id', userId)
+    .in('musicdb_id', musicdbIds);
+  
+  if (error) {
+    console.error('fetchExistingScores error:', error);
+    return new Map();
+  }
+  
+  const map = new Map<number, ExistingScore>();
+  for (const row of data || []) {
+    if (row.musicdb_id) {
+      map.set(row.musicdb_id, row as ExistingScore);
+    }
+  }
+  return map;
 }
 
 // ============================================================================
@@ -391,6 +496,121 @@ async function processSanbai(
 }
 
 // ============================================================================
+// Smart Upsert - Merge best values from existing and new scores
+// ============================================================================
+
+interface UpsertResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+}
+
+async function smartUpsertScores(
+  supabase: any,
+  userId: string,
+  uploadId: string,
+  scores: ScoreRecord[],
+  existingScores: Map<number, ExistingScore>
+): Promise<UpsertResult> {
+  const toInsert: any[] = [];
+  const toUpdate: { id: string; data: any }[] = [];
+  let skipped = 0;
+  
+  for (const score of scores) {
+    if (!score.musicdb_id) {
+      skipped++;
+      continue;
+    }
+    
+    const existing = existingScores.get(score.musicdb_id);
+    
+    if (!existing) {
+      // No existing score - insert new record
+      toInsert.push({
+        user_id: userId,
+        upload_id: uploadId,
+        musicdb_id: score.musicdb_id,
+        chart_id: score.chart_id,
+        song_id: score.song_id,
+        playstyle: score.playstyle,
+        difficulty_name: score.difficulty_name,
+        difficulty_level: score.difficulty_level,
+        score: score.score,
+        timestamp: score.timestamp,
+        username: score.username,
+        rank: score.rank,
+        flare: score.flare,
+        halo: score.halo,
+        source_type: score.source_type,
+      });
+    } else {
+      // Existing score - compute the best values
+      const bestScore = getBetterScore(existing.score, score.score);
+      const bestHalo = getBetterHalo(existing.halo, score.halo);
+      const bestFlare = getBetterFlare(existing.flare, score.flare);
+      const bestRank = getBetterRank(existing.rank, score.rank);
+      
+      // Check if anything improved
+      const scoreImproved = bestScore !== existing.score;
+      const haloImproved = bestHalo !== existing.halo;
+      const flareImproved = bestFlare !== existing.flare;
+      const rankImproved = bestRank !== existing.rank;
+      
+      if (scoreImproved || haloImproved || flareImproved || rankImproved) {
+        toUpdate.push({
+          id: existing.id,
+          data: {
+            score: bestScore,
+            halo: bestHalo,
+            flare: bestFlare,
+            rank: bestRank,
+            upload_id: uploadId, // Track which upload caused the update
+          },
+        });
+      } else {
+        skipped++;
+      }
+    }
+  }
+  
+  // Batch insert new records
+  if (toInsert.length > 0) {
+    const { error: insertError } = await supabase
+      .from('user_scores')
+      .insert(toInsert);
+    
+    if (insertError) {
+      console.error('Insert error:', insertError);
+      throw new Error(`Failed to insert scores: ${insertError.message}`);
+    }
+    console.log(`Inserted ${toInsert.length} new scores`);
+  }
+  
+  // Update existing records one by one (Supabase doesn't support batch update)
+  for (const update of toUpdate) {
+    const { error: updateError } = await supabase
+      .from('user_scores')
+      .update(update.data)
+      .eq('id', update.id);
+    
+    if (updateError) {
+      console.error('Update error:', updateError);
+      // Continue with other updates
+    }
+  }
+  
+  if (toUpdate.length > 0) {
+    console.log(`Updated ${toUpdate.length} existing scores with improvements`);
+  }
+  
+  return {
+    inserted: toInsert.length,
+    updated: toUpdate.length,
+    skipped,
+  };
+}
+
+// ============================================================================
 // Main Handler
 // ============================================================================
 
@@ -507,7 +727,7 @@ Deno.serve(async (req) => {
             mapped_rows: 0,
             skipped_rows: parseResult.unmatchedSongs.length,
             source_type: parseResult.sourceType,
-            unmatched_songs: parseResult.unmatchedSongs.slice(0, 50), // Limit to first 50
+            unmatched_songs: parseResult.unmatchedSongs.slice(0, 50),
           },
         })
         .eq('id', uploadId);
@@ -525,29 +745,36 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Insert scores
-    const scoresToInsert = parseResult.scores.map(score => ({
-      user_id: user.id,
-      upload_id: uploadId,
-      ...score,
-    }));
+    // Fetch existing scores for smart upsert
+    const musicdbIds = parseResult.scores
+      .map(s => s.musicdb_id)
+      .filter((id): id is number => id !== null);
+    
+    const existingScores = await fetchExistingScores(supabase, user.id, musicdbIds);
+    console.log(`Found ${existingScores.size} existing scores for comparison`);
 
-    const { error: insertError } = await supabase
-      .from('user_scores')
-      .insert(scoresToInsert);
-
-    if (insertError) {
-      console.error('Score insert error:', insertError);
+    // Smart upsert - merge best values
+    let upsertResult: UpsertResult;
+    try {
+      upsertResult = await smartUpsertScores(
+        supabase,
+        user.id,
+        uploadId,
+        parseResult.scores,
+        existingScores
+      );
+    } catch (err) {
+      console.error('Upsert error:', err);
       await supabase
         .from('uploads')
         .update({
           parse_status: 'failed',
-          parse_error: `Failed to insert scores: ${insertError.message}`,
+          parse_error: err instanceof Error ? err.message : 'Failed to save scores',
         })
         .eq('id', uploadId);
 
       return new Response(JSON.stringify({
-        error: `Failed to insert scores: ${insertError.message}`,
+        error: err instanceof Error ? err.message : 'Failed to save scores',
         total_rows: parseResult.scores.length + parseResult.unmatchedSongs.length,
         mapped_rows: 0,
         skipped_rows: parseResult.scores.length + parseResult.unmatchedSongs.length,
@@ -568,6 +795,9 @@ Deno.serve(async (req) => {
           total_rows: totalRows,
           mapped_rows: parseResult.scores.length,
           skipped_rows: parseResult.unmatchedSongs.length,
+          inserted: upsertResult.inserted,
+          updated: upsertResult.updated,
+          unchanged: upsertResult.skipped,
           source_type: parseResult.sourceType,
           unmatched_songs: parseResult.unmatchedSongs.slice(0, 50),
         },
@@ -579,6 +809,9 @@ Deno.serve(async (req) => {
       total_rows: totalRows,
       mapped_rows: parseResult.scores.length,
       skipped_rows: parseResult.unmatchedSongs.length,
+      inserted: upsertResult.inserted,
+      updated: upsertResult.updated,
+      unchanged: upsertResult.skipped,
       source_type: parseResult.sourceType,
       unmatched_songs: parseResult.unmatchedSongs.slice(0, 10),
     }), {
