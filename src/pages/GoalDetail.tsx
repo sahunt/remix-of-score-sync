@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useGoal } from '@/hooks/useGoals';
+import { useGoal, useGoals } from '@/hooks/useGoals';
 import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,11 +9,15 @@ import { GoalDetailHeader } from '@/components/goals/GoalDetailHeader';
 import { GoalCard } from '@/components/home/GoalCard';
 import { GoalSongTabs } from '@/components/goals/GoalSongTabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
 
 export default function GoalDetail() {
   const { goalId } = useParams<{ goalId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { deleteGoal } = useGoals();
+  const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch the goal
   const { data: goal, isLoading: goalLoading } = useGoal(goalId);
@@ -54,11 +59,33 @@ export default function GoalDetail() {
     navigate('/home');
   };
 
+  const handleDelete = async () => {
+    if (!goalId) return;
+    
+    setIsDeleting(true);
+    try {
+      await deleteGoal.mutateAsync(goalId);
+      toast({
+        title: 'Goal deleted',
+        description: 'Your goal has been removed.',
+      });
+      navigate('/home');
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete goal. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (goalLoading) {
     return (
       <div className="relative min-h-screen bg-background">
         <div className="px-[28px] pt-[60px]">
-          <GoalDetailHeader onBack={handleBack} />
+          <GoalDetailHeader onBack={handleBack} onDelete={handleDelete} isDeleting={isDeleting} />
           <div className="mt-4 space-y-4">
             <Skeleton className="h-32 w-full rounded-[10px]" />
             <Skeleton className="h-10 w-full rounded-[10px]" />
@@ -73,7 +100,7 @@ export default function GoalDetail() {
     return (
       <div className="relative min-h-screen bg-background">
         <div className="px-[28px] pt-[60px]">
-          <GoalDetailHeader onBack={handleBack} />
+          <GoalDetailHeader onBack={handleBack} onDelete={handleDelete} isDeleting={isDeleting} />
           <div className="mt-8 text-center">
             <p className="text-muted-foreground">Goal not found</p>
           </div>
@@ -96,7 +123,7 @@ export default function GoalDetail() {
   return (
     <div className="relative min-h-screen bg-background">
       <div className="px-[28px] pt-[60px] pb-8">
-        <GoalDetailHeader onBack={handleBack} />
+          <GoalDetailHeader onBack={handleBack} onDelete={handleDelete} isDeleting={isDeleting} />
         
         {/* Goal Card */}
         <div className="mt-4">
