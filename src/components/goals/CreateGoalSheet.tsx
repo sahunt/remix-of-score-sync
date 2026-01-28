@@ -9,8 +9,6 @@ import { GoalPreviewCard } from './GoalPreviewCard';
 import { TargetSelector } from './TargetSelector';
 import { GoalModeToggle } from './GoalModeToggle';
 import { FilterRuleRow } from '@/components/filters/FilterRuleRow';
-import { RuleConnectorChip } from '@/components/filters/RuleConnectorChip';
-import { MatchModeToggle } from '@/components/filters/MatchModeToggle';
 import {
   type FilterRule,
   generateRuleId,
@@ -367,40 +365,26 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
                   <ActiveStepHeader stepNumber={2} title="On which charts?" />
                   <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">
-                      Optional: Add rules to filter which charts count toward this goal
+                      Optional: Filter which charts count toward this goal
                     </p>
                     
-                    {criteriaRules.length >= 2 && (
-                      <MatchModeToggle
-                        value={criteriaMatchMode}
-                        onChange={setCriteriaMatchMode}
+                    {criteriaRules.length === 0 ? (
+                      <Button
+                        variant="outline"
+                        onClick={handleAddRule}
+                        className="w-full rounded-[10px] border-dashed border-muted-foreground/30 text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add filter
+                      </Button>
+                    ) : (
+                      <FilterRuleRow
+                        rule={criteriaRules[0]}
+                        onChange={(updatedRule) => handleUpdateRule(0, updatedRule)}
+                        onRemove={() => handleRemoveRule(0)}
+                        showRemove={true}
                       />
                     )}
-
-                    <div className="space-y-0">
-                      {criteriaRules.map((rule, index) => (
-                        <div key={rule.id}>
-                          {index > 0 && (
-                            <RuleConnectorChip mode={criteriaMatchMode} />
-                          )}
-                          <FilterRuleRow
-                            rule={rule}
-                            onChange={(updatedRule) => handleUpdateRule(index, updatedRule)}
-                            onRemove={() => handleRemoveRule(index)}
-                            showRemove={true}
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      onClick={handleAddRule}
-                      className="w-full rounded-[10px] border-dashed border-muted-foreground/30 text-muted-foreground hover:text-foreground hover:border-muted-foreground/50"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add criteria
-                    </Button>
 
                     <Button
                       onClick={handleContinueFromCriteria}
