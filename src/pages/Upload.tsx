@@ -11,10 +11,21 @@ import { cn } from '@/lib/utils';
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
+interface UnmatchedSong {
+  name: string | null;
+  difficulty: string | null;
+  reason: string;
+}
+
 interface UploadResult {
   total_rows: number;
   mapped_rows: number;
   skipped_rows: number;
+  inserted?: number;
+  updated?: number;
+  unchanged?: number;
+  source_type?: string;
+  unmatched_songs?: UnmatchedSong[];
 }
 
 export default function UploadPage() {
@@ -62,6 +73,11 @@ export default function UploadPage() {
         total_rows: data.total_rows ?? 0,
         mapped_rows: data.mapped_rows ?? 0,
         skipped_rows: data.skipped_rows ?? 0,
+        inserted: data.inserted,
+        updated: data.updated,
+        unchanged: data.unchanged,
+        source_type: data.source_type,
+        unmatched_songs: data.unmatched_songs,
       });
 
       setState('success');
@@ -184,6 +200,64 @@ export default function UploadPage() {
                     <p className="text-xs text-muted-foreground">Skipped</p>
                   </div>
                 </div>
+
+                {/* Debug: Upsert breakdown */}
+                {(result.inserted !== undefined || result.updated !== undefined) && (
+                  <div className="mb-4 grid grid-cols-3 gap-4 text-center text-sm">
+                    <div className="rounded-lg bg-primary/10 px-4 py-3">
+                      <p className="text-lg font-bold text-primary">{result.inserted ?? 0}</p>
+                      <p className="text-xs text-muted-foreground">New</p>
+                    </div>
+                    <div className="rounded-lg bg-accent/10 px-4 py-3">
+                      <p className="text-lg font-bold text-accent">{result.updated ?? 0}</p>
+                      <p className="text-xs text-muted-foreground">Updated</p>
+                    </div>
+                    <div className="rounded-lg bg-muted px-4 py-3">
+                      <p className="text-lg font-bold text-muted-foreground">{result.unchanged ?? 0}</p>
+                      <p className="text-xs text-muted-foreground">Unchanged</p>
+                    </div>
+                  </div>
+                )}
+
+                {result.source_type && (
+                  <p className="mb-4 text-xs text-muted-foreground">
+                    Source: <span className="font-mono text-foreground">{result.source_type}</span>
+                  </p>
+                )}
+
+                {/* Debug: Unmatched songs list */}
+                {result.unmatched_songs && result.unmatched_songs.length > 0 && (
+                  <div className="mb-4 w-full rounded-lg border border-warning/30 bg-warning/5 p-3">
+                    <p className="mb-2 text-sm font-medium text-warning">
+                      ⚠️ Skipped Songs ({result.unmatched_songs.length})
+                    </p>
+                    <div className="max-h-48 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-warning/20 text-left text-muted-foreground">
+                            <th className="pb-1 pr-2">Song</th>
+                            <th className="pb-1 pr-2">Difficulty</th>
+                            <th className="pb-1">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.unmatched_songs.map((song, idx) => (
+                            <tr key={idx} className="border-b border-warning/10 last:border-0">
+                              <td className="py-1 pr-2 font-mono">{song.name ?? '(no name)'}</td>
+                              <td className="py-1 pr-2 font-mono">{song.difficulty ?? '-'}</td>
+                              <td className="py-1">
+                                <span className="rounded bg-warning/20 px-1 py-0.5 text-warning">
+                                  {song.reason}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 <Button onClick={reset}>Upload Another File</Button>
               </div>
             )}
