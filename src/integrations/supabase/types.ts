@@ -17,61 +17,79 @@ export type Database = {
       musicdb: {
         Row: {
           artist: string | null
+          basename: string | null
           bpm_max: number | null
           chart_id: number | null
           created_at: string | null
           difficulty_level: number | null
           difficulty_name: string | null
+          eventno: number | null
           flare: number | null
           halo: string | null
           id: number
           judgement_offset: number | null
           name: string | null
+          name_romanized: string | null
           playstyle: string | null
           rank: string | null
+          sanbai_song_id: string | null
           score: number | null
+          series: number | null
           song_id: number
           timestamp: string | null
+          title_yomi: string | null
           updated_at: string | null
           username: string | null
         }
         Insert: {
           artist?: string | null
+          basename?: string | null
           bpm_max?: number | null
           chart_id?: number | null
           created_at?: string | null
           difficulty_level?: number | null
           difficulty_name?: string | null
+          eventno?: number | null
           flare?: number | null
           halo?: string | null
           id?: never
           judgement_offset?: number | null
           name?: string | null
+          name_romanized?: string | null
           playstyle?: string | null
           rank?: string | null
+          sanbai_song_id?: string | null
           score?: number | null
+          series?: number | null
           song_id: number
           timestamp?: string | null
+          title_yomi?: string | null
           updated_at?: string | null
           username?: string | null
         }
         Update: {
           artist?: string | null
+          basename?: string | null
           bpm_max?: number | null
           chart_id?: number | null
           created_at?: string | null
           difficulty_level?: number | null
           difficulty_name?: string | null
+          eventno?: number | null
           flare?: number | null
           halo?: string | null
           id?: never
           judgement_offset?: number | null
           name?: string | null
+          name_romanized?: string | null
           playstyle?: string | null
           rank?: string | null
+          sanbai_song_id?: string | null
           score?: number | null
+          series?: number | null
           song_id?: number
           timestamp?: string | null
+          title_yomi?: string | null
           updated_at?: string | null
           username?: string | null
         }
