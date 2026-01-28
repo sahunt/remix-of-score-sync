@@ -4,7 +4,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Icon } from '@/components/ui/Icon';
 
 interface ProfileSectionProps {
-  number: number;
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
@@ -12,7 +11,6 @@ interface ProfileSectionProps {
 }
 
 export function ProfileSection({ 
-  number, 
   title, 
   children, 
   defaultOpen = false,
@@ -26,16 +24,6 @@ export function ProfileSection({
         {/* Header */}
         <CollapsibleTrigger className="w-full">
           <div className="flex items-center gap-4 p-5">
-            {/* Number badge */}
-            <div className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center text-lg font-semibold flex-shrink-0",
-              variant === 'danger' 
-                ? "bg-destructive text-destructive-foreground"
-                : "bg-primary text-primary-foreground"
-            )}>
-              {number}
-            </div>
-            
             {/* Title */}
             <span className={cn(
               "text-base font-medium flex-1 text-left",
