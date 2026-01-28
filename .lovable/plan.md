@@ -1,201 +1,313 @@
 
-# Phase 1: Populate Master MusicDB with Song Catalog
+# Phase 2: Multi-Source Score Upload Processing (Updated)
 
 ## Overview
 
-This plan focuses on populating the `musicdb` table with the complete song and chart catalog from `musicdb.xml`. This is the critical first step before handling user score uploads.
+This plan updates the `process-upload` edge function to parse and map scores from PhaseII JSON and Sanbai CSV/TSV to the master `musicdb` catalog. It enforces **chart-level matching** (not just song-level) and adds source tracking for future UI display.
 
-## Current State
+## Critical Constraint
 
-- **musicdb table**: 40 test records across 5 songs
-- **XML file**: ~16,377 lines containing ~1,200+ songs with Japanese character support
-- **Missing columns**: series, eventno, title_yomi, name_romanized, sanbai_song_id, basename
+**We can NEVER create new musicdb entries.** All scores must match an existing chart record or be skipped.
 
-## What This Plan Does
+## File Format Analysis
 
-1. Updates the database schema with new columns
-2. Clears existing test data
-3. Creates an edge function to parse and import the XML
-4. Populates ~10,000+ chart records from the XML
+### PhaseII JSON Structure
 
----
-
-## Implementation Steps
-
-### Step 1: Database Migration
-
-Add new columns to support the full XML data:
-
-```sql
--- Add new columns
-ALTER TABLE public.musicdb 
-ADD COLUMN IF NOT EXISTS series smallint,
-ADD COLUMN IF NOT EXISTS eventno smallint,
-ADD COLUMN IF NOT EXISTS title_yomi text,
-ADD COLUMN IF NOT EXISTS name_romanized text,
-ADD COLUMN IF NOT EXISTS sanbai_song_id text,
-ADD COLUMN IF NOT EXISTS basename text;
-
--- Create unique constraint for UPSERT
-ALTER TABLE public.musicdb 
-ADD CONSTRAINT musicdb_unique_chart 
-UNIQUE (song_id, playstyle, difficulty_name);
-
--- Indexes for lookups
-CREATE INDEX IF NOT EXISTS idx_musicdb_sanbai_id 
-ON public.musicdb(sanbai_song_id) WHERE sanbai_song_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_musicdb_name_match 
-ON public.musicdb(name, playstyle, difficulty_name);
+```json
+{
+  "data": [
+    {
+      "song": {
+        "db_id": 263561,
+        "id": 36935,
+        "chart": "SP CHALLENGE - 14",
+        "name": "華爛漫 -Flowers-",
+        "data": { "difficulty": 14 }
+      },
+      "timestamp": "2026-01-20 08:47:39",
+      "username": "LUMEN",
+      "points": "999,910",
+      "data": {
+        "rank": "AAA",
+        "halo": "PERFECT FULL COMBO",
+        "flare": 10
+      }
+    }
+  ]
+}
 ```
 
-### Step 2: Clear Test Data
-
-Remove existing test records:
-
-```sql
-DELETE FROM public.user_scores;
-DELETE FROM public.uploads;  
-DELETE FROM public.musicdb;
-```
-
-### Step 3: Create Import Edge Function
-
-**File:** `supabase/functions/import-musicdb/index.ts`
-
-The edge function will:
-
-1. Accept XML content as POST body
-2. Parse all `<music>` elements using Deno's DOMParser
-3. For each song, expand into chart rows:
-   - Positions 0-4: SP (BEGINNER, BASIC, DIFFICULT, EXPERT, CHALLENGE)
-   - Positions 5-9: DP (BEGINNER, BASIC, DIFFICULT, EXPERT, CHALLENGE)
-   - Skip if difficulty level = 0
-4. Generate computed chart_id: `song_id * 100 + position_index`
-5. Batch insert using service role key
-6. Return summary of imported records
-
-**Data Mapping:**
-
-| XML Field | DB Column | Notes |
-|-----------|-----------|-------|
-| mcode | song_id | Primary song identifier |
-| title | name | Full title (Japanese supported) |
-| title_yomi | title_yomi | Romanized reading |
-| artist | artist | Artist name (Japanese supported) |
-| bpmmax | bpm_max | Maximum BPM |
-| series | series | Game version number |
-| eventno | eventno | Event unlock number (optional) |
-| basename | basename | Internal identifier |
-
-**Chart ID Formula:**
+### Sanbai TSV Structure
 
 ```text
-chart_id = (song_id * 100) + position_index
-
-Example for mcode=38062:
-- SP BEGINNER (pos 0) -> chart_id = 3806200
-- SP EXPERT (pos 3)   -> chart_id = 3806203
-- DP DIFFICULT (pos 7) -> chart_id = 3806207
+Song ID	Song Name	Difficulty	Rating	Score	Grade	Lamp	Flare
+00obPO6oPIPOoD9qb0dIl6q6D8P6o9bI	IX	DSP	14	999670	AAA	PFC	X
+00obPO6oPIPOoD9qb0dIl6q6D8P6o9bI	IX	ESP	16	998450	AAA	GFC	IX
+00obPO6oPIPOoD9qb0dIl6q6D8P6o9bI	IX	CSP	18	985230	AA+	Clear	VII
 ```
 
-### Step 4: Update config.toml
+Note: Same `Song ID` appears multiple times for different charts of the same song.
 
-Register the new edge function:
+## Chart-Level Matching Strategy
 
-```toml
-project_id = "cjosawtrjeyqavdsffuy"
+### Key Clarification: sanbai_song_id is Song-Level Only
 
-[functions.import-musicdb]
-verify_jwt = false
-```
+The `sanbai_song_id` column in `musicdb` identifies the **song**, not the chart. Multiple `musicdb` rows share the same `sanbai_song_id` (one per difficulty/playstyle combination).
 
-### Step 5: Store XML Reference
+**Therefore, matching MUST always include playstyle + difficulty_name in addition to any song identifier.**
 
-Copy the musicdb.xml file to `public/data/musicdb.xml` for future reference and diffs.
+### Difficulty Code Parsing
 
----
+Sanbai difficulty codes encode both playstyle AND difficulty name:
 
-## Edge Function Details
+| Code | Playstyle | Difficulty Name |
+|------|-----------|-----------------|
+| bSP  | SP        | BEGINNER        |
+| BSP  | SP        | BASIC           |
+| DSP  | SP        | DIFFICULT       |
+| ESP  | SP        | EXPERT          |
+| CSP  | SP        | CHALLENGE       |
+| BDP  | DP        | BASIC           |
+| DDP  | DP        | DIFFICULT       |
+| EDP  | DP        | EXPERT          |
+| CDP  | DP        | CHALLENGE       |
 
-### Endpoint
-- **POST** `/import-musicdb`
-- No authentication required (uses service role internally)
-- Input: `{ "content": "<xml string>" }`
-
-### Core Logic
+### Matching Priority (Sanbai)
 
 ```text
-1. Parse XML using DOMParser
-2. Query all <music> elements
-3. For each music element:
-   - Extract mcode, title, title_yomi, artist, bpmmax, series, eventno, basename
-   - Parse diffLv array (10 space-separated values)
-   - For each position 0-9:
-     - If value > 0, create chart record
-     - Set playstyle: positions 0-4 = "SP", 5-9 = "DP"
-     - Set difficulty_name based on position index
-     - Calculate chart_id = song_id * 100 + position
-4. Batch insert all charts (500 at a time)
-5. Return summary: { songs_processed, charts_inserted }
+For each Sanbai row:
+  1. Parse difficulty code -> playstyle + difficulty_name
+  2. Query musicdb WHERE:
+     - sanbai_song_id = row.Song_ID
+     - AND playstyle = parsed_playstyle
+     - AND difficulty_name = parsed_difficulty_name
+  3. If no match AND sanbai_song_id not in musicdb:
+     - Fallback: Match by song name + playstyle + difficulty_name + difficulty_level
+     - If match found: UPDATE musicdb.sanbai_song_id for all charts of that song
+  4. If still no match: SKIP row (log as unmatched)
 ```
 
-### Difficulty Position Mapping
+### Matching Priority (PhaseII)
 
-| Position | Playstyle | Difficulty Name |
-|----------|-----------|-----------------|
-| 0 | SP | BEGINNER |
-| 1 | SP | BASIC |
-| 2 | SP | DIFFICULT |
-| 3 | SP | EXPERT |
-| 4 | SP | CHALLENGE |
-| 5 | DP | BEGINNER |
-| 6 | DP | BASIC |
-| 7 | DP | DIFFICULT |
-| 8 | DP | EXPERT |
-| 9 | DP | CHALLENGE |
+```text
+For each PhaseII item:
+  1. Parse chart string "SP CHALLENGE - 14" -> playstyle + difficulty_name + level
+  2. Query musicdb WHERE:
+     - name ILIKE song.name (fuzzy match)
+     - AND playstyle = parsed_playstyle
+     - AND difficulty_name = parsed_difficulty_name
+     - AND difficulty_level = parsed_level
+  3. If no match: SKIP row (log as unmatched)
+```
 
----
+### Halo/Lamp Translation
 
-## Expected Results
+| PhaseII Halo              | Sanbai Lamp | Stored Value |
+|---------------------------|-------------|--------------|
+| MARVELOUS FULL COMBO      | MFC         | mfc          |
+| PERFECT FULL COMBO        | PFC         | pfc          |
+| GREAT FULL COMBO          | GFC         | gfc          |
+| GOOD FULL COMBO           | FC          | fc           |
+| (clear)                   | Clear       | clear        |
+| (fail)                    | Fail        | fail         |
 
-After running the import:
+## Database Changes
 
-- **~1,200 unique songs** in the database
-- **~10,000+ chart records** (each song has 5-10 charts)
-- **Full Japanese character support** in titles and artist names
-- **title_yomi column** populated for romanized search
-- **Computed chart_id** for each chart for precise matching
+### Add source_type to user_scores
 
----
+```sql
+ALTER TABLE public.user_scores
+ADD COLUMN IF NOT EXISTS source_type text NOT NULL DEFAULT 'unknown';
+```
 
-## Files to Create/Modify
+Values: `phaseii`, `sanbai`, `manual`, `unknown`
+
+## Edge Function Implementation
+
+### File: supabase/functions/process-upload/index.ts
+
+#### 1. Source Detection
+
+```typescript
+function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
+  const trimmed = content.trim();
+  
+  // PhaseII: JSON with headers/data structure
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.headers && parsed.data) return 'phaseii';
+    } catch {}
+  }
+  
+  // Sanbai: TSV with "Song ID" header
+  const firstLine = trimmed.split('\n')[0];
+  if (firstLine.includes('Song ID') && firstLine.includes('\t')) {
+    return 'sanbai';
+  }
+  
+  return 'unknown';
+}
+```
+
+#### 2. PhaseII Parser
+
+```typescript
+function parsePhaseIIChart(chart: string) {
+  // "SP CHALLENGE - 14" -> { playstyle: 'SP', difficulty_name: 'CHALLENGE', level: 14 }
+  const match = chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
+  if (!match) return null;
+  return {
+    playstyle: match[1],
+    difficulty_name: match[2].toUpperCase(),
+    difficulty_level: parseInt(match[3])
+  };
+}
+
+function normalizePhaseIIHalo(halo: string | null): string | null {
+  if (!halo) return null;
+  const map: Record<string, string> = {
+    'MARVELOUS FULL COMBO': 'mfc',
+    'PERFECT FULL COMBO': 'pfc',
+    'GREAT FULL COMBO': 'gfc',
+    'GOOD FULL COMBO': 'fc',
+  };
+  return map[halo.toUpperCase()] || 'clear';
+}
+```
+
+#### 3. Sanbai Parser
+
+```typescript
+function parseSanbaiDifficulty(code: string) {
+  // "ESP" -> { playstyle: 'SP', difficulty_name: 'EXPERT' }
+  // "CDP" -> { playstyle: 'DP', difficulty_name: 'CHALLENGE' }
+  const playstyle = code.endsWith('DP') ? 'DP' : 'SP';
+  const diffChar = code[0];
+  const diffMap: Record<string, string> = {
+    'b': 'BEGINNER',
+    'B': 'BASIC',
+    'D': 'DIFFICULT',
+    'E': 'EXPERT',
+    'C': 'CHALLENGE'
+  };
+  return {
+    playstyle,
+    difficulty_name: diffMap[diffChar] || null
+  };
+}
+
+function normalizeSanbaiLamp(lamp: string | null): string | null {
+  if (!lamp) return null;
+  const normalized = lamp.toLowerCase().trim();
+  if (['mfc', 'pfc', 'gfc', 'fc', 'clear', 'fail'].includes(normalized)) {
+    return normalized;
+  }
+  return 'clear';
+}
+```
+
+#### 4. Chart-Level Matching Functions
+
+```typescript
+// Sanbai: Match by sanbai_song_id + playstyle + difficulty_name
+async function matchSanbaiChart(
+  supabase: any,
+  sanbaiSongId: string,
+  playstyle: string,
+  difficultyName: string
+): Promise<number | null> {
+  const { data } = await supabase
+    .from('musicdb')
+    .select('id, song_id, chart_id')
+    .eq('sanbai_song_id', sanbaiSongId)
+    .eq('playstyle', playstyle)
+    .eq('difficulty_name', difficultyName)
+    .limit(1)
+    .maybeSingle();
+  
+  return data?.id ?? null;
+}
+
+// Fallback: Match by name + playstyle + difficulty_name + level
+async function matchByNameAndChart(
+  supabase: any,
+  songName: string,
+  playstyle: string,
+  difficultyName: string,
+  difficultyLevel: number
+): Promise<{ id: number; song_id: number } | null> {
+  const { data } = await supabase
+    .from('musicdb')
+    .select('id, song_id')
+    .ilike('name', songName)
+    .eq('playstyle', playstyle)
+    .eq('difficulty_name', difficultyName)
+    .eq('difficulty_level', difficultyLevel)
+    .limit(1)
+    .maybeSingle();
+  
+  return data;
+}
+```
+
+#### 5. Sanbai ID Discovery
+
+When a Sanbai song matches by name but doesn't have `sanbai_song_id` set:
+
+```typescript
+// Update ALL charts for this song with the sanbai_song_id
+async function discoverSanbaiSongId(
+  supabase: any,
+  songId: number,
+  sanbaiSongId: string
+) {
+  await supabase
+    .from('musicdb')
+    .update({ sanbai_song_id: sanbaiSongId })
+    .eq('song_id', songId);
+}
+```
+
+## Parse Summary Output
+
+```typescript
+{
+  total_rows: 150,
+  mapped_rows: 142,
+  skipped_rows: 8,
+  source_type: 'sanbai',
+  unmatched_songs: [
+    { name: 'Some Removed Song', difficulty: 'ESP', reason: 'no_match' },
+    // ...
+  ]
+}
+```
+
+## Files to Modify
 
 | File | Action | Description |
 |------|--------|-------------|
-| Database migration | RUN | Add columns, constraint, indexes |
-| `supabase/functions/import-musicdb/index.ts` | CREATE | XML parser and importer |
-| `supabase/config.toml` | UPDATE | Register edge function |
-| `public/data/musicdb.xml` | CREATE | Store XML for future reference |
+| Database migration | CREATE | Add `source_type` column to `user_scores` |
+| `supabase/functions/process-upload/index.ts` | REWRITE | Dual-format parsing with chart-level matching |
 
----
+## Implementation Steps
 
-## Japanese Character Support
+1. **Database Migration**: Add `source_type` column to `user_scores`
+2. **Rewrite process-upload**: 
+   - Detect source format (PhaseII JSON vs Sanbai TSV)
+   - Parse format-specific fields
+   - Match at chart level (song identifier + playstyle + difficulty_name)
+   - Store source_type per score
+   - Log unmatched songs in parse_summary
+3. **Test with sample files**: Verify both formats parse and match correctly
 
-The database already uses UTF-8 encoding, so Japanese characters will be stored correctly. Examples from the XML:
+## Expected Behavior
 
-- `漆黒のスペシャルプリンセスサンデー` (title)
-- `日向美ビタースイーツ♪` (artist)
-- `シツコクノスヘシヤルフリンセスサンテエ` (title_yomi in katakana)
-
-No additional encoding configuration is needed - PostgreSQL text columns handle this natively.
-
----
-
-## After This Phase
-
-Once the musicdb is populated, Phase 2 will update the `process-upload` edge function to:
-- Detect PhaseII vs Sanbai file formats
-- Parse each format correctly
-- Map scores to the new musicdb records
-- Store sanbai_song_id when discovered for future lookups
+| Scenario | Result |
+|----------|--------|
+| Sanbai row with known sanbai_song_id + valid chart | Score inserted with musicdb_id |
+| Sanbai row with unknown sanbai_song_id, name matches | Score inserted + sanbai_song_id discovered |
+| Sanbai row with no match | Skipped, logged in unmatched_songs |
+| PhaseII row matching by name + chart | Score inserted with musicdb_id |
+| PhaseII row with no match | Skipped, logged in unmatched_songs |
