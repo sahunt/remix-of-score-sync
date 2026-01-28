@@ -82,19 +82,34 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
   const isSelected = (type: string, value: string) =>
     targetType === type && targetValue === value;
 
+  // Calculate the position for the sliding indicator
+  const getIndicatorStyle = () => {
+    if (!selectedCategory) return { opacity: 0 };
+    const index = CATEGORIES.findIndex(c => c.value === selectedCategory);
+    const width = 'calc(25% - 6px)'; // 4 columns with gaps
+    const left = `calc(${index * 25}% + 6px)`;
+    return { left, width, opacity: 1 };
+  };
+
   return (
     <div className="space-y-3">
       {/* Category Tab Bar */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
+        {/* Sliding background indicator */}
+        <div
+          className="absolute top-1.5 bottom-1.5 rounded-[8px] bg-primary transition-all duration-300 ease-out"
+          style={getIndicatorStyle()}
+        />
+        
         {CATEGORIES.map((category) => (
           <button
             key={category.value}
             onClick={() => handleCategoryClick(category.value)}
             className={cn(
-              "h-[44px] rounded-[10px] text-sm font-medium transition-all duration-200",
+              "relative z-10 flex-1 h-10 rounded-[8px] text-sm font-medium transition-all duration-300 ease-out",
               selectedCategory === category.value
-                ? "bg-primary text-primary-foreground"
-                : "bg-card border-2 border-transparent text-foreground hover:bg-muted"
+                ? "text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground/70"
             )}
           >
             {category.label}
