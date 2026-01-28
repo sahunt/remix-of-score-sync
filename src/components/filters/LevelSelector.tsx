@@ -90,7 +90,7 @@ export function LevelSelector({ value, onChange, isBetween, singleSelect = false
   };
 
   return (
-    <div className="grid grid-cols-7 gap-2">
+    <div className="grid grid-cols-7 gap-2 w-full">
       {LEVELS.map((level) => {
         const isSelected = selectedLevels.includes(level);
         

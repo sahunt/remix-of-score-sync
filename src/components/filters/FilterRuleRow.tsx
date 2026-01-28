@@ -391,10 +391,8 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove, allowedTyp
         </Select>
       </div>
 
-      {/* Value input */}
-      <div>
-        {renderValueInput()}
-      </div>
+      {/* Value input - no extra padding, inherits card padding */}
+      {renderValueInput()}
     </div>
   );
 }
