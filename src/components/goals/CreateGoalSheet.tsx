@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useFilterResults } from '@/hooks/useFilterResults';
+import { useMusicDbCount } from '@/hooks/useMusicDbCount';
 
 interface CreateGoalSheetProps {
   open: boolean;
@@ -156,8 +157,12 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   // Completion states
   const isStep1Complete = Boolean(targetType && targetValue);
 
-  // Calculate matching scores based on criteria rules
-  const { count: matchingTotal, filteredScores } = useFilterResults(
+  // Get total from musicdb based on criteria rules
+  const { data: musicDbData } = useMusicDbCount(criteriaRules, criteriaMatchMode, open);
+  const musicDbTotal = musicDbData?.total ?? 0;
+
+  // Calculate matching scores based on criteria rules (for current progress)
+  const { filteredScores } = useFilterResults(
     userScores,
     criteriaRules,
     criteriaMatchMode
@@ -385,7 +390,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
             targetValue={targetValue}
             goalMode={goalMode}
             goalCount={goalCount}
-            matchingTotal={matchingTotal}
+            matchingTotal={musicDbTotal}
             currentProgress={currentProgress}
           />
 
