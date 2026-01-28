@@ -221,6 +221,7 @@ export type Database = {
           rank: string | null
           score: number | null
           song_id: number
+          source_type: string
           timestamp: string | null
           upload_id: string
           user_id: string
@@ -240,6 +241,7 @@ export type Database = {
           rank?: string | null
           score?: number | null
           song_id: number
+          source_type?: string
           timestamp?: string | null
           upload_id: string
           user_id: string
@@ -259,6 +261,7 @@ export type Database = {
           rank?: string | null
           score?: number | null
           song_id?: number
+          source_type?: string
           timestamp?: string | null
           upload_id?: string
           user_id?: string

@@ -6,6 +6,8 @@ interface ParseSummary {
   total_rows?: number;
   mapped_rows?: number;
   skipped_rows?: number;
+  source_type?: 'phaseii' | 'sanbai' | 'manual' | 'unknown';
+  unmatched_songs?: Array<{ name: string | null; difficulty: string | null; reason: string }>;
 }
 
 interface Upload {
