@@ -415,68 +415,141 @@ async function batchMatchBySongId(
   return matchMap;
 }
 
-async function matchSanbaiChart(
+// Batch match by sanbai_song_id for performance
+async function batchMatchBySanbaiId(
   supabase: any,
-  sanbaiSongId: string,
-  playstyle: string,
-  difficultyName: string
-): Promise<MusicdbMatch | null> {
-  const { data, error } = await supabase
-    .from('musicdb')
-    .select('id, song_id, chart_id')
-    .eq('sanbai_song_id', sanbaiSongId)
-    .eq('playstyle', playstyle)
-    .eq('difficulty_name', difficultyName)
-    .limit(1)
-    .maybeSingle();
+  sanbaiSongIds: string[]
+): Promise<Map<string, MusicdbMatch & { sanbai_song_id: string }>> {
+  if (sanbaiSongIds.length === 0) return new Map();
   
-  if (error) {
-    console.error('matchSanbaiChart error:', error);
-    return null;
+  const uniqueIds = [...new Set(sanbaiSongIds)];
+  console.log(`batchMatchBySanbaiId: attempting to match ${uniqueIds.length} unique sanbai IDs`);
+  
+  const BATCH_SIZE = 100;
+  const allData: any[] = [];
+  
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    const batchIds = uniqueIds.slice(i, i + BATCH_SIZE);
+    
+    const { data, error } = await supabase
+      .from('musicdb')
+      .select('id, song_id, chart_id, sanbai_song_id, playstyle, difficulty_name, name, difficulty_level')
+      .in('sanbai_song_id', batchIds);
+    
+    if (error) {
+      console.error(`batchMatchBySanbaiId batch ${i / BATCH_SIZE} error:`, error);
+      continue;
+    }
+    
+    if (data) {
+      allData.push(...data);
+    }
   }
-  return data;
+  
+  console.log(`batchMatchBySanbaiId: got ${allData.length} chart matches`);
+  
+  // Create lookup map: sanbai_song_id|playstyle|difficulty_name -> match
+  const matchMap = new Map<string, MusicdbMatch & { sanbai_song_id: string }>();
+  for (const row of allData) {
+    const key = `${row.sanbai_song_id}|${row.playstyle}|${row.difficulty_name}`;
+    matchMap.set(key, { 
+      id: row.id, 
+      song_id: row.song_id, 
+      chart_id: row.chart_id,
+      sanbai_song_id: row.sanbai_song_id 
+    });
+  }
+  
+  return matchMap;
 }
 
-async function matchByNameAndChart(
+// Batch match by name and chart for fallback matching
+async function batchMatchByNameAndChart(
   supabase: any,
-  songName: string,
-  playstyle: string,
-  difficultyName: string,
-  difficultyLevel: number
-): Promise<MusicdbMatch | null> {
-  const { data, error } = await supabase
-    .from('musicdb')
-    .select('id, song_id, chart_id')
-    .ilike('name', songName)
-    .eq('playstyle', playstyle)
-    .eq('difficulty_name', difficultyName)
-    .eq('difficulty_level', difficultyLevel)
-    .limit(1)
-    .maybeSingle();
+  entries: Array<{ songName: string; playstyle: string; difficultyName: string; difficultyLevel: number }>
+): Promise<Map<string, MusicdbMatch>> {
+  if (entries.length === 0) return new Map();
   
-  if (error) {
-    console.error('matchByNameAndChart error:', error);
-    return null;
+  // Get unique song names
+  const uniqueNames = [...new Set(entries.map(e => e.songName.toLowerCase()))];
+  console.log(`batchMatchByNameAndChart: attempting to match ${uniqueNames.length} unique song names`);
+  
+  const BATCH_SIZE = 50;
+  const allData: any[] = [];
+  
+  for (let i = 0; i < uniqueNames.length; i += BATCH_SIZE) {
+    const batchNames = uniqueNames.slice(i, i + BATCH_SIZE);
+    
+    // Use ilike for case-insensitive matching - need to do one by one for ilike
+    for (const name of batchNames) {
+      const { data, error } = await supabase
+        .from('musicdb')
+        .select('id, song_id, chart_id, name, playstyle, difficulty_name, difficulty_level')
+        .ilike('name', name);
+      
+      if (error) {
+        console.error(`batchMatchByNameAndChart error for ${name}:`, error);
+        continue;
+      }
+      
+      if (data) {
+        allData.push(...data);
+      }
+    }
   }
-  return data;
+  
+  console.log(`batchMatchByNameAndChart: got ${allData.length} potential matches`);
+  
+  // Create lookup map: name|playstyle|difficulty_name|difficulty_level -> match
+  const matchMap = new Map<string, MusicdbMatch>();
+  for (const row of allData) {
+    const key = `${row.name?.toLowerCase()}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
+    matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
+  }
+  
+  return matchMap;
 }
 
-async function discoverSanbaiSongId(
+// Batch update sanbai_song_id discoveries
+async function batchDiscoverSanbaiSongIds(
   supabase: any,
-  songId: number,
-  sanbaiSongId: string
+  discoveries: Array<{ songId: number; sanbaiSongId: string }>
 ): Promise<void> {
-  const { error } = await supabase
-    .from('musicdb')
-    .update({ sanbai_song_id: sanbaiSongId })
-    .eq('song_id', songId);
+  if (discoveries.length === 0) return;
   
-  if (error) {
-    console.error('discoverSanbaiSongId error:', error);
-  } else {
-    console.log(`Discovered sanbai_song_id ${sanbaiSongId} for song_id ${songId}`);
+  console.log(`Batch discovering ${discoveries.length} sanbai_song_id mappings...`);
+  
+  // Group by song_id to avoid duplicate updates
+  const uniqueDiscoveries = new Map<number, string>();
+  for (const d of discoveries) {
+    uniqueDiscoveries.set(d.songId, d.sanbaiSongId);
   }
+  
+  // Do updates in parallel batches
+  const updates = Array.from(uniqueDiscoveries.entries());
+  const BATCH_SIZE = 20;
+  
+  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+    const batch = updates.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async ([songId, sanbaiSongId]) => {
+        const { error } = await supabase
+          .from('musicdb')
+          .update({ sanbai_song_id: sanbaiSongId })
+          .eq('song_id', songId)
+          .is('sanbai_song_id', null); // Only update if not already set
+        
+        if (error) {
+          console.error(`discoverSanbaiSongId error for ${songId}:`, error);
+        }
+      })
+    );
+  }
+  
+  console.log(`Discovered ${uniqueDiscoveries.size} sanbai_song_id mappings`);
 }
+
+// matchByNameAndChart and discoverSanbaiSongId replaced by batch versions above
 
 // ============================================================================
 // Fetch Existing Scores for User - Batched
@@ -980,6 +1053,21 @@ async function processSanbai(
   
   console.log(`Processing ${lines.length - 1} Sanbai rows`);
   
+  // PHASE 1: Parse all rows and collect data for batch matching
+  interface ParsedRow {
+    sanbaiSongId: string;
+    songName: string;
+    diffInfo: { playstyle: string; difficulty_name: string };
+    rating: number;
+    scoreVal: number | null;
+    grade: string | null;
+    lamp: string | null;
+    flare: string | null;
+  }
+  
+  const parsedRows: ParsedRow[] = [];
+  const allSanbaiIds: string[] = [];
+  
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
@@ -1005,38 +1093,96 @@ async function processSanbai(
       continue;
     }
     
-    let match = await matchSanbaiChart(supabase, sanbaiSongId, diffInfo.playstyle, diffInfo.difficulty_name);
+    parsedRows.push({ sanbaiSongId, songName, diffInfo, rating, scoreVal, grade, lamp, flare });
+    allSanbaiIds.push(sanbaiSongId);
+  }
+  
+  console.log(`Parsed ${parsedRows.length} valid rows, ${unmatchedSongs.length} invalid`);
+  
+  // PHASE 2: Batch fetch all charts with known sanbai_song_ids
+  const sanbaiMatchMap = await batchMatchBySanbaiId(supabase, allSanbaiIds);
+  console.log(`Sanbai ID match map has ${sanbaiMatchMap.size} entries`);
+  
+  // PHASE 3: Identify rows that need fallback matching and batch fetch those
+  const needsFallback: ParsedRow[] = [];
+  const matchedRows: Array<{ row: ParsedRow; match: MusicdbMatch }> = [];
+  
+  for (const row of parsedRows) {
+    const key = `${row.sanbaiSongId}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}`;
+    const match = sanbaiMatchMap.get(key);
     
-    if (!match && songName && rating > 0) {
-      match = await matchByNameAndChart(supabase, songName, diffInfo.playstyle, diffInfo.difficulty_name, rating);
+    if (match) {
+      matchedRows.push({ row, match });
+    } else {
+      needsFallback.push(row);
+    }
+  }
+  
+  console.log(`Direct sanbai matches: ${matchedRows.length}, need fallback: ${needsFallback.length}`);
+  
+  // PHASE 4: Batch fallback matching by name+chart
+  const discoveries: Array<{ songId: number; sanbaiSongId: string }> = [];
+  
+  if (needsFallback.length > 0) {
+    const fallbackEntries = needsFallback
+      .filter(row => row.songName && row.rating > 0)
+      .map(row => ({
+        songName: row.songName,
+        playstyle: row.diffInfo.playstyle,
+        difficultyName: row.diffInfo.difficulty_name,
+        difficultyLevel: row.rating,
+      }));
+    
+    const nameMatchMap = await batchMatchByNameAndChart(supabase, fallbackEntries);
+    console.log(`Name match map has ${nameMatchMap.size} entries`);
+    
+    for (const row of needsFallback) {
+      if (!row.songName || row.rating <= 0) {
+        unmatchedSongs.push({ 
+          name: row.songName, 
+          difficulty: `${row.diffInfo.playstyle} ${row.diffInfo.difficulty_name} ${row.rating}`, 
+          reason: 'no_match' 
+        });
+        continue;
+      }
+      
+      const nameKey = `${row.songName.toLowerCase()}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}|${row.rating}`;
+      const match = nameMatchMap.get(nameKey);
       
       if (match) {
-        await discoverSanbaiSongId(supabase, match.song_id, sanbaiSongId);
+        matchedRows.push({ row, match });
+        // Queue for discovery
+        discoveries.push({ songId: match.song_id, sanbaiSongId: row.sanbaiSongId });
+      } else {
+        unmatchedSongs.push({ 
+          name: row.songName, 
+          difficulty: `${row.diffInfo.playstyle} ${row.diffInfo.difficulty_name} ${row.rating}`, 
+          reason: 'no_match' 
+        });
       }
     }
-    
-    if (!match) {
-      unmatchedSongs.push({ 
-        name: songName, 
-        difficulty: `${diffInfo.playstyle} ${diffInfo.difficulty_name} ${rating}`, 
-        reason: 'no_match' 
-      });
-      continue;
-    }
-    
+  }
+  
+  // PHASE 5: Batch discover sanbai_song_ids for fallback matches
+  if (discoveries.length > 0) {
+    await batchDiscoverSanbaiSongIds(supabase, discoveries);
+  }
+  
+  // PHASE 6: Build score records
+  for (const { row, match } of matchedRows) {
     scores.push({
       musicdb_id: match.id,
       chart_id: match.chart_id,
       song_id: match.song_id,
-      playstyle: diffInfo.playstyle,
-      difficulty_name: diffInfo.difficulty_name,
-      difficulty_level: rating,
-      score: scoreVal,
+      playstyle: row.diffInfo.playstyle,
+      difficulty_name: row.diffInfo.difficulty_name,
+      difficulty_level: row.rating,
+      score: row.scoreVal,
       timestamp: null,
       username: null,
-      rank: grade,
-      flare: parseSanbaiFlare(flare),
-      halo: normalizeSanbaiLamp(lamp),
+      rank: row.grade,
+      flare: parseSanbaiFlare(row.flare),
+      halo: normalizeSanbaiLamp(row.lamp),
       source_type: 'sanbai',
     });
   }
