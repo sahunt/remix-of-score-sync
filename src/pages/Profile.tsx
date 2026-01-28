@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-
 import { useUsername } from '@/hooks/useUsername';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Icon } from '@/components/ui/Icon';
+import { ProfileSection } from '@/components/profile/ProfileSection';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -190,10 +188,9 @@ export default function Profile() {
       </header>
 
       {/* Content card */}
-      <div className="relative -mt-10 rounded-t-[40px] bg-background min-h-[calc(100vh-120px)] px-7 pt-8 pb-32">
+      <div className="relative -mt-10 rounded-t-[40px] bg-background min-h-[calc(100vh-120px)] px-7 pt-8 pb-32 space-y-4">
         {/* Display Name Section */}
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold text-white mb-3">Display Name</h2>
+        <ProfileSection number={1} title="Display Name" defaultOpen>
           <div className="space-y-3">
             <Input
               value={displayName || (usernameLoading ? '' : username || '')}
@@ -210,12 +207,10 @@ export default function Profile() {
               {savingDisplayName ? 'Saving...' : 'Save'}
             </Button>
           </div>
-        </section>
-
+        </ProfileSection>
 
         {/* Change Password Section */}
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold text-white mb-3">Change Password</h2>
+        <ProfileSection number={2} title="Change Password">
           <div className="space-y-3">
             <Input
               type="password"
@@ -244,11 +239,10 @@ export default function Profile() {
               {savingPassword ? 'Updating...' : 'Update Password'}
             </Button>
           </div>
-        </section>
+        </ProfileSection>
 
         {/* Danger Zone Section */}
-        <section>
-          <h2 className="text-sm font-semibold text-destructive mb-3">Danger Zone</h2>
+        <ProfileSection number={3} title="Danger Zone" variant="danger">
           <div className="space-y-3">
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -287,7 +281,7 @@ export default function Profile() {
               Log Out
             </Button>
           </div>
-        </section>
+        </ProfileSection>
       </div>
     </div>
   );
