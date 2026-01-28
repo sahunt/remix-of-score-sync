@@ -296,25 +296,37 @@ async function batchMatchBySongId(
   // Get unique song IDs
   const songIds = [...new Set(entries.map(e => e.songId))];
   
-  // Batch fetch all potential matches for the given song IDs
-  // Note: This only fetches charts for songs in the current upload, not all 10k+ charts
-  // Using a very high limit to ensure we get all charts (typically ~8 charts per song)
-  const { data, error } = await supabase
-    .from('musicdb')
-    .select('id, song_id, chart_id, playstyle, difficulty_name, difficulty_level')
-    .in('song_id', songIds)
-    .limit(50000); // Safe upper bound: even 5000 unique songs × 10 charts = 50000
+  console.log(`batchMatchBySongId: attempting to match ${songIds.length} unique song IDs`);
+  console.log(`Sample song IDs: ${songIds.slice(0, 10).join(', ')}`);
   
-  if (error) {
-    console.error('batchMatchBySongId error:', error);
-    return new Map();
+  // Supabase has a default 1000 row limit that can't be overridden via .limit()
+  // We need to fetch in batches and combine the results
+  const BATCH_SIZE = 50; // Fetch songs in batches of 50 to stay well under any limits
+  const allData: any[] = [];
+  
+  for (let i = 0; i < songIds.length; i += BATCH_SIZE) {
+    const batchIds = songIds.slice(i, i + BATCH_SIZE);
+    
+    const { data, error } = await supabase
+      .from('musicdb')
+      .select('id, song_id, chart_id, playstyle, difficulty_name, difficulty_level')
+      .in('song_id', batchIds);
+    
+    if (error) {
+      console.error(`batchMatchBySongId batch ${i / BATCH_SIZE} error:`, error);
+      continue;
+    }
+    
+    if (data) {
+      allData.push(...data);
+    }
   }
   
-  console.log(`batchMatchBySongId: queried ${songIds.length} song IDs, got ${data?.length || 0} chart matches`);
+  console.log(`batchMatchBySongId: queried ${songIds.length} song IDs in ${Math.ceil(songIds.length / BATCH_SIZE)} batches, got ${allData.length} chart matches`);
   
   // Create a lookup map
   const matchMap = new Map<string, MusicdbMatch>();
-  for (const row of data || []) {
+  for (const row of allData) {
     const key = `${row.song_id}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
     matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
   }
