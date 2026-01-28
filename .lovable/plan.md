@@ -1,177 +1,201 @@
 
-
-# Visual Consistency Audit: Goal UI vs Filter UI
+# Phase 1: Populate Master MusicDB with Song Catalog
 
 ## Overview
-This plan addresses the styling inconsistencies between the Goal Creation sheet and the Filter Creation sheet. Both UIs should share the same global design system for drawers, headers, inputs, and interactive elements.
 
-## Differences Identified
+This plan focuses on populating the `musicdb` table with the complete song and chart catalog from `musicdb.xml`. This is the critical first step before handling user score uploads.
 
-### 1. Drawer Container Configuration
+## Current State
 
-**Filter UI:**
-- Uses `DrawerPortal` + `DrawerOverlay` + `DrawerContent` with custom classes
-- Background: `bg-[#3B3F51]`
-- Border radius: `rounded-t-[20px]`
-- No border: `border-0`
-- Handle: Hidden via `hideHandle` prop
-- Overlay: `bg-black/60`
+- **musicdb table**: 40 test records across 5 songs
+- **XML file**: ~16,377 lines containing ~1,200+ songs with Japanese character support
+- **Missing columns**: series, eventno, title_yomi, name_romanized, sanbai_song_id, basename
 
-**Goal UI (Current):**
-- Uses basic `DrawerContent` with default styling
-- Background: Default `bg-background`
-- Border radius: Default `rounded-t-[10px]`
-- Handle: Visible (default gray bar)
-- Overlay: Default `bg-black/80`
+## What This Plan Does
 
-### 2. Header Structure
-
-**Filter UI:**
-- Negative margins: `-mx-7 -mt-4` to span full width
-- Padding: `px-5 py-4`
-- Has kebab menu on the right side
-
-**Goal UI (Current):**
-- No negative margins (header doesn't span full width)
-- Same padding but missing full-width alignment
-- No kebab menu (empty spacer only)
-
-### 3. Content Padding
-
-**Filter UI:** `px-7 pb-8 pt-4`
-**Goal UI:** `px-7 py-6`
-
-### 4. TargetSelector Category Tabs Background
-
-**Current Issue:** The category tabs sit inside a `bg-[#262937]` container, but the TargetSelector component has its own `bg-[#262937]` on the tab bar, creating redundant nesting. The filter UI doesn't have this double-nesting pattern.
-
-### 5. Step Content Expansion Panels
-
-**Current Issue:** Each step's expanded content sits inside `bg-[#262937]`, but the options panel inside (for TargetSelector) uses `bg-[#3B3F51]`. The filter UI rule cards use a single `bg-[#262937]` container without inner panels.
+1. Updates the database schema with new columns
+2. Clears existing test data
+3. Creates an edge function to parse and import the XML
+4. Populates ~10,000+ chart records from the XML
 
 ---
 
-## Implementation Plan
+## Implementation Steps
 
-### Task 1: Update Drawer Container in CreateGoalSheet
+### Step 1: Database Migration
 
-Update the Goal sheet to use the same drawer configuration as FilterModal:
+Add new columns to support the full XML data:
 
-```tsx
-// Change from:
-<DrawerContent className="max-h-[90vh]">
+```sql
+-- Add new columns
+ALTER TABLE public.musicdb 
+ADD COLUMN IF NOT EXISTS series smallint,
+ADD COLUMN IF NOT EXISTS eventno smallint,
+ADD COLUMN IF NOT EXISTS title_yomi text,
+ADD COLUMN IF NOT EXISTS name_romanized text,
+ADD COLUMN IF NOT EXISTS sanbai_song_id text,
+ADD COLUMN IF NOT EXISTS basename text;
 
-// To:
-<DrawerPortal>
-  <DrawerOverlay className="fixed inset-0 bg-black/60" />
-  <DrawerContent 
-    hideHandle 
-    className="fixed bottom-0 left-0 right-0 mt-24 flex h-auto max-h-[85vh] flex-col rounded-t-[20px] bg-[#3B3F51] border-0 outline-none"
-  >
+-- Create unique constraint for UPSERT
+ALTER TABLE public.musicdb 
+ADD CONSTRAINT musicdb_unique_chart 
+UNIQUE (song_id, playstyle, difficulty_name);
+
+-- Indexes for lookups
+CREATE INDEX IF NOT EXISTS idx_musicdb_sanbai_id 
+ON public.musicdb(sanbai_song_id) WHERE sanbai_song_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_musicdb_name_match 
+ON public.musicdb(name, playstyle, difficulty_name);
 ```
 
-### Task 2: Update Header Positioning
+### Step 2: Clear Test Data
 
-Add negative margins to make header span full drawer width:
+Remove existing test records:
 
-```tsx
-// Change from:
-<div className="flex items-center justify-between px-5 py-4 border-b border-[#4A4E61]">
-
-// To:
-<div className="flex items-center justify-between -mx-7 -mt-4 px-5 py-4 border-b border-[#4A4E61]">
+```sql
+DELETE FROM public.user_scores;
+DELETE FROM public.uploads;  
+DELETE FROM public.musicdb;
 ```
 
-### Task 3: Update Content Area Padding
+### Step 3: Create Import Edge Function
 
-Match the filter sheet padding pattern:
+**File:** `supabase/functions/import-musicdb/index.ts`
 
-```tsx
-// Change from:
-<div className="px-7 py-6 space-y-6 overflow-y-auto">
+The edge function will:
 
-// To:
-<div className="flex-1 overflow-y-auto px-7 pb-8 pt-4">
-  <div className="space-y-6">
-```
+1. Accept XML content as POST body
+2. Parse all `<music>` elements using Deno's DOMParser
+3. For each song, expand into chart rows:
+   - Positions 0-4: SP (BEGINNER, BASIC, DIFFICULT, EXPERT, CHALLENGE)
+   - Positions 5-9: DP (BEGINNER, BASIC, DIFFICULT, EXPERT, CHALLENGE)
+   - Skip if difficulty level = 0
+4. Generate computed chart_id: `song_id * 100 + position_index`
+5. Batch insert using service role key
+6. Return summary of imported records
 
-### Task 4: Update TargetSelector Background Nesting
+**Data Mapping:**
 
-Remove the redundant `bg-[#262937]` from the TargetSelector tab bar since it will be inside a step container that already has that background:
+| XML Field | DB Column | Notes |
+|-----------|-----------|-------|
+| mcode | song_id | Primary song identifier |
+| title | name | Full title (Japanese supported) |
+| title_yomi | title_yomi | Romanized reading |
+| artist | artist | Artist name (Japanese supported) |
+| bpmmax | bpm_max | Maximum BPM |
+| series | series | Game version number |
+| eventno | eventno | Event unlock number (optional) |
+| basename | basename | Internal identifier |
 
-```tsx
-// In TargetSelector.tsx, change:
-<div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
-
-// To:
-<div className="relative flex items-center rounded-[10px] bg-[#3B3F51] p-1.5">
-```
-
-This makes the tab bar consistent with the FilterRuleRow dropdowns which use `bg-[#3B3F51]`.
-
-### Task 5: Update Step Container Colors
-
-The step expansion containers should follow the filter card pattern:
-
-**Step Header (collapsed):**
-- Background: `bg-[#262937]` (matches rule card)
-- When expanded: Same `bg-[#262937]` with `border-primary/30`
-
-**Step Content (expanded):**
-- Currently using `mt-3 p-4 rounded-[10px] bg-[#262937]` 
-- This creates a **separate** card below the header
-
-**Recommended change:** Make expanded content flow inside the same card as the header, not as a separate card. But this is a structural change that may be intentional for the accordion UX. The minimum fix is ensuring color values match the filter system.
-
-### Task 6: Update GoalModeToggle Background
-
-The toggle currently has `bg-[#262937]` but it sits inside a step container that's also `bg-[#262937]`. Change to:
-
-```tsx
-// In GoalModeToggle.tsx, change:
-<div className="relative flex items-center rounded-[10px] bg-[#262937] p-1.5">
-
-// To:
-<div className="relative flex items-center rounded-[10px] bg-[#3B3F51] p-1.5">
-```
-
----
-
-## Files to Modify
-
-1. **src/components/goals/CreateGoalSheet.tsx**
-   - Update Drawer structure to use DrawerPortal + DrawerOverlay
-   - Add hideHandle prop
-   - Update drawer background, border-radius, and overlay
-   - Add negative margins to header
-   - Update content padding structure
-
-2. **src/components/goals/TargetSelector.tsx**
-   - Change category tab bar background from `bg-[#262937]` to `bg-[#3B3F51]`
-
-3. **src/components/goals/GoalModeToggle.tsx**
-   - Change toggle bar background from `bg-[#262937]` to `bg-[#3B3F51]`
-
----
-
-## Technical Details
-
-### Color Reference (Global Design System)
-
-| Element | Color Code | Usage |
-|---------|------------|-------|
-| Drawer Background | `#3B3F51` | Main drawer/modal background |
-| Card/Rule Container | `#262937` | Cards, rule rows, step containers |
-| Input/Interactive | `#3B3F51` | Dropdowns, input fields, toggles inside cards |
-| Border | `#4A4E61` | Header separator, dividers |
-| Primary | `#6692FA` | Active states, CTAs |
-
-### Nesting Pattern
+**Chart ID Formula:**
 
 ```text
-Drawer Background (#3B3F51)
-  └── Card/Container (#262937)
-        └── Interactive Elements (#3B3F51)
-              └── Nested Items (#4A4E61)
+chart_id = (song_id * 100) + position_index
+
+Example for mcode=38062:
+- SP BEGINNER (pos 0) -> chart_id = 3806200
+- SP EXPERT (pos 3)   -> chart_id = 3806203
+- DP DIFFICULT (pos 7) -> chart_id = 3806207
 ```
 
+### Step 4: Update config.toml
+
+Register the new edge function:
+
+```toml
+project_id = "cjosawtrjeyqavdsffuy"
+
+[functions.import-musicdb]
+verify_jwt = false
+```
+
+### Step 5: Store XML Reference
+
+Copy the musicdb.xml file to `public/data/musicdb.xml` for future reference and diffs.
+
+---
+
+## Edge Function Details
+
+### Endpoint
+- **POST** `/import-musicdb`
+- No authentication required (uses service role internally)
+- Input: `{ "content": "<xml string>" }`
+
+### Core Logic
+
+```text
+1. Parse XML using DOMParser
+2. Query all <music> elements
+3. For each music element:
+   - Extract mcode, title, title_yomi, artist, bpmmax, series, eventno, basename
+   - Parse diffLv array (10 space-separated values)
+   - For each position 0-9:
+     - If value > 0, create chart record
+     - Set playstyle: positions 0-4 = "SP", 5-9 = "DP"
+     - Set difficulty_name based on position index
+     - Calculate chart_id = song_id * 100 + position
+4. Batch insert all charts (500 at a time)
+5. Return summary: { songs_processed, charts_inserted }
+```
+
+### Difficulty Position Mapping
+
+| Position | Playstyle | Difficulty Name |
+|----------|-----------|-----------------|
+| 0 | SP | BEGINNER |
+| 1 | SP | BASIC |
+| 2 | SP | DIFFICULT |
+| 3 | SP | EXPERT |
+| 4 | SP | CHALLENGE |
+| 5 | DP | BEGINNER |
+| 6 | DP | BASIC |
+| 7 | DP | DIFFICULT |
+| 8 | DP | EXPERT |
+| 9 | DP | CHALLENGE |
+
+---
+
+## Expected Results
+
+After running the import:
+
+- **~1,200 unique songs** in the database
+- **~10,000+ chart records** (each song has 5-10 charts)
+- **Full Japanese character support** in titles and artist names
+- **title_yomi column** populated for romanized search
+- **Computed chart_id** for each chart for precise matching
+
+---
+
+## Files to Create/Modify
+
+| File | Action | Description |
+|------|--------|-------------|
+| Database migration | RUN | Add columns, constraint, indexes |
+| `supabase/functions/import-musicdb/index.ts` | CREATE | XML parser and importer |
+| `supabase/config.toml` | UPDATE | Register edge function |
+| `public/data/musicdb.xml` | CREATE | Store XML for future reference |
+
+---
+
+## Japanese Character Support
+
+The database already uses UTF-8 encoding, so Japanese characters will be stored correctly. Examples from the XML:
+
+- `漆黒のスペシャルプリンセスサンデー` (title)
+- `日向美ビタースイーツ♪` (artist)
+- `シツコクノスヘシヤルフリンセスサンテエ` (title_yomi in katakana)
+
+No additional encoding configuration is needed - PostgreSQL text columns handle this natively.
+
+---
+
+## After This Phase
+
+Once the musicdb is populated, Phase 2 will update the `process-upload` edge function to:
+- Detect PhaseII vs Sanbai file formats
+- Parse each format correctly
+- Map scores to the new musicdb records
+- Store sanbai_song_id when discovered for future lookups
