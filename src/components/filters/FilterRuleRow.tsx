@@ -215,11 +215,15 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove, allowedTyp
           }
         }
         
+        // Use single select for greater_than and less_than operators
+        const isSingleSelect = rule.operator === 'greater_than' || rule.operator === 'less_than';
+        
         return (
           <LevelSelector
             value={levelValue}
             onChange={handleValueChange}
             isBetween={isBetween}
+            singleSelect={isSingleSelect}
           />
         );
       }
