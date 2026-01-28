@@ -349,6 +349,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
                     onChange={(updatedRule) => handleUpdateRule(0, updatedRule)}
                     onRemove={() => handleRemoveRule(0)}
                     showRemove={false}
+                    allowedTypes={['level', 'difficulty']}
                   />
                 )}
               </div>
