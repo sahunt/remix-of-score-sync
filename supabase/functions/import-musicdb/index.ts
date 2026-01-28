@@ -1,5 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { DOMParser, Element } from "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,9 +22,10 @@ interface ChartRecord {
 
 const DIFFICULTY_NAMES = ['BEGINNER', 'BASIC', 'DIFFICULT', 'EXPERT', 'CHALLENGE'];
 
-function getTextContent(element: Element, tagName: string): string | null {
-  const child = element.getElementsByTagName(tagName)[0];
-  return child ? child.textContent : null;
+function getTagContent(musicXml: string, tagName: string): string | null {
+  const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'i');
+  const match = musicXml.match(regex);
+  return match ? match[1].trim() : null;
 }
 
 function parseIntSafe(value: string | null): number | null {
@@ -43,18 +43,30 @@ Deno.serve(async (req) => {
   console.log('import-musicdb: Starting import process');
 
   try {
-    // Parse request body
-    const { content } = await req.json();
+    // Parse request body - accept either content directly or a URL to fetch from
+    const body = await req.json().catch(() => ({}));
+    let content = body.content;
+    
+    // If a URL is provided, fetch the content from there
+    if (body.url && !content) {
+      console.log(`import-musicdb: Fetching XML from URL: ${body.url}`);
+      const response = await fetch(body.url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch XML from URL: ${response.status}`);
+      }
+      content = await response.text();
+    }
     
     if (!content || typeof content !== 'string') {
       console.error('import-musicdb: No XML content provided');
       return new Response(
-        JSON.stringify({ error: 'XML content is required' }),
+        JSON.stringify({ error: 'XML content is required. Provide either "content" or "url" in the request body.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log(`import-musicdb: Received XML content of length ${content.length}`);
+    console.log(`import-musicdb: First 500 chars: ${content.substring(0, 500)}`);
 
     // Create Supabase client with service role for bulk operations
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -62,30 +74,29 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse XML using DOMParser
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(content, 'text/xml');
+    // Parse XML using regex (DOMParser not available in Deno Deploy)
+    const musicRegex = /<music>([\s\S]*?)<\/music>/g;
+    const musicMatches = [...content.matchAll(musicRegex)];
     
-    if (!doc) {
-      console.error('import-musicdb: Failed to parse XML');
+    console.log(`import-musicdb: Found ${musicMatches.length} music elements`);
+    
+    if (musicMatches.length === 0) {
+      console.error('import-musicdb: No <music> elements found in XML');
       return new Response(
-        JSON.stringify({ error: 'Failed to parse XML' }),
+        JSON.stringify({ error: 'No music elements found in XML. Content may not be valid XML.', content_preview: content.substring(0, 200) }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const musicElements = doc.getElementsByTagName('music');
-    console.log(`import-musicdb: Found ${musicElements.length} music elements`);
 
     const charts: ChartRecord[] = [];
     let songsProcessed = 0;
     let chartsSkipped = 0;
 
     // Process each music element
-    for (let i = 0; i < musicElements.length; i++) {
-      const music = musicElements[i] as Element;
+    for (let i = 0; i < musicMatches.length; i++) {
+      const musicXml = musicMatches[i][1];
       
-      const mcodeStr = getTextContent(music, 'mcode');
+      const mcodeStr = getTagContent(musicXml, 'mcode');
       if (!mcodeStr) {
         console.warn(`import-musicdb: Skipping music element ${i} - no mcode`);
         continue;
@@ -97,14 +108,14 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const name = getTextContent(music, 'title') || '';
-      const title_yomi = getTextContent(music, 'title_yomi');
-      const artist = getTextContent(music, 'artist');
-      const bpmmax = getTextContent(music, 'bpmmax');
-      const seriesStr = getTextContent(music, 'series');
-      const eventnoStr = getTextContent(music, 'eventno');
-      const basename = getTextContent(music, 'basename');
-      const diffLvStr = getTextContent(music, 'diffLv');
+      const name = getTagContent(musicXml, 'title') || '';
+      const title_yomi = getTagContent(musicXml, 'title_yomi');
+      const artist = getTagContent(musicXml, 'artist');
+      const bpmmax = getTagContent(musicXml, 'bpmmax');
+      const seriesStr = getTagContent(musicXml, 'series');
+      const eventnoStr = getTagContent(musicXml, 'eventno');
+      const basename = getTagContent(musicXml, 'basename');
+      const diffLvStr = getTagContent(musicXml, 'diffLv');
 
       const bpm_max = parseIntSafe(bpmmax);
       const series = parseIntSafe(seriesStr);
@@ -112,7 +123,7 @@ Deno.serve(async (req) => {
 
       // Parse difficulty levels (10 space-separated values)
       const diffLevels = diffLvStr 
-        ? diffLvStr.trim().split(/\s+/).map(v => parseInt(v, 10))
+        ? diffLvStr.trim().split(/\s+/).map((v: string) => parseInt(v, 10))
         : [];
 
       // Create chart records for each position with level > 0
