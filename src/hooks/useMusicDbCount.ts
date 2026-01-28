@@ -106,10 +106,12 @@ export function useMusicDbCount(
     queryFn: async () => {
       // Fetch all charts from musicdb (we filter client-side for flexibility)
       // In production, this could be optimized with server-side filtering
-      const { data, error } = await supabase
+      // Fetch ALL charts - override default 1000 row limit
+      const { data, error, count } = await supabase
         .from('musicdb')
-        .select('id, difficulty_level, difficulty_name, name')
-        .not('difficulty_level', 'is', null); // Only count charts with a level
+        .select('id, difficulty_level, difficulty_name, name', { count: 'exact' })
+        .not('difficulty_level', 'is', null)
+        .range(0, 50000); // Fetch up to 50k records (well above total chart count)
 
       if (error) throw error;
 
@@ -143,10 +145,12 @@ export async function fetchMusicDbCount(
   rules: FilterRule[],
   matchMode: 'all' | 'any' = 'all'
 ): Promise<number> {
+  // Fetch ALL charts - override default 1000 row limit
   const { data, error } = await supabase
     .from('musicdb')
     .select('id, difficulty_level, difficulty_name, name')
-    .not('difficulty_level', 'is', null);
+    .not('difficulty_level', 'is', null)
+    .range(0, 50000); // Fetch up to 50k records
 
   if (error) throw error;
 
