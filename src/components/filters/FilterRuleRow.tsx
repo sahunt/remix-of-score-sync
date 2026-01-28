@@ -58,11 +58,17 @@ interface FilterRuleRowProps {
   onChange: (rule: FilterRule) => void;
   onRemove: () => void;
   showRemove: boolean;
+  allowedTypes?: FilterType[];
 }
 
-export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRuleRowProps) {
+export function FilterRuleRow({ rule, onChange, onRemove, showRemove, allowedTypes }: FilterRuleRowProps) {
   const operators = OPERATORS_BY_TYPE[rule.type];
   const isBetween = rule.operator === 'is_between';
+  
+  // Filter available types if allowedTypes is provided
+  const availableTypes = allowedTypes 
+    ? FILTER_TYPES.filter(t => allowedTypes.includes(t.value))
+    : FILTER_TYPES;
 
   const handleTypeChange = (type: FilterType) => {
     onChange({
@@ -358,7 +364,7 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove }: FilterRu
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[#3B3F51] border-0">
-            {FILTER_TYPES.map((type) => (
+            {availableTypes.map((type) => (
               <SelectItem key={type.value} value={type.value}>
                 {type.label}
               </SelectItem>
