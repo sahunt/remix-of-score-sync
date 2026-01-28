@@ -100,6 +100,9 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const [editingTarget, setEditingTarget] = useState(true);
   const [editingCriteria, setEditingCriteria] = useState(false);
   const [editingMode, setEditingMode] = useState(false);
+  
+  // Track if we've already auto-advanced from step 1 (prevents re-triggering on edit)
+  const [hasAdvancedFromStep1, setHasAdvancedFromStep1] = useState(false);
 
   // Reset edit states when sheet opens
   useEffect(() => {
@@ -107,22 +110,24 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
       setEditingTarget(true);
       setEditingCriteria(false);
       setEditingMode(false);
+      setHasAdvancedFromStep1(false);
     }
   }, [open]);
 
   // Completion states
   const isStep1Complete = Boolean(targetType && targetValue);
 
-  // Auto-advance: when target is selected, show step 2
+  // Auto-advance: when target is selected for the FIRST time, show step 2
   useEffect(() => {
-    if (isStep1Complete && editingTarget) {
+    if (isStep1Complete && editingTarget && !hasAdvancedFromStep1) {
       const timer = setTimeout(() => {
         setEditingTarget(false);
         setEditingCriteria(true);
+        setHasAdvancedFromStep1(true);
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [isStep1Complete, editingTarget]);
+  }, [isStep1Complete, editingTarget, hasAdvancedFromStep1]);
 
   // Generate auto-name based on selections
   const generateName = () => {
