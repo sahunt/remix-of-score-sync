@@ -121,53 +121,65 @@ function getBetterScore(a: number | null, b: number | null): number | null {
 // ============================================================================
 
 function sanitizeJsonString(content: string): string {
-  // The issue is control characters INSIDE string literals
-  // We need to find strings and escape control characters within them
-  // Simpler approach: replace ALL control characters (except \n, \r, \t) with escaped versions
+  // JSON doesn't allow raw control characters (0x00-0x1F) inside string literals
+  // except when properly escaped as \n, \r, \t, etc.
+  // 
+  // The problem: PhaseII exports contain raw control characters AND raw newlines
+  // inside JSON string values (e.g., song names with line breaks)
+  //
+  // Solution: Process the JSON character by character, escaping control characters
+  // when we're inside a string literal
   
-  // First, replace backslash with a placeholder to avoid double-escaping
-  let result = content;
+  const chars: string[] = [];
+  let inString = false;
+  let escaped = false;
   
-  // Remove or escape control characters that break JSON parsing
-  // ASCII 0-8, 11-12, 14-31 are problematic (keeping \t=9, \n=10, \r=13)
-  result = result
-    .replace(/\x00/g, '')  // null
-    .replace(/\x01/g, '')  // SOH
-    .replace(/\x02/g, '')  // STX
-    .replace(/\x03/g, '')  // ETX
-    .replace(/\x04/g, '')  // EOT
-    .replace(/\x05/g, '')  // ENQ
-    .replace(/\x06/g, '')  // ACK
-    .replace(/\x07/g, '')  // BEL
-    .replace(/\x08/g, '')  // BS
-    // \x09 = tab, keep it
-    // \x0A = newline, keep it
-    .replace(/\x0B/g, '')  // VT
-    .replace(/\x0C/g, '')  // FF
-    // \x0D = carriage return, keep it
-    .replace(/\x0E/g, '')  // SO
-    .replace(/\x0F/g, '')  // SI
-    .replace(/\x10/g, '')  // DLE
-    .replace(/\x11/g, '')  // DC1
-    .replace(/\x12/g, '')  // DC2
-    .replace(/\x13/g, '')  // DC3
-    .replace(/\x14/g, '')  // DC4
-    .replace(/\x15/g, '')  // NAK
-    .replace(/\x16/g, '')  // SYN
-    .replace(/\x17/g, '')  // ETB
-    .replace(/\x18/g, '')  // CAN
-    .replace(/\x19/g, '')  // EM
-    .replace(/\x1A/g, '')  // SUB
-    .replace(/\x1B/g, '')  // ESC
-    .replace(/\x1C/g, '')  // FS
-    .replace(/\x1D/g, '')  // GS
-    .replace(/\x1E/g, '')  // RS
-    .replace(/\x1F/g, ''); // US
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    const code = content.charCodeAt(i);
+    
+    if (escaped) {
+      // Previous char was backslash, this is an escape sequence
+      chars.push(char);
+      escaped = false;
+      continue;
+    }
+    
+    if (char === '\\' && inString) {
+      // Start of escape sequence
+      chars.push(char);
+      escaped = true;
+      continue;
+    }
+    
+    if (char === '"' && !escaped) {
+      // Toggle string mode
+      inString = !inString;
+      chars.push(char);
+      continue;
+    }
+    
+    if (inString && code < 32) {
+      // Control character inside string - escape or remove it
+      if (code === 9) {
+        chars.push('\\t');  // Tab
+      } else if (code === 10) {
+        chars.push('\\n');  // Newline - escape it properly
+      } else if (code === 13) {
+        chars.push('\\r');  // Carriage return
+      } else {
+        // Other control characters - remove them
+        continue;
+      }
+    } else if (!inString && code < 32 && code !== 9 && code !== 10 && code !== 13) {
+      // Control character outside string - remove it
+      continue;
+    } else {
+      chars.push(char);
+    }
+  }
   
-  // Also handle any DEL character
-  result = result.replace(/\x7F/g, '');
-  
-  return result;
+  return chars.join('');
 }
 
 // ============================================================================
