@@ -25,6 +25,8 @@ interface ScoreWithSong {
   musicdb: {
     name: string | null;
     artist: string | null;
+    eamuse_id: string | null;
+    song_id: number | null;
   } | null;
 }
 
@@ -146,7 +148,9 @@ export default function Scores() {
             halo,
             musicdb (
               name,
-              artist
+              artist,
+              eamuse_id,
+              song_id
             )
           `)
           .eq('user_id', user.id)
@@ -328,6 +332,8 @@ export default function Scores() {
                 rank={s.rank}
                 flare={s.flare}
                 halo={s.halo}
+                eamuseId={s.musicdb?.eamuse_id}
+                songId={s.musicdb?.song_id}
               />
             ))}
           </div>

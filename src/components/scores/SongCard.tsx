@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
 import { HaloSparkle, type HaloType } from '@/components/ui/HaloSparkle';
 import { use12MSMode } from '@/hooks/use12MSMode';
+import { getJacketUrl, getJacketFallbackUrl } from '@/lib/jacketUrl';
 
 interface SongCardProps {
   name: string;
@@ -10,6 +12,8 @@ interface SongCardProps {
   rank: string | null;
   flare: number | null;
   halo: string | null;
+  eamuseId?: string | null;
+  songId?: number | null;
   className?: string;
 }
 
@@ -100,6 +104,8 @@ export function SongCard({
   rank,
   flare,
   halo,
+  eamuseId,
+  songId,
   className
 }: SongCardProps) {
   const { transformHalo } = use12MSMode();
@@ -108,6 +114,25 @@ export function SongCard({
   const transformedHalo = transformHalo(halo);
   const haloType = normalizeHaloType(transformedHalo);
   const difficultyClass = getDifficultyColorClass(difficultyLevel);
+
+  // Image fallback state
+  const [imgError, setImgError] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
+  
+  const primaryUrl = getJacketUrl(eamuseId, songId);
+  const fallbackUrl = getJacketFallbackUrl(songId);
+  const currentImgUrl = useFallback ? fallbackUrl : primaryUrl;
+  const showPlaceholder = !currentImgUrl || imgError;
+
+  const handleImageError = () => {
+    // If primary failed and we have a fallback, try it
+    if (!useFallback && fallbackUrl && fallbackUrl !== primaryUrl) {
+      setUseFallback(true);
+    } else {
+      // No more fallbacks, show placeholder
+      setImgError(true);
+    }
+  };
 
   return (
     <div className={cn('w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative', className)}>
@@ -119,9 +144,18 @@ export function SongCard({
         {/* Album art with difficulty bar */}
         <div className="w-[38px] h-[38px] rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
           {/* Difficulty color bar on left edge */}
-          {difficultyLevel && <div className={cn('absolute left-0 top-0 w-[4px] h-full', difficultyClass)} />}
-          {/* Placeholder icon */}
-          <span className="text-muted-foreground text-xs">♪</span>
+          {difficultyLevel && <div className={cn('absolute left-0 top-0 w-[4px] h-full z-10', difficultyClass)} />}
+          {/* Song jacket image or placeholder */}
+          {showPlaceholder ? (
+            <span className="text-muted-foreground text-xs">♪</span>
+          ) : (
+            <img
+              src={currentImgUrl!}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={handleImageError}
+            />
+          )}
         </div>
 
         {/* Song info section */}

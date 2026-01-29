@@ -52,7 +52,7 @@ export default function GoalDetail() {
           rank,
           flare,
           halo,
-          musicdb(name, artist)
+          musicdb(name, artist, eamuse_id, song_id)
         `)
         .eq('user_id', user.id)
         .order('timestamp', { ascending: false, nullsFirst: false })
