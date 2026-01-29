@@ -256,7 +256,8 @@ function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
   const trimmed = content.trim();
   
   const firstLine = trimmed.split('\n')[0];
-  if (firstLine.includes('Song ID') && firstLine.includes('\t')) {
+  // Sanbai can be TSV (tab-separated) or CSV (comma-separated)
+  if (firstLine.includes('Song ID') && (firstLine.includes('\t') || firstLine.includes(','))) {
     return 'sanbai';
   }
   
@@ -1080,7 +1081,12 @@ async function processSanbai(
     return { scores, sourceType: 'sanbai', unmatchedSongs: [{ name: null, difficulty: null, reason: 'no_data_rows' }] };
   }
   
-  const headers = lines[0].split('\t').map(h => h.trim());
+  // Detect separator: if first line contains tabs, use tab; otherwise use comma
+  const firstLine = lines[0];
+  const separator = firstLine.includes('\t') ? '\t' : ',';
+  console.log(`Sanbai using separator: ${separator === '\t' ? 'TAB' : 'COMMA'}`);
+  
+  const headers = lines[0].split(separator).map(h => h.trim());
   const colIndex: Record<string, number> = {};
   headers.forEach((h, i) => { colIndex[h] = i; });
   
@@ -1112,7 +1118,7 @@ async function processSanbai(
     const line = lines[i].trim();
     if (!line) continue;
     
-    const cols = line.split('\t');
+    const cols = line.split(separator);
     const sanbaiSongId = cols[colIndex['Song ID']]?.trim();
     const songName = cols[colIndex['Song Name']]?.trim();
     const difficultyCode = cols[colIndex['Difficulty']]?.trim();
