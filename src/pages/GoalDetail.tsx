@@ -63,6 +63,7 @@ export default function GoalDetail() {
             musicdb(name, artist, eamuse_id, song_id)
           `)
           .eq('user_id', user.id)
+          .eq('playstyle', 'SP')
           .order('timestamp', { ascending: false, nullsFirst: false })
           .range(from, from + PAGE_SIZE - 1);
 

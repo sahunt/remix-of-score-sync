@@ -241,6 +241,7 @@ export default function Scores() {
               )
             `)
             .eq('user_id', user.id)
+            .eq('playstyle', 'SP')
             .range(from, from + PAGE_SIZE - 1);
 
           if (error) throw error;
