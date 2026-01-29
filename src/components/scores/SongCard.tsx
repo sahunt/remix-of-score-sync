@@ -151,23 +151,25 @@ export function SongCard({
 
       {/* Main content - pt-[14px] pb-2 to center content in dark area below the 4px bar */}
       <div className="flex items-center gap-3 px-3 pt-[14px] pb-2">
-        {/* Album art with difficulty drop shadow */}
-        <div 
-          className="w-[38px] h-[38px] flex-shrink-0 flex items-center justify-center"
-          style={{ 
-            filter: difficultyLevel ? `drop-shadow(2px 2px 0 ${getDifficultyHexColor(difficultyLevel)})` : undefined 
-          }}
-        >
-          {/* Song jacket image or placeholder */}
+        {/* Album art with difficulty shadow element */}
+        <div className="relative w-[38px] h-[38px] flex-shrink-0">
+          {/* Solid color shadow element - positioned behind */}
+          {difficultyLevel && (
+            <div 
+              className="absolute top-[2px] left-[2px] w-full h-full rounded-[2px]"
+              style={{ backgroundColor: getDifficultyHexColor(difficultyLevel) }}
+            />
+          )}
+          {/* Song jacket image or placeholder - on top */}
           {showPlaceholder ? (
-            <div className="w-full h-full rounded-[2px] bg-muted flex items-center justify-center border-2 border-[#3B3F51]">
+            <div className="relative w-full h-full rounded-[2px] bg-muted flex items-center justify-center border-2 border-[#3B3F51]">
               <span className="text-muted-foreground text-xs">♪</span>
             </div>
           ) : (
             <img
               src={currentImgUrl!}
               alt=""
-              className="w-full h-full object-cover rounded-[2px] border-2 border-[#3B3F51]"
+              className="relative w-full h-full object-cover rounded-[2px] border-2 border-[#3B3F51]"
               onError={handleImageError}
             />
           )}
