@@ -1,83 +1,52 @@
 
 
-# Plan: Update eamuse_id Mappings from CSV
+# Populate musicdb with eamuse_id Mappings
 
 ## Overview
-Create an edge function to update the `eamuse_id` column in the `musicdb` table using the provided CSV file. The function will use `song_id` as the source of truth and update the corresponding `eamuse_id` values, then verify there are no duplicate eamuse_ids.
+Use the existing `update-eamuse-ids` edge function to populate the cleared `eamuse_id` column with the 1,395 mappings from your CSV file.
 
-## Current State
-- **musicdb table**: 1,395 unique songs, but only 1,301 unique eamuse_ids
-- **Existing duplicates**: ~20+ eamuse_ids are currently mapped to multiple song_ids
-- **CSV file**: Contains 1,323 song_id to eamuse_id mappings (header + 1,323 data rows)
+## What Will Happen
+1. Copy the CSV file to the project
+2. Call the edge function with the CSV content
+3. The function updates all matching `song_id` records with the corresponding `EncodedID` value
+4. Returns a detailed report showing:
+   - How many songs were updated
+   - Which song_ids weren't found in musicdb (if any)
+   - Any duplicate eamuse_ids detected
 
-## Implementation Steps
+## Steps
 
-### Step 1: Create Update Edge Function
-Create a new edge function `update-eamuse-ids` that:
-1. Accepts CSV content (directly, via URL, or storage path)
-2. Parses the CSV to extract song_id → eamuse_id mappings
-3. Updates all charts in musicdb matching each song_id with the new eamuse_id
-4. Returns a summary of updates made
+### Step 1: Copy CSV to Project
+Copy the uploaded file to the project so it can be used by the edge function.
 
-### Step 2: Deploy and Execute
-1. Add function configuration to `supabase/config.toml`
-2. Deploy the edge function
-3. Call the function with the CSV content to perform the update
+### Step 2: Execute the Update
+Call the `update-eamuse-ids` edge function with the CSV content. The function processes in batches of 50 songs to handle the 1,395 rows efficiently.
 
-### Step 3: Verify Data Integrity
-After the update, run verification queries to:
-1. Confirm all mappings were applied
-2. Check for any remaining duplicate eamuse_ids
-3. Report any song_ids not found in musicdb
+### Step 3: Verify Results
+Review the response to confirm:
+- All expected songs were updated
+- No duplicate eamuse_ids exist
+- Any missing song_ids are expected (songs in CSV but not in your musicdb)
 
 ---
 
 ## Technical Details
 
-### New Edge Function: `supabase/functions/update-eamuse-ids/index.ts`
+**Edge Function**: `supabase/functions/update-eamuse-ids/index.ts` (already exists)
 
-```typescript
-// Key logic:
-// 1. Parse CSV: song_id,EncodedID
-// 2. For each row, update musicdb SET eamuse_id = EncodedID WHERE song_id = song_id
-// 3. Batch updates (100 at a time) for efficiency
-// 4. Return summary with success/failure counts
-```
+**CSV Format Validation**:
+- Header: `song_id,EncodedID` - matches expected format
+- 1,395 data rows to process
+- song_id is treated as source of truth for matching
 
-**Function capabilities:**
-- Accept CSV via `content`, `url`, or `storage_path` parameter
-- Parse CSV format (header: `song_id,EncodedID`)
-- Batch UPDATE operations to musicdb table
-- Include duplicate check logic after updates
-- Return detailed summary including:
-  - Songs updated
-  - Songs not found
-  - Duplicate eamuse_ids detected
-
-### Config Update: `supabase/config.toml`
-Add the new function entry:
-```toml
-[functions.update-eamuse-ids]
-verify_jwt = false
-```
-
-### Post-Update Verification
-The function will include a final check that queries:
+**Database Operation**:
 ```sql
-SELECT eamuse_id, COUNT(DISTINCT song_id) as song_count
-FROM musicdb 
-WHERE eamuse_id IS NOT NULL
-GROUP BY eamuse_id 
-HAVING COUNT(DISTINCT song_id) > 1
+UPDATE musicdb SET eamuse_id = [EncodedID] WHERE song_id = [song_id]
 ```
 
-If duplicates are found, they will be reported in the response.
-
----
-
-## Expected Outcome
-- All 1,323 song_ids from the CSV will have their eamuse_id updated in musicdb
-- Each eamuse_id will be unique to a single song_id (no duplicates)
-- The function will report any songs in the CSV that don't exist in musicdb
-- Song jackets will correctly load using the updated eamuse_ids
+**Safety Features**:
+- Batched processing (50 at a time)
+- Detailed logging of each batch
+- Post-update duplicate detection
+- Complete audit trail in response
 
