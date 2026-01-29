@@ -8,6 +8,7 @@ import { FiltersSection, type ActiveFilter } from '@/components/scores/FiltersSe
 import { StatsSummary } from '@/components/scores/StatsSummary';
 import { SearchSortBar, type SortOption } from '@/components/scores/SearchSortBar';
 import { SongCard } from '@/components/scores/SongCard';
+import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
 import type { SavedFilter, FilterRule } from '@/components/filters/filterTypes';
@@ -28,6 +29,13 @@ interface ScoreWithSong {
     eamuse_id: string | null;
     song_id: number | null;
   } | null;
+}
+
+interface SelectedSong {
+  songId: number;
+  songName: string;
+  artist: string | null;
+  eamuseId: string | null;
 }
 
 // Filter matching logic
@@ -128,6 +136,25 @@ export default function Scores() {
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('name');
+  
+  // Modal state
+  const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  const handleSongClick = useCallback((song: ScoreWithSong) => {
+    if (!song.musicdb?.song_id) return;
+    setSelectedSong({
+      songId: song.musicdb.song_id,
+      songName: song.musicdb.name ?? 'Unknown Song',
+      artist: song.musicdb.artist,
+      eamuseId: song.musicdb.eamuse_id,
+    });
+    setIsDetailModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setIsDetailModalOpen(false);
+  }, []);
 
   useEffect(() => {
     const fetchScores = async () => {
@@ -334,11 +361,22 @@ export default function Scores() {
                 halo={s.halo}
                 eamuseId={s.musicdb?.eamuse_id}
                 songId={s.musicdb?.song_id}
+                onClick={() => handleSongClick(s)}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Song Detail Modal */}
+      <SongDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={handleCloseModal}
+        songId={selectedSong?.songId ?? null}
+        songName={selectedSong?.songName ?? ''}
+        artist={selectedSong?.artist ?? null}
+        eamuseId={selectedSong?.eamuseId ?? null}
+      />
     </div>
   );
 }

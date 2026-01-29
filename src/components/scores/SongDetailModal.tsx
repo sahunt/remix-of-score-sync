@@ -1,0 +1,287 @@
+import { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
+import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
+import { SourceIcon } from '@/components/ui/SourceIcon';
+import { use12MSMode } from '@/hooks/use12MSMode';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { getJacketUrl, getJacketFallbackUrl } from '@/lib/jacketUrl';
+import { cn } from '@/lib/utils';
+
+interface SongDetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  songId: number | null;
+  songName: string;
+  artist: string | null;
+  eamuseId: string | null;
+}
+
+interface ChartWithScore {
+  id: number;
+  difficulty_name: string;
+  difficulty_level: number;
+  score: number | null;
+  rank: string | null;
+  flare: number | null;
+  halo: string | null;
+  source_type: string | null;
+}
+
+// Difficulty order for display (highest to lowest)
+const DIFFICULTY_ORDER = ['CHALLENGE', 'EXPERT', 'DIFFICULT', 'BASIC', 'BEGINNER'];
+
+// Get difficulty color class based on level
+function getDifficultyColorClass(level: number | null): string {
+  if (!level) return '';
+  if (level <= 5) return 'bg-[hsl(var(--difficulty-beginner))]';
+  if (level <= 8) return 'bg-[hsl(var(--difficulty-basic))]';
+  if (level <= 12) return 'bg-[hsl(var(--difficulty-difficult))]';
+  if (level <= 16) return 'bg-[hsl(var(--difficulty-expert))]';
+  return 'bg-[hsl(var(--difficulty-challenge))]';
+}
+
+// Convert numeric flare to FlareType
+function flareNumberToType(flare: number | null): FlareType | null {
+  if (flare === null || flare === undefined) return null;
+  const mapping: Record<number, FlareType> = {
+    0: 'ex', 1: 'i', 2: 'ii', 3: 'iii', 4: 'iv',
+    5: 'v', 6: 'vi', 7: 'vii', 8: 'viii', 9: 'ix', 10: 'ex'
+  };
+  return mapping[flare] ?? null;
+}
+
+// Normalize halo string to HaloType
+function normalizeHaloType(halo: string | null): HaloType | null {
+  if (!halo) return null;
+  const normalized = halo.toLowerCase();
+  const validTypes: HaloType[] = ['fc', 'gfc', 'life4', 'mfc', 'pfc'];
+  if (validTypes.includes(normalized as HaloType)) {
+    return normalized as HaloType;
+  }
+  return null;
+}
+
+export function SongDetailModal({
+  isOpen,
+  onClose,
+  songId,
+  songName,
+  artist,
+  eamuseId,
+}: SongDetailModalProps) {
+  const { user } = useAuth();
+  const { transformHalo } = use12MSMode();
+  const [charts, setCharts] = useState<ChartWithScore[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Image fallback state
+  const [imgError, setImgError] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
+
+  const primaryUrl = getJacketUrl(eamuseId, songId);
+  const fallbackUrl = getJacketFallbackUrl(songId);
+  const currentImgUrl = useFallback ? fallbackUrl : primaryUrl;
+  const showPlaceholder = !currentImgUrl || imgError;
+
+  const handleImageError = () => {
+    if (!useFallback && fallbackUrl && fallbackUrl !== primaryUrl) {
+      setUseFallback(true);
+    } else {
+      setImgError(true);
+    }
+  };
+
+  // Reset image state when song changes
+  useEffect(() => {
+    setImgError(false);
+    setUseFallback(false);
+  }, [songId, eamuseId]);
+
+  // Fetch chart data when modal opens
+  useEffect(() => {
+    if (!isOpen || !songId || !user) {
+      setCharts([]);
+      return;
+    }
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch all SP charts for this song
+        const { data: chartData, error: chartError } = await supabase
+          .from('musicdb')
+          .select('id, difficulty_name, difficulty_level')
+          .eq('song_id', songId)
+          .eq('playstyle', 'SP')
+          .not('difficulty_level', 'is', null)
+          .order('difficulty_level', { ascending: false });
+
+        if (chartError) throw chartError;
+        if (!chartData || chartData.length === 0) {
+          setCharts([]);
+          return;
+        }
+
+        // Fetch user's scores for these charts
+        const chartIds = chartData.map(c => c.id);
+        const { data: scoreData, error: scoreError } = await supabase
+          .from('user_scores')
+          .select('musicdb_id, score, rank, flare, halo, source_type')
+          .eq('user_id', user.id)
+          .in('musicdb_id', chartIds);
+
+        if (scoreError) throw scoreError;
+
+        // Create a map of scores by musicdb_id
+        const scoreMap = new Map(
+          (scoreData || []).map(s => [s.musicdb_id, s])
+        );
+
+        // Merge charts with scores and sort by difficulty order
+        const mergedCharts: ChartWithScore[] = chartData
+          .map(chart => {
+            const userScore = scoreMap.get(chart.id);
+            return {
+              id: chart.id,
+              difficulty_name: chart.difficulty_name ?? 'UNKNOWN',
+              difficulty_level: chart.difficulty_level ?? 0,
+              score: userScore?.score ?? null,
+              rank: userScore?.rank ?? null,
+              flare: userScore?.flare ?? null,
+              halo: userScore?.halo ?? null,
+              source_type: userScore?.source_type ?? null,
+            };
+          })
+          .sort((a, b) => {
+            const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());
+            const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name.toUpperCase());
+            return aIndex - bIndex;
+          });
+
+        setCharts(mergedCharts);
+      } catch (err) {
+        console.error('Error fetching song details:', err);
+        setCharts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isOpen, songId, user]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-[#3B3F51] border-none rounded-[20px] p-6 max-w-[340px] mx-auto">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{songName}</DialogTitle>
+        </DialogHeader>
+
+        {/* Song Header */}
+        <div className="flex flex-col items-center text-center mb-6">
+          {/* Jacket */}
+          <div className="w-20 h-20 rounded-lg overflow-hidden mb-3 bg-muted flex items-center justify-center">
+            {showPlaceholder ? (
+              <span className="text-muted-foreground text-2xl">♪</span>
+            ) : (
+              <img
+                src={currentImgUrl!}
+                alt=""
+                className="w-full h-full object-cover"
+                onError={handleImageError}
+              />
+            )}
+          </div>
+
+          {/* Artist */}
+          {artist && (
+            <p className="text-[10px] font-medium text-[#96A7AF] uppercase tracking-[1px] leading-normal mb-1">
+              {artist}
+            </p>
+          )}
+
+          {/* Song Title */}
+          <p className="text-base font-bold text-white leading-normal">
+            {songName}
+          </p>
+        </div>
+
+        {/* Difficulty Rows */}
+        <div className="space-y-2 mb-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : charts.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No SP charts available
+            </p>
+          ) : (
+            charts.map((chart) => {
+              const flareType = flareNumberToType(chart.flare);
+              const transformedHalo = transformHalo(chart.halo);
+              const haloType = normalizeHaloType(transformedHalo);
+              const hasScore = chart.score !== null;
+
+              return (
+                <div
+                  key={chart.id}
+                  className="flex items-center gap-2 bg-[#262937] rounded-lg px-3 py-2"
+                >
+                  {/* Difficulty Chip */}
+                  <div
+                    className={cn(
+                      'flex-shrink-0 w-[22px] h-[22px] rounded-[5px] flex items-center justify-center',
+                      getDifficultyColorClass(chart.difficulty_level)
+                    )}
+                  >
+                    <span className="text-[11px] font-bold text-[#000F33]">
+                      {chart.difficulty_level}
+                    </span>
+                  </div>
+
+                  {/* Score or No play */}
+                  <div className="flex-1 min-w-0">
+                    {hasScore ? (
+                      <span className="text-sm font-bold text-white tabular-nums">
+                        {chart.score!.toLocaleString()}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">No play</span>
+                    )}
+                  </div>
+
+                  {/* Right side: rank, flare, halo, source */}
+                  {hasScore && (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {chart.rank && (
+                        <span className="text-xs font-bold text-white">
+                          {chart.rank}
+                        </span>
+                      )}
+                      {flareType && <FlareChip type={flareType} className="h-4" />}
+                      {haloType && <HaloChip type={haloType} className="h-3.5" />}
+                      <SourceIcon source={chart.source_type} className="h-4 w-4" />
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Close Button */}
+        <Button
+          onClick={onClose}
+          className="w-full rounded-full"
+          variant="default"
+        >
+          Close
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}

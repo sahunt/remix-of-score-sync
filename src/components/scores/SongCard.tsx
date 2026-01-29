@@ -15,6 +15,7 @@ interface SongCardProps {
   eamuseId?: string | null;
   songId?: number | null;
   className?: string;
+  onClick?: () => void;
 }
 
 // Get halo bar background style
@@ -116,7 +117,8 @@ export function SongCard({
   halo,
   eamuseId,
   songId,
-  className
+  className,
+  onClick
 }: SongCardProps) {
   const { transformHalo } = use12MSMode();
   const flareType = flareNumberToType(flare);
@@ -145,7 +147,14 @@ export function SongCard({
   };
 
   return (
-    <div className={cn('w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative', className)}>
+    <div
+      className={cn(
+        'w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative',
+        onClick && 'cursor-pointer active:opacity-90 transition-opacity',
+        className
+      )}
+      onClick={onClick}
+    >
       {/* Top halo bar - use transformed halo for display */}
       <div className="h-1 w-full absolute top-0 left-0 rounded-t-sm" style={getHaloBarStyle(transformedHalo)} />
 
