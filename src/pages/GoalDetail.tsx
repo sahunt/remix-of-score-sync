@@ -40,26 +40,44 @@ export default function GoalDetail() {
     queryFn: async () => {
       if (!user?.id) return [];
       
-      const { data, error } = await supabase
-        .from('user_scores')
-        .select(`
-          id,
-          score,
-          timestamp,
-          playstyle,
-          difficulty_name,
-          difficulty_level,
-          rank,
-          flare,
-          halo,
-          musicdb(name, artist, eamuse_id, song_id)
-        `)
-        .eq('user_id', user.id)
-        .order('timestamp', { ascending: false, nullsFirst: false })
-        .limit(500);
+      // Supabase limits responses to 1000 rows per request
+      // Must paginate to fetch all scores (users can have 4500+ scores)
+      const PAGE_SIZE = 1000;
+      let allScores: ScoreWithSong[] = [];
+      let from = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      return (data || []) as ScoreWithSong[];
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('user_scores')
+          .select(`
+            id,
+            score,
+            timestamp,
+            playstyle,
+            difficulty_name,
+            difficulty_level,
+            rank,
+            flare,
+            halo,
+            musicdb(name, artist, eamuse_id, song_id)
+          `)
+          .eq('user_id', user.id)
+          .order('timestamp', { ascending: false, nullsFirst: false })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allScores = [...allScores, ...(data as ScoreWithSong[])];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      return allScores;
     },
     enabled: !!user?.id,
   });
