@@ -182,8 +182,10 @@ export default function Scores() {
               song_id
             )
           `)
-          .eq('user_id', user.id);
-          // No limit - fetch all user scores (could be 10k+ matching musicdb charts)
+          .eq('user_id', user.id)
+          // IMPORTANT: Supabase defaults to 1000 rows if no limit specified!
+          // Must set explicit high limit to fetch all scores (musicdb has 10k+ charts)
+          .limit(100000);
 
         if (error) throw error;
         
