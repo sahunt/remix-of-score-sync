@@ -251,6 +251,10 @@ function aggressiveSanitizeJson(content: string): string {
 // ============================================================================
 // Source Detection
 // ============================================================================
+// Source Type Detection
+// IMPORTANT: Sanbai exports can be EITHER CSV (comma-separated) OR TSV (tab-separated)!
+// DO NOT assume only TSV format - the user's actual exports use CSV format.
+// ============================================================================
 
 function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
   const trimmed = content.trim();
