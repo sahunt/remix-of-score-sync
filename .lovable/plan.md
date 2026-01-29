@@ -1,139 +1,158 @@
 
-
-# 12MS Mode: System-Wide Transformation Plan
+# Jacket Art Integration Plan
 
 ## Overview
-Extend the 12MS mode toggle to transform halo representations across the entire application, including goal progress calculations. When 12MS mode is ON, the transformation affects both visual display AND goal matching logic.
+Integrate ~1,300 song jacket images from the uploaded ZIP file (`ddr_jacket_art.zip`) into the application. Images are named by `eamuse_id` and will appear wherever song details are displayed, replacing the current placeholder music note icon.
 
-## Transformation Rules
+## Current State
 
-| Database Value | 12MS Display | Reverse (for goals) |
-|---------------|--------------|---------------------|
-| PFC | MFC | pfc target matches actual pfc/mfc |
-| FC | GFC | fc target matches actual fc/gfc/pfc/mfc |
-| GFC | PFC | gfc target matches actual gfc/pfc/mfc |
-| MFC | MFC | mfc target matches actual pfc/mfc |
-| LIFE4 | LIFE4 | unchanged |
-| Clear | Clear | unchanged |
-| Fail | Fail | unchanged |
+| Component | Current Behavior |
+|-----------|-----------------|
+| `SongCard` | Shows 38x38px placeholder with music note icon |
+| `Scores.tsx` | Fetches `musicdb(name, artist)` - missing `eamuse_id` |
+| `GoalDetail.tsx` | Fetches `musicdb(name, artist)` - missing `eamuse_id` |
+| Goal list components | Display SongCard without image data |
+| Storage | Only `score-uploads` bucket exists (private) |
 
-## Implementation Steps
+## Implementation Phases
 
-### 1. Enhance 12MS Mode Hook
-**File: `src/hooks/use12MSMode.tsx`**
+### Phase 1: Storage Infrastructure
+Create a public storage bucket `song-jackets` for serving images directly to users.
 
-Add new utility functions to the context:
-```typescript
-// For text labels (uppercase)
-transformHaloLabel: (label: string | null) => string | null
+**Database Migration:**
+- Create bucket `song-jackets` with `public = true`
+- Add RLS policy for public read access
+- Add RLS policy for service role uploads (for edge function)
 
-// Reverse transformation for goal matching
-// Returns what actual DB value would display as the target
-reverseTransformHalo: (target: string | null) => string | null
-```
+### Phase 2: ZIP Extraction Edge Function
+Create `extract-jackets` edge function that:
+1. Downloads ZIP from `score-uploads` bucket
+2. Uses JSZip to extract images in memory
+3. Uploads each image to `song-jackets` bucket
+4. Returns progress/error report
 
-**Reverse transformation logic:**
-- When goal target is "pfc" and 12MS mode is ON:
-- User expects scores that DISPLAY as PFC
-- Those are actual GFC scores in the database
-- So check if actual halo >= "gfc"
+**Key considerations:**
+- Use `EdgeRuntime.waitUntil()` for background processing (ZIP is large)
+- Return 202 Accepted immediately, process in background
+- Batch uploads to avoid timeouts
+- Log progress for debugging
 
-### 2. Update Goal Progress Calculation
-**File: `src/hooks/useGoalProgress.ts`**
+### Phase 3: Utility Function
+Create `src/lib/jacketUrl.ts` with helper to construct URLs:
+- Primary: Try `eamuse_id.png`
+- Fallback: Try `song_id.png` (for future uploads)
+- Returns `null` if neither available
 
-The `meetsTarget` function needs to accept a transformation function and apply it when checking lamp targets:
-- Pass `reverseTransformHalo` from 12MS context
-- When checking lamp target, reverse-transform the target value first
-- Then check if score meets that transformed target
+### Phase 4: Update SongCard Component
+Modify `SongCard.tsx`:
+- Add `eamuseId?: string | null` and `songId?: number | null` props
+- Render `<img>` with `onError` fallback chain
+- Keep existing ♪ placeholder as final fallback
+- Use `object-cover` to fill the 38x38px container
 
-Since hooks cannot call other hooks directly in utility functions, we'll modify the `useGoalProgress` hook to accept an optional transformation function parameter.
+### Phase 5: Update Data Queries
+Extend queries to include `eamuse_id` and `song_id` from `musicdb`:
 
-### 3. Update Visual Components
+**Files to update:**
+| File | Change |
+|------|--------|
+| `src/pages/Scores.tsx` | Add `eamuse_id, song_id` to musicdb select |
+| `src/pages/GoalDetail.tsx` | Add `eamuse_id, song_id` to musicdb select |
+| `src/hooks/useGoalProgress.ts` | Add `eamuse_id, song_id` to `ScoreWithSong` interface |
 
-#### StatsSummary + Scores.tsx
-**File: `src/pages/Scores.tsx`**
-- Use `transformHaloLabel` to transform stat column labels
-- "MFC" stays "MFC", "PFC" becomes "MFC" in display
+### Phase 6: Update SongCard Consumers
+Pass the new props to SongCard in all locations:
 
-#### LampSelector
-**File: `src/components/filters/LampSelector.tsx`**
-- Transform displayed lamp option labels using hook
-- Actual filter values remain unchanged (filters work on DB values)
+| File | Update |
+|------|--------|
+| `src/pages/Scores.tsx` | Pass `eamuseId`, `songId` to SongCard |
+| `src/components/goals/CompletedSongsList.tsx` | Pass `eamuseId`, `songId` |
+| `src/components/goals/RemainingSongsList.tsx` | Pass `eamuseId`, `songId` |
+| `src/components/goals/SuggestionsList.tsx` | Pass `eamuseId`, `songId` |
 
-#### TargetSelector
-**File: `src/components/goals/TargetSelector.tsx`**
-- Transform lamp option labels in goal creation UI
-- Selected value remains the "visual" target (will be reverse-transformed at evaluation time)
-
-#### HaloChip
-**File: `src/components/ui/HaloChip.tsx`**
-- Accept transformed type prop OR transform internally
-- When rendering "pfc" badge in 12MS mode, show "mfc" asset
-
-#### HaloSparkle
-**File: `src/components/ui/HaloSparkle.tsx`**
-- Same transformation as HaloChip for sparkle colors
-
-#### GoalBadge
-**File: `src/components/home/GoalBadge.tsx`**
-- Uses HaloChip, will inherit transformation
-
-#### GoalCard
-**File: `src/components/home/GoalCard.tsx`**
-- Transform badge type prop
-
-### 4. Update Goal Detail and Home Page
-**Files: `src/pages/GoalDetail.tsx`, `src/pages/Home.tsx`**
-- Pass transformation context to goal progress calculations
-
-## File Summary
-
-| File | Changes |
-|------|---------|
-| `src/hooks/use12MSMode.tsx` | Add `transformHaloLabel`, `reverseTransformHalo` |
-| `src/hooks/useGoalProgress.ts` | Accept transform function, apply to lamp targets |
-| `src/pages/Scores.tsx` | Transform stat labels |
-| `src/components/scores/SongCard.tsx` | Verify transformation works (already started) |
-| `src/components/filters/LampSelector.tsx` | Transform option labels |
-| `src/components/goals/TargetSelector.tsx` | Transform lamp option labels |
-| `src/components/ui/HaloChip.tsx` | Transform type prop |
-| `src/components/ui/HaloSparkle.tsx` | Transform type prop |
-| `src/components/home/GoalBadge.tsx` | Inherit from HaloChip |
-| `src/components/home/GoalCard.tsx` | Transform badge type |
-| `src/pages/GoalDetail.tsx` | Pass transform to useGoalProgress |
-| `src/pages/Home.tsx` | Pass transform to goal progress |
+---
 
 ## Technical Details
 
-### Hook Context Addition
-```typescript
-interface TwelveMSModeContextType {
-  is12MSMode: boolean;
-  toggle12MSMode: () => void;
-  transformHalo: (halo: string | null) => string | null;
-  transformHaloLabel: (label: string | null) => string | null;
-  reverseTransformHalo: (target: string | null) => string | null;
-  loading: boolean;
+### Edge Function: `extract-jackets`
+
+```text
+Input:  POST { "zip_path": "ddr_jacket_art.zip" }
+        
+Process:
+  1. Download ZIP from score-uploads bucket
+  2. Parse with JSZip
+  3. For each file:
+     - Extract filename (e.g., "lIlQ1DbODqi8Qqd0bQqP1dD9iPPiQd80.png")
+     - Upload to song-jackets/{filename}
+  4. Track success/failure
+
+Output: { 
+  "status": "complete",
+  "total": 1300, 
+  "uploaded": 1295, 
+  "failed": 5,
+  "errors": ["file.png: reason", ...]
 }
 ```
 
-### Goal Matching Flow (12MS ON, target="pfc")
-1. User sets goal for "PFC all 14s"
-2. Goal stored with target_value = "pfc"
-3. When calculating progress:
-   - `reverseTransformHalo("pfc")` returns `"gfc"`
-   - Check if each score's actual halo >= "gfc"
-   - GFC, PFC, MFC scores all count toward goal
-4. Display shows "PFC" goal with correct progress count
+### Image Fallback Chain in SongCard
 
-### Filter Behavior
-Filters will continue to operate on database values, but the UI labels will be transformed. This means:
-- User selects "PFC" filter (displays as "MFC" label in 12MS mode)
-- Filter actually filters for actual PFC records in DB
-- This maintains consistency: filter for what you SEE
+```text
+1. Try: /storage/v1/object/public/song-jackets/{eamuse_id}.png
+   |
+   v (onError)
+2. Try: /storage/v1/object/public/song-jackets/{song_id}.png  
+   |
+   v (onError)
+3. Show: ♪ placeholder icon
+```
 
-## Edge Cases
-- New users without 12MS preference: defaults to false
-- Scores with null halos: treated consistently (no transform applied)
-- MFC target in 12MS mode: matches actual PFC (since PFC displays as MFC)
+### Jacket URL Helper
 
+```typescript
+// src/lib/jacketUrl.ts
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
+export function getJacketUrl(eamuseId: string | null, songId?: number | null): string | null {
+  if (eamuseId) {
+    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${eamuseId}.png`;
+  }
+  if (songId) {
+    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${songId}.png`;
+  }
+  return null;
+}
+```
+
+---
+
+## Files Summary
+
+| File | Action |
+|------|--------|
+| Database migration | Create `song-jackets` bucket + policies |
+| `supabase/functions/extract-jackets/index.ts` | Create new edge function |
+| `supabase/config.toml` | Add function config |
+| `src/lib/jacketUrl.ts` | Create utility |
+| `src/components/scores/SongCard.tsx` | Add image support with fallback |
+| `src/hooks/useGoalProgress.ts` | Add `eamuse_id`, `song_id` to types |
+| `src/pages/Scores.tsx` | Update query + pass props |
+| `src/pages/GoalDetail.tsx` | Update query |
+| `src/components/goals/CompletedSongsList.tsx` | Pass image props |
+| `src/components/goals/RemainingSongsList.tsx` | Pass image props |
+| `src/components/goals/SuggestionsList.tsx` | Pass image props |
+
+---
+
+## Execution Order
+
+1. **Database migration** - Create `song-jackets` bucket
+2. **Create edge function** - Build and deploy `extract-jackets`
+3. **Upload ZIP** - Move `ddr_jacket_art.zip` to `score-uploads` bucket
+4. **Run extraction** - Call edge function to populate bucket
+5. **Create utility** - Add `jacketUrl.ts` helper
+6. **Update SongCard** - Add image rendering with fallback
+7. **Update queries** - Include `eamuse_id` in all data fetches
+8. **Update consumers** - Pass props to all SongCard usages
+9. **Test** - Verify images appear on Scores and Goal pages
