@@ -1,158 +1,142 @@
 
-# Jacket Art Integration Plan
+# Song Details Modal Implementation
 
 ## Overview
-Integrate ~1,300 song jacket images from the uploaded ZIP file (`ddr_jacket_art.zip`) into the application. Images are named by `eamuse_id` and will appear wherever song details are displayed, replacing the current placeholder music note icon.
+When a user taps a song card on the Scores page, a modal opens showing:
+- Song header (jacket, artist, title)
+- All SP difficulty charts from musicdb with user scores
+- Each row displays: difficulty chip, score, rank, flare, halo badge, and source icon
 
-## Current State
+## New Files
 
-| Component | Current Behavior |
-|-----------|-----------------|
-| `SongCard` | Shows 38x38px placeholder with music note icon |
-| `Scores.tsx` | Fetches `musicdb(name, artist)` - missing `eamuse_id` |
-| `GoalDetail.tsx` | Fetches `musicdb(name, artist)` - missing `eamuse_id` |
-| Goal list components | Display SongCard without image data |
-| Storage | Only `score-uploads` bucket exists (private) |
+### 1. Source Icons
+Save the uploaded SVGs to the assets folder:
+- `src/assets/sources/sanbai.svg`
+- `src/assets/sources/phaseii.svg`
 
-## Implementation Phases
+### 2. SourceIcon Component
+**File:** `src/components/ui/SourceIcon.tsx`
 
-### Phase 1: Storage Infrastructure
-Create a public storage bucket `song-jackets` for serving images directly to users.
+A small component displaying the data source icon (similar pattern to FlareChip/HaloChip):
+- Props: `source: 'sanbai' | 'phaseii' | string`
+- Size: 16x16px circular icon
+- Future sources can be added by adding new SVG files
 
-**Database Migration:**
-- Create bucket `song-jackets` with `public = true`
-- Add RLS policy for public read access
-- Add RLS policy for service role uploads (for edge function)
+### 3. Song Detail Modal
+**File:** `src/components/scores/SongDetailModal.tsx`
 
-### Phase 2: ZIP Extraction Edge Function
-Create `extract-jackets` edge function that:
-1. Downloads ZIP from `score-uploads` bucket
-2. Uses JSZip to extract images in memory
-3. Uploads each image to `song-jackets` bucket
-4. Returns progress/error report
+The main modal component with:
 
-**Key considerations:**
-- Use `EdgeRuntime.waitUntil()` for background processing (ZIP is large)
-- Return 202 Accepted immediately, process in background
-- Batch uploads to avoid timeouts
-- Log progress for debugging
+**Header Section:**
+- 80x80px song jacket (no difficulty shadow - just the song art)
+- Artist name (10px uppercase, muted color, letter-spacing)
+- Song title (16px bold white)
 
-### Phase 3: Utility Function
-Create `src/lib/jacketUrl.ts` with helper to construct URLs:
-- Primary: Try `eamuse_id.png`
-- Fallback: Try `song_id.png` (for future uploads)
-- Returns `null` if neither available
+**Difficulty Rows:**
+- Query all SP charts from musicdb for the song
+- Order: Challenge, Expert, Difficult, Basic, Beginner (descending by level)
+- Only show rows where `difficulty_level` is not null
+- Each row contains:
+  - Difficulty chip (14x14px, colored by level)
+  - Score (formatted) or "No play" text
+  - Rank badge (AAA, AA+, etc.)
+  - FlareChip (if score exists with flare)
+  - HaloChip (full badge, if score exists with halo)
+  - SourceIcon (if score exists)
 
-### Phase 4: Update SongCard Component
-Modify `SongCard.tsx`:
-- Add `eamuseId?: string | null` and `songId?: number | null` props
-- Render `<img>` with `onError` fallback chain
-- Keep existing ♪ placeholder as final fallback
-- Use `object-cover` to fill the 38x38px container
+**Footer:**
+- Close button (primary style, full-width, rounded-full)
 
-### Phase 5: Update Data Queries
-Extend queries to include `eamuse_id` and `song_id` from `musicdb`:
+## Modified Files
 
-**Files to update:**
-| File | Change |
-|------|--------|
-| `src/pages/Scores.tsx` | Add `eamuse_id, song_id` to musicdb select |
-| `src/pages/GoalDetail.tsx` | Add `eamuse_id, song_id` to musicdb select |
-| `src/hooks/useGoalProgress.ts` | Add `eamuse_id, song_id` to `ScoreWithSong` interface |
+### 1. SongCard Component
+**File:** `src/components/scores/SongCard.tsx`
 
-### Phase 6: Update SongCard Consumers
-Pass the new props to SongCard in all locations:
+Add:
+- `onClick?: () => void` prop
+- Wrapper with click handler and cursor-pointer styling
 
-| File | Update |
-|------|--------|
-| `src/pages/Scores.tsx` | Pass `eamuseId`, `songId` to SongCard |
-| `src/components/goals/CompletedSongsList.tsx` | Pass `eamuseId`, `songId` |
-| `src/components/goals/RemainingSongsList.tsx` | Pass `eamuseId`, `songId` |
-| `src/components/goals/SuggestionsList.tsx` | Pass `eamuseId`, `songId` |
+### 2. Scores Page
+**File:** `src/pages/Scores.tsx`
 
----
+Add:
+- State: `selectedSongId: number | null`
+- State: `isDetailModalOpen: boolean`
+- Click handler passed to SongCard
+- SongDetailModal rendered conditionally
+- Pass song_id and eamuse_id to modal for data fetching
 
-## Technical Details
+## Data Fetching Strategy
 
-### Edge Function: `extract-jackets`
+When modal opens with a `song_id`:
 
-```text
-Input:  POST { "zip_path": "ddr_jacket_art.zip" }
-        
-Process:
-  1. Download ZIP from score-uploads bucket
-  2. Parse with JSZip
-  3. For each file:
-     - Extract filename (e.g., "lIlQ1DbODqi8Qqd0bQqP1dD9iPPiQd80.png")
-     - Upload to song-jackets/{filename}
-  4. Track success/failure
-
-Output: { 
-  "status": "complete",
-  "total": 1300, 
-  "uploaded": 1295, 
-  "failed": 5,
-  "errors": ["file.png: reason", ...]
-}
-```
-
-### Image Fallback Chain in SongCard
-
-```text
-1. Try: /storage/v1/object/public/song-jackets/{eamuse_id}.png
-   |
-   v (onError)
-2. Try: /storage/v1/object/public/song-jackets/{song_id}.png  
-   |
-   v (onError)
-3. Show: ♪ placeholder icon
-```
-
-### Jacket URL Helper
-
+1. **Fetch all SP charts for this song:**
 ```typescript
-// src/lib/jacketUrl.ts
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-
-export function getJacketUrl(eamuseId: string | null, songId?: number | null): string | null {
-  if (eamuseId) {
-    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${eamuseId}.png`;
-  }
-  if (songId) {
-    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${songId}.png`;
-  }
-  return null;
-}
+const { data: charts } = await supabase
+  .from('musicdb')
+  .select('id, difficulty_name, difficulty_level, eamuse_id')
+  .eq('song_id', songId)
+  .eq('playstyle', 'SP')
+  .not('difficulty_level', 'is', null)
+  .order('difficulty_level', { ascending: false });
 ```
 
----
+2. **Fetch user's scores for these charts:**
+```typescript
+const chartIds = charts.map(c => c.id);
+const { data: scores } = await supabase
+  .from('user_scores')
+  .select('musicdb_id, score, rank, flare, halo, source_type')
+  .eq('user_id', userId)
+  .in('musicdb_id', chartIds);
+```
 
-## Files Summary
+3. **Merge data:** Map each chart to its score (or null if no play)
 
-| File | Action |
-|------|--------|
-| Database migration | Create `song-jackets` bucket + policies |
-| `supabase/functions/extract-jackets/index.ts` | Create new edge function |
-| `supabase/config.toml` | Add function config |
-| `src/lib/jacketUrl.ts` | Create utility |
-| `src/components/scores/SongCard.tsx` | Add image support with fallback |
-| `src/hooks/useGoalProgress.ts` | Add `eamuse_id`, `song_id` to types |
-| `src/pages/Scores.tsx` | Update query + pass props |
-| `src/pages/GoalDetail.tsx` | Update query |
-| `src/components/goals/CompletedSongsList.tsx` | Pass image props |
-| `src/components/goals/RemainingSongsList.tsx` | Pass image props |
-| `src/components/goals/SuggestionsList.tsx` | Pass image props |
+## Visual Layout
 
----
+```text
++------------------------------------------+
+|                                          |
+|    [  80x80 Jacket  ]                    |
+|                                          |
+|    ARTIST NAME                           |
+|    Song Title                            |
+|                                          |
++------------------------------------------+
+|                                          |
+|  [18] 999,870  AAA [IX] [PFC] [sanbai]   |
+|  [15] 998,420  AA+ [VI] [GFC] [phaseii]  |
+|  [10] No play                            |
+|  [5]  No play                            |
+|                                          |
+|           [    Close    ]                |
+|                                          |
++------------------------------------------+
+```
 
-## Execution Order
+## Styling Notes
 
-1. **Database migration** - Create `song-jackets` bucket
-2. **Create edge function** - Build and deploy `extract-jackets`
-3. **Upload ZIP** - Move `ddr_jacket_art.zip` to `score-uploads` bucket
-4. **Run extraction** - Call edge function to populate bucket
-5. **Create utility** - Add `jacketUrl.ts` helper
-6. **Update SongCard** - Add image rendering with fallback
-7. **Update queries** - Include `eamuse_id` in all data fetches
-8. **Update consumers** - Pass props to all SongCard usages
-9. **Test** - Verify images appear on Scores and Goal pages
+- Modal uses Dialog component from existing UI library
+- Background follows visual hierarchy: modal content uses `#3B3F51`
+- Inner content uses standard padding patterns (px-6, py-4)
+- Difficulty chips reuse existing `getDifficultyColorClass` helper from SongCard
+- 12MS Mode transformations apply to halo display (using existing HaloChip)
+- Rows use flexbox with `justify-between` for even spacing
+
+## Edge Cases
+
+| Case | Behavior |
+|------|----------|
+| No CHALLENGE chart exists | Row not shown |
+| User hasn't played a difficulty | Show "No play" (muted text) |
+| No rank/flare/halo/source | Hide that element |
+| Unknown source_type | Hide source icon |
+| Song has no SP charts | Show empty state message |
+
+## Technical Considerations
+
+- Modal receives `song_id`, `eamuse_id`, `songName`, and `artist` from clicked card
+- Jacket uses same fallback chain as SongCard (eamuse_id → song_id → placeholder)
+- Loading state shown while fetching chart/score data
+- The `source_type` field already exists in `user_scores` table
