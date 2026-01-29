@@ -1174,8 +1174,7 @@ async function processSanbai(
   const eamuseMatchMap = await batchMatchByEamuseId(supabase, allEamuseIds);
   console.log(`Eamuse ID match map has ${eamuseMatchMap.size} entries`);
   
-  // PHASE 3: Identify rows that need fallback matching and batch fetch those
-  const needsFallback: ParsedRow[] = [];
+  // PHASE 3: Match by eamuse_id ONLY - no fallback to names
   const matchedRows: Array<{ row: ParsedRow; match: MusicdbMatch }> = [];
   
   for (const row of parsedRows) {
@@ -1185,61 +1184,16 @@ async function processSanbai(
     if (match) {
       matchedRows.push({ row, match });
     } else {
-      needsFallback.push(row);
+      // No eamuse_id match - add to unmatched (no fallback to name matching)
+      unmatchedSongs.push({ 
+        name: row.songName, 
+        difficulty: `${row.diffInfo.playstyle} ${row.diffInfo.difficulty_name} ${row.rating}`, 
+        reason: 'eamuse_id_not_found' 
+      });
     }
   }
   
-  console.log(`Direct eamuse matches: ${matchedRows.length}, need fallback: ${needsFallback.length}`);
-  
-  // PHASE 4: Batch fallback matching by name+chart
-  const discoveries: Array<{ songId: number; eamuseId: string }> = [];
-  
-  if (needsFallback.length > 0) {
-    const fallbackEntries = needsFallback
-      .filter(row => row.songName && row.rating > 0)
-      .map(row => ({
-        songName: row.songName,
-        playstyle: row.diffInfo.playstyle,
-        difficultyName: row.diffInfo.difficulty_name,
-        difficultyLevel: row.rating,
-      }));
-    
-    const nameMatchMap = await batchMatchByNameAndChart(supabase, fallbackEntries);
-    console.log(`Name match map has ${nameMatchMap.size} entries`);
-    
-    for (const row of needsFallback) {
-      if (!row.songName || row.rating <= 0) {
-        unmatchedSongs.push({ 
-          name: row.songName, 
-          difficulty: `${row.diffInfo.playstyle} ${row.diffInfo.difficulty_name} ${row.rating}`, 
-          reason: 'no_match' 
-        });
-        continue;
-      }
-      
-      // Use normalized name for lookup (matching how batchMatchByNameAndChart stores keys)
-      const normalizedName = normalizeSanbaiName(row.songName).toLowerCase();
-      const nameKey = `${normalizedName}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}|${row.rating}`;
-      const match = nameMatchMap.get(nameKey);
-      
-      if (match) {
-        matchedRows.push({ row, match });
-        // Queue for discovery
-        discoveries.push({ songId: match.song_id, eamuseId: row.eamuseId });
-      } else {
-        unmatchedSongs.push({ 
-          name: row.songName, 
-          difficulty: `${row.diffInfo.playstyle} ${row.diffInfo.difficulty_name} ${row.rating}`, 
-          reason: 'no_match' 
-        });
-      }
-    }
-  }
-  
-  // PHASE 5: Batch discover eamuse_ids for fallback matches
-  if (discoveries.length > 0) {
-    await batchDiscoverEamuseIds(supabase, discoveries);
-  }
+  console.log(`Eamuse ID matches: ${matchedRows.length}, unmatched: ${unmatchedSongs.length}`);
   
   // PHASE 6: Build score records
   for (const { row, match } of matchedRows) {
