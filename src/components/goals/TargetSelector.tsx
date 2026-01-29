@@ -168,10 +168,10 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
             </div>
           )}
 
-          {/* Flare Options */}
+          {/* Flare Options - filter out 'none' since it doesn't make sense as a goal target */}
           {selectedCategory === 'flare' && (
             <div className="flex flex-wrap gap-2">
-              {FLARE_OPTIONS.map((option) => (
+              {FLARE_OPTIONS.filter(o => o.flareType !== 'none').map((option) => (
                 <button
                   key={option.value}
                   onClick={() => handleSelect('flare', String(option.value))}
@@ -182,7 +182,7 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
                       : "bg-[#4A4E61] hover:bg-[#555a6e]"
                   )}
                 >
-                  <FlareChip type={option.flareType} className="h-5" />
+                  <FlareChip type={option.flareType as any} className="h-5" />
                 </button>
               ))}
             </div>
