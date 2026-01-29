@@ -4,14 +4,16 @@ import { Icon } from '@/components/ui/Icon';
 import { Input } from '@/components/ui/input';
 
 export type SortOption = 'name' | 'difficulty' | 'score' | 'flare' | 'rank';
+export type SortDirection = 'asc' | 'desc';
 
 interface SearchSortBarProps {
   onSearchChange: (query: string) => void;
   sortBy: SortOption;
-  onSortChange: (sort: SortOption) => void;
+  sortDirection: SortDirection;
+  onSortChange: (sort: SortOption, direction: SortDirection) => void;
 }
 
-export function SearchSortBar({ onSearchChange, sortBy, onSortChange }: SearchSortBarProps) {
+export function SearchSortBar({ onSearchChange, sortBy, sortDirection, onSortChange }: SearchSortBarProps) {
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOpen, setSortOpen] = useState(false);
@@ -35,6 +37,17 @@ export function SearchSortBar({ onSearchChange, sortBy, onSortChange }: SearchSo
   const handleSearchInput = (value: string) => {
     setSearchQuery(value);
     onSearchChange(value);
+  };
+
+  const handleSortClick = (option: SortOption) => {
+    if (sortBy === option) {
+      // Toggle direction if same option clicked
+      onSortChange(option, sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New option, start ascending
+      onSortChange(option, 'asc');
+    }
+    setSortOpen(false);
   };
 
   return (
@@ -90,18 +103,21 @@ export function SearchSortBar({ onSearchChange, sortBy, onSortChange }: SearchSo
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => {
-                        onSortChange(option.value);
-                        setSortOpen(false);
-                      }}
+                      onClick={() => handleSortClick(option.value)}
                       className={cn(
-                        'w-full px-3 py-2 text-left text-sm transition-colors',
+                        'w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between',
                         sortBy === option.value
                           ? 'bg-primary text-primary-foreground'
                           : 'text-foreground hover:bg-secondary'
                       )}
                     >
-                      {option.label}
+                      <span>{option.label}</span>
+                      {sortBy === option.value && (
+                        <Icon 
+                          name={sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'} 
+                          size={16} 
+                        />
+                      )}
                     </button>
                   ))}
                 </div>
