@@ -10,7 +10,6 @@ import flareVI from '@/assets/flares/flare_vi.png';
 import flareVII from '@/assets/flares/flare_vii.png';
 import flareVIII from '@/assets/flares/flare_viii.png';
 import flareIX from '@/assets/flares/flare_ix.png';
-import flareEmpty from '@/assets/flares/flare_empty.svg';
 
 export type FlareType = 'ex' | 'i' | 'ii' | 'iii' | 'iv' | 'v' | 'vi' | 'vii' | 'viii' | 'ix';
 
@@ -28,22 +27,11 @@ const flareAssets: Record<FlareType, string> = {
 };
 
 interface FlareChipProps {
-  type: FlareType | null;
+  type: FlareType;
   className?: string;
 }
 
 export function FlareChip({ type, className }: FlareChipProps) {
-  // Show empty placeholder when no flare type
-  if (!type) {
-    return (
-      <img
-        src={flareEmpty}
-        alt="No flare"
-        className={cn('h-4 w-auto', className)}
-      />
-    );
-  }
-
   const asset = flareAssets[type];
 
   return (

@@ -262,7 +262,7 @@ export function SongDetailModal({
                           {chart.rank}
                         </span>
                       )}
-                      <FlareChip type={flareType} className="h-4" />
+                      {flareType && <FlareChip type={flareType} className="h-4" />}
                       {haloType && <HaloChip type={haloType} className="h-3.5" />}
                       <SourceIcon source={chart.source_type} className="h-4 w-4" />
                     </div>
