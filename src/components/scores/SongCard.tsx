@@ -210,7 +210,7 @@ export function SongCard({
                 {flareType && <FlareChip type={flareType} className="h-5" />}
               </>
             ) : (
-              <span className="text-sm text-muted-foreground">No score</span>
+              <span className="text-sm text-muted-foreground">No play</span>
             )}
           </div>
         </div>

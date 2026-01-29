@@ -32,6 +32,32 @@ interface ScoreWithSong {
   } | null;
 }
 
+interface MusicDbChart {
+  id: number;
+  song_id: number;
+  name: string | null;
+  artist: string | null;
+  eamuse_id: string | null;
+  difficulty_name: string | null;
+  difficulty_level: number | null;
+  playstyle: string | null;
+}
+
+interface DisplaySong {
+  id: string;
+  score: number | null;
+  rank: string | null;
+  flare: number | null;
+  halo: string | null;
+  difficulty_level: number | null;
+  difficulty_name: string | null;
+  name: string | null;
+  artist: string | null;
+  eamuse_id: string | null;
+  song_id: number | null;
+  isNoPlay: boolean;
+}
+
 interface SelectedSong {
   songId: number;
   songName: string;
@@ -130,6 +156,7 @@ export default function Scores() {
   const { user } = useAuth();
   const { transformHaloLabel } = use12MSMode();
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
+  const [musicDbCharts, setMusicDbCharts] = useState<MusicDbChart[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Persistent filter state
@@ -150,13 +177,13 @@ export default function Scores() {
   const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  const handleSongClick = useCallback((song: ScoreWithSong) => {
-    if (!song.musicdb?.song_id) return;
+  const handleSongClick = useCallback((song: DisplaySong) => {
+    if (!song.song_id) return;
     setSelectedSong({
-      songId: song.musicdb.song_id,
-      songName: song.musicdb.name ?? 'Unknown Song',
-      artist: song.musicdb.artist,
-      eamuseId: song.musicdb.eamuse_id,
+      songId: song.song_id,
+      songName: song.name ?? 'Unknown Song',
+      artist: song.artist,
+      eamuseId: song.eamuse_id,
     });
     setIsDetailModalOpen(true);
   }, []);
@@ -231,32 +258,35 @@ export default function Scores() {
     fetchAllScores();
   }, [user]);
 
-  // Fetch total chart count from musicdb for the current level filter
+  // Fetch musicdb charts for the current level (to show "no play" songs)
   const [musicDbTotal, setMusicDbTotal] = useState<number>(0);
   
   useEffect(() => {
-    const fetchMusicDbTotal = async () => {
+    const fetchMusicDbCharts = async () => {
+      // Only fetch when a level is selected (to avoid fetching all 10k+ charts)
+      if (selectedLevel === null) {
+        setMusicDbCharts([]);
+        setMusicDbTotal(0);
+        return;
+      }
+      
       try {
-        let query = supabase
+        const { data, count, error } = await supabase
           .from('musicdb')
-          .select('*', { count: 'exact', head: true })
+          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle', { count: 'exact' })
           .not('difficulty_level', 'is', null)
-          .eq('playstyle', 'SP');
+          .eq('playstyle', 'SP')
+          .eq('difficulty_level', selectedLevel);
         
-        // Apply level filter if selected
-        if (selectedLevel !== null) {
-          query = query.eq('difficulty_level', selectedLevel);
-        }
-        
-        const { count, error } = await query;
         if (error) throw error;
+        setMusicDbCharts(data ?? []);
         setMusicDbTotal(count ?? 0);
       } catch (err) {
-        console.error('Error fetching musicdb count:', err);
+        console.error('Error fetching musicdb charts:', err);
       }
     };
     
-    fetchMusicDbTotal();
+    fetchMusicDbCharts();
   }, [selectedLevel]);
 
   // Calculate stats based on fully filtered scores (including active filters)
@@ -320,37 +350,97 @@ export default function Scores() {
     ];
   }, [scores, selectedLevel, activeFilters, transformHaloLabel, musicDbTotal]);
 
-  // Filter and sort scores for display
-  const displayedScores = useMemo(() => {
-    let result = [...scores];
+  // Filter and sort scores for display, including "no play" songs from musicdb
+  const displayedScores = useMemo((): DisplaySong[] => {
+    // Convert user scores to DisplaySong format
+    let playedSongs: DisplaySong[] = scores.map(s => ({
+      id: s.id,
+      score: s.score,
+      rank: s.rank,
+      flare: s.flare,
+      halo: s.halo,
+      difficulty_level: s.difficulty_level,
+      difficulty_name: s.difficulty_name,
+      name: s.musicdb?.name ?? null,
+      artist: s.musicdb?.artist ?? null,
+      eamuse_id: s.musicdb?.eamuse_id ?? null,
+      song_id: s.musicdb?.song_id ?? null,
+      isNoPlay: false,
+    }));
 
     // Filter by difficulty level
     if (selectedLevel !== null) {
-      result = result.filter(s => s.difficulty_level === selectedLevel);
+      playedSongs = playedSongs.filter(s => s.difficulty_level === selectedLevel);
     }
 
-    // Apply active filters
+    // Apply active filters to played songs
     if (activeFilters.length > 0) {
-      result = result.filter(score => {
-        // Each active filter must match (AND between filters)
+      playedSongs = playedSongs.filter(song => {
+        // Convert DisplaySong back to ScoreWithSong format for matchesRule
+        const scoreForMatching: ScoreWithSong = {
+          id: song.id,
+          score: song.score,
+          timestamp: null,
+          playstyle: 'SP',
+          difficulty_name: song.difficulty_name,
+          difficulty_level: song.difficulty_level,
+          rank: song.rank,
+          flare: song.flare,
+          halo: song.halo,
+          musicdb: {
+            name: song.name,
+            artist: song.artist,
+            eamuse_id: song.eamuse_id,
+            song_id: song.song_id,
+          },
+        };
+        
         return activeFilters.every(af => {
           const filter = af.filter;
-          // Apply match mode within each filter
           if (filter.matchMode === 'all') {
-            return filter.rules.every(rule => matchesRule(score, rule));
+            return filter.rules.every(rule => matchesRule(scoreForMatching, rule));
           } else {
-            return filter.rules.some(rule => matchesRule(score, rule));
+            return filter.rules.some(rule => matchesRule(scoreForMatching, rule));
           }
         });
       });
     }
 
+    // Build set of played chart keys to identify unplayed songs
+    const playedChartKeys = new Set(
+      playedSongs.map(s => `${s.song_id}|${s.difficulty_name}`)
+    );
+
+    // Add "no play" songs from musicdb (only when a level is selected)
+    let noPlaySongs: DisplaySong[] = [];
+    if (selectedLevel !== null && musicDbCharts.length > 0) {
+      noPlaySongs = musicDbCharts
+        .filter(chart => !playedChartKeys.has(`${chart.song_id}|${chart.difficulty_name}`))
+        .map(chart => ({
+          id: `noplay-${chart.id}`,
+          score: null,
+          rank: null,
+          flare: null,
+          halo: null,
+          difficulty_level: chart.difficulty_level,
+          difficulty_name: chart.difficulty_name,
+          name: chart.name,
+          artist: chart.artist,
+          eamuse_id: chart.eamuse_id,
+          song_id: chart.song_id,
+          isNoPlay: true,
+        }));
+    }
+
+    // Combine played and unplayed songs
+    let result = [...playedSongs, ...noPlaySongs];
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(s => {
-        const name = s.musicdb?.name?.toLowerCase() ?? '';
-        const artist = s.musicdb?.artist?.toLowerCase() ?? '';
+        const name = s.name?.toLowerCase() ?? '';
+        const artist = s.artist?.toLowerCase() ?? '';
         return name.includes(query) || artist.includes(query);
       });
     }
@@ -360,22 +450,31 @@ export default function Scores() {
       let comparison = 0;
       switch (sortBy) {
         case 'name':
-          comparison = (a.musicdb?.name ?? '').localeCompare(b.musicdb?.name ?? '');
+          comparison = (a.name ?? '').localeCompare(b.name ?? '');
           break;
         case 'difficulty':
           comparison = (a.difficulty_level ?? 0) - (b.difficulty_level ?? 0);
           break;
         case 'score':
-          comparison = (a.score ?? 0) - (b.score ?? 0);
+          // No play songs (null score) should sort last for descending, first for ascending
+          if (a.score === null && b.score === null) comparison = 0;
+          else if (a.score === null) comparison = -1;
+          else if (b.score === null) comparison = 1;
+          else comparison = a.score - b.score;
           break;
         case 'flare':
-          comparison = (a.flare ?? 0) - (b.flare ?? 0);
+          if (a.flare === null && b.flare === null) comparison = 0;
+          else if (a.flare === null) comparison = -1;
+          else if (b.flare === null) comparison = 1;
+          else comparison = a.flare - b.flare;
           break;
         case 'rank':
           const rankOrder: Record<string, number> = { 
             'AAA': 5, 'AA+': 4, 'AA': 3, 'AA-': 2, 'A+': 1, 'A': 0 
           };
-          comparison = (rankOrder[a.rank ?? ''] ?? -1) - (rankOrder[b.rank ?? ''] ?? -1);
+          const aRank = a.rank ? (rankOrder[a.rank] ?? -1) : -2;
+          const bRank = b.rank ? (rankOrder[b.rank] ?? -1) : -2;
+          comparison = aRank - bRank;
           break;
         default:
           comparison = 0;
@@ -384,7 +483,7 @@ export default function Scores() {
     });
 
     return result;
-  }, [scores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection]);
+  }, [scores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection, musicDbCharts]);
 
   const handleRemoveFilter = useCallback((id: string) => {
     setActiveFilters(prev => prev.filter(f => f.id !== id));
@@ -454,14 +553,14 @@ export default function Scores() {
             {displayedScores.map((s) => (
               <SongCard
                 key={s.id}
-                name={s.musicdb?.name ?? 'Unknown Song'}
+                name={s.name ?? 'Unknown Song'}
                 difficultyLevel={s.difficulty_level}
                 score={s.score}
                 rank={s.rank}
                 flare={s.flare}
                 halo={s.halo}
-                eamuseId={s.musicdb?.eamuse_id}
-                songId={s.musicdb?.song_id}
+                eamuseId={s.eamuse_id}
+                songId={s.song_id}
                 onClick={() => handleSongClick(s)}
               />
             ))}
