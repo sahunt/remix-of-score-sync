@@ -202,12 +202,12 @@ export function SongCard({
 
           {/* Score row with flare badge */}
           <div className="flex items-center gap-1">
-            {score !== null ? (
+              {score !== null ? (
               <>
                 <span className="text-[16px] font-bold text-white leading-normal tabular-nums">
                   {score.toLocaleString()}
                 </span>
-                {flareType && <FlareChip type={flareType} className="h-5" />}
+                <FlareChip type={flareType} className="h-5" />
               </>
             ) : (
               <span className="text-sm text-muted-foreground">No score</span>
