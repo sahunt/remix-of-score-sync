@@ -7,10 +7,10 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
  */
 export function getJacketUrl(eamuseId: string | null | undefined, songId?: number | null): string | null {
   if (eamuseId) {
-    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${eamuseId}.png`;
+    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${eamuseId}.jpg`;
   }
   if (songId) {
-    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${songId}.png`;
+    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${songId}.jpg`;
   }
   return null;
 }
@@ -21,7 +21,7 @@ export function getJacketUrl(eamuseId: string | null | undefined, songId?: numbe
  */
 export function getJacketFallbackUrl(songId: number | null | undefined): string | null {
   if (songId) {
-    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${songId}.png`;
+    return `${SUPABASE_URL}/storage/v1/object/public/song-jackets/${songId}.jpg`;
   }
   return null;
 }
