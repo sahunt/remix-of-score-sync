@@ -259,16 +259,32 @@ export default function Scores() {
     fetchMusicDbTotal();
   }, [selectedLevel]);
 
-  // Calculate stats based on filtered scores
+  // Calculate stats based on fully filtered scores (including active filters)
   const stats = useMemo(() => {
-    let filteredForStats = scores;
+    // Use displayedScores which already has level + active filters applied
+    // But we need to compute stats before search query is applied
+    let filteredForStats = [...scores];
     
-    // Apply difficulty filter for stats
+    // Apply difficulty filter
     if (selectedLevel !== null) {
       filteredForStats = filteredForStats.filter(s => s.difficulty_level === selectedLevel);
     }
+    
+    // Apply active filters (same logic as displayedScores)
+    if (activeFilters.length > 0) {
+      filteredForStats = filteredForStats.filter(score => {
+        return activeFilters.every(af => {
+          const filter = af.filter;
+          if (filter.matchMode === 'all') {
+            return filter.rules.every(rule => matchesRule(score, rule));
+          } else {
+            return filter.rules.some(rule => matchesRule(score, rule));
+          }
+        });
+      });
+    }
 
-    const songsWithScores = filteredForStats.length;
+    const total = filteredForStats.length;
     const mfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'mfc').length;
     const pfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'pfc').length;
     const aaa = filteredForStats.filter(s => s.rank?.toUpperCase() === 'AAA').length;
@@ -287,11 +303,14 @@ export default function Scores() {
     
     const fail = filteredForStats.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
     
-    // No play = total charts in musicdb - songs with scores
-    const noPlay = Math.max(0, musicDbTotal - songsWithScores);
+    // No play is only meaningful when no active filters are applied
+    // When filters are active, we're showing a subset so "no play" doesn't make sense
+    const noPlay = activeFilters.length === 0 
+      ? Math.max(0, musicDbTotal - total) 
+      : 0;
 
     return [
-      { label: 'Total', value: musicDbTotal },
+      { label: 'Total', value: total },
       { label: transformHaloLabel('MFC') || 'MFC', value: mfc },
       { label: transformHaloLabel('PFC') || 'PFC', value: pfc },
       { label: 'AAA', value: aaa },
@@ -299,7 +318,7 @@ export default function Scores() {
       { label: 'Fail', value: fail },
       { label: '', value: noPlay, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
     ];
-  }, [scores, selectedLevel, transformHaloLabel, musicDbTotal]);
+  }, [scores, selectedLevel, activeFilters, transformHaloLabel, musicDbTotal]);
 
   // Filter and sort scores for display
   const displayedScores = useMemo(() => {
