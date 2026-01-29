@@ -161,6 +161,8 @@ export default function Scores() {
       if (!user) return;
 
       try {
+        // Fetch scores without the timestamp ordering issue
+        // Using a higher limit to ensure we get all scores
         const { data, error } = await supabase
           .from('user_scores')
           .select(`
@@ -181,11 +183,19 @@ export default function Scores() {
             )
           `)
           .eq('user_id', user.id)
-          .order('timestamp', { ascending: false, nullsFirst: false })
-          .limit(500);
+          .limit(10000); // Increase limit to get all scores
 
         if (error) throw error;
-        setScores(data ?? []);
+        
+        // Sort client-side by timestamp (recent first), with nulls last
+        const sortedData = [...(data ?? [])].sort((a, b) => {
+          if (!a.timestamp && !b.timestamp) return 0;
+          if (!a.timestamp) return 1;
+          if (!b.timestamp) return -1;
+          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        });
+        
+        setScores(sortedData);
       } catch (err) {
         console.error('Error fetching scores:', err);
       } finally {
