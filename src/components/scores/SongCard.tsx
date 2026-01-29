@@ -156,17 +156,17 @@ export function SongCard({
           {/* Solid color shadow element - positioned behind */}
           {difficultyLevel && (
             <div 
-              className="absolute top-[3px] left-[3px] w-full h-full rounded-[2px]"
+              className="absolute top-[3px] left-[3px] w-full h-full rounded-[3px]"
               style={{ backgroundColor: getDifficultyHexColor(difficultyLevel) }}
             />
           )}
           {/* Song jacket image or placeholder - on top */}
           {showPlaceholder ? (
-            <div className="relative w-full h-full rounded-[2px] overflow-hidden bg-muted flex items-center justify-center border-2 border-[#3B3F51]">
+            <div className="relative w-full h-full rounded-[3px] bg-muted flex items-center justify-center border-2 border-[#3B3F51] overflow-hidden">
               <span className="text-muted-foreground text-xs">♪</span>
             </div>
           ) : (
-            <div className="relative w-full h-full rounded-[2px] overflow-hidden border-2 border-[#3B3F51]">
+            <div className="relative w-full h-full rounded-[3px] border-2 border-[#3B3F51] overflow-hidden">
               <img
                 src={currentImgUrl!}
                 alt=""
