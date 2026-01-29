@@ -145,6 +145,12 @@ export default function UploadPage() {
     setCurrentUploadId(null);
 
     try {
+      // Ensure we have a fresh session before uploading
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Please log in again to upload files');
+      }
+
       // 1. Upload raw file to storage
       const filePath = `${user.id}/${Date.now()}_${file.name}`;
       const { error: storageError } = await supabase.storage
