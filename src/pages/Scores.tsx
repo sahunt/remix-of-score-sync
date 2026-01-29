@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { use12MSMode } from '@/hooks/use12MSMode';
+import { useScoresFilterState } from '@/hooks/useScoresFilterState';
 import { supabase } from '@/integrations/supabase/client';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
 import { FiltersSection, type ActiveFilter } from '@/components/scores/FiltersSection';
 import { StatsSummary } from '@/components/scores/StatsSummary';
-import { SearchSortBar, type SortOption, type SortDirection } from '@/components/scores/SearchSortBar';
+import { SearchSortBar } from '@/components/scores/SearchSortBar';
 import { SongCard } from '@/components/scores/SongCard';
 import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Icon } from '@/components/ui/Icon';
@@ -131,12 +132,19 @@ export default function Scores() {
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // State for filters and search
-  const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
-  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  // Persistent filter state
+  const {
+    selectedLevel,
+    activeFilters,
+    searchQuery,
+    sortBy,
+    sortDirection,
+    levelsFromFilters,
+    setSelectedLevel,
+    setActiveFilters,
+    setSearchQuery,
+    setSortOptions,
+  } = useScoresFilterState();
   
   // Modal state
   const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
@@ -383,6 +391,7 @@ export default function Scores() {
         <DifficultyGrid
           selectedLevel={selectedLevel}
           onSelectLevel={setSelectedLevel}
+          highlightedLevels={levelsFromFilters}
         />
 
         {/* Filters section */}
@@ -401,10 +410,7 @@ export default function Scores() {
           onSearchChange={setSearchQuery}
           sortBy={sortBy}
           sortDirection={sortDirection}
-          onSortChange={(sort, direction) => {
-            setSortBy(sort);
-            setSortDirection(direction);
-          }}
+          onSortChange={setSortOptions}
         />
 
         {/* Song list */}
