@@ -162,16 +162,18 @@ export function SongCard({
           )}
           {/* Song jacket image or placeholder - on top */}
           {showPlaceholder ? (
-            <div className="relative w-full h-full rounded-[2px] bg-muted flex items-center justify-center border-2 border-[#3B3F51]">
+            <div className="relative w-full h-full rounded-[2px] overflow-hidden bg-muted flex items-center justify-center border-2 border-[#3B3F51]">
               <span className="text-muted-foreground text-xs">♪</span>
             </div>
           ) : (
-            <img
-              src={currentImgUrl!}
-              alt=""
-              className="relative w-full h-full object-cover rounded-[2px] border-2 border-[#3B3F51]"
-              onError={handleImageError}
-            />
+            <div className="relative w-full h-full rounded-[2px] overflow-hidden border-2 border-[#3B3F51]">
+              <img
+                src={currentImgUrl!}
+                alt=""
+                className="w-full h-full object-cover"
+                onError={handleImageError}
+              />
+            </div>
           )}
         </div>
 
