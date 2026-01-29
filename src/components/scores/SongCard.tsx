@@ -67,6 +67,16 @@ function getDifficultyColorClass(level: number | null): string {
   return 'bg-[hsl(var(--difficulty-challenge))]';
 }
 
+// Get difficulty hex color for drop shadow
+function getDifficultyHexColor(level: number | null): string {
+  if (!level) return 'transparent';
+  if (level <= 5) return '#C5D0E6'; // Beginner
+  if (level <= 8) return '#F2C94C'; // Basic
+  if (level <= 12) return '#F26C6C'; // Difficult
+  if (level <= 16) return '#7BDCB5'; // Expert
+  return '#A78BDA'; // Challenge
+}
+
 // Convert numeric flare (1-9, 10 for EX) to FlareType
 function flareNumberToType(flare: number | null): FlareType | null {
   if (flare === null || flare === undefined) return null;
@@ -141,18 +151,23 @@ export function SongCard({
 
       {/* Main content - pt-[14px] pb-2 to center content in dark area below the 4px bar */}
       <div className="flex items-center gap-3 px-3 pt-[14px] pb-2">
-        {/* Album art with difficulty bar */}
-        <div className="w-[38px] h-[38px] rounded-lg bg-muted relative overflow-hidden flex-shrink-0 flex items-center justify-center">
-          {/* Difficulty color bar on left edge */}
-          {difficultyLevel && <div className={cn('absolute left-0 top-0 w-[4px] h-full z-10', difficultyClass)} />}
+        {/* Album art with difficulty drop shadow */}
+        <div 
+          className="w-[38px] h-[38px] flex-shrink-0 flex items-center justify-center"
+          style={{ 
+            filter: difficultyLevel ? `drop-shadow(1px 1px 0 ${getDifficultyHexColor(difficultyLevel)})` : undefined 
+          }}
+        >
           {/* Song jacket image or placeholder */}
           {showPlaceholder ? (
-            <span className="text-muted-foreground text-xs">♪</span>
+            <div className="w-full h-full rounded-[2px] bg-muted flex items-center justify-center border border-[#3B3F51]">
+              <span className="text-muted-foreground text-xs">♪</span>
+            </div>
           ) : (
             <img
               src={currentImgUrl!}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover rounded-[2px] border border-[#3B3F51]"
               onError={handleImageError}
             />
           )}
