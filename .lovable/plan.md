@@ -1,142 +1,83 @@
 
-# Song Details Modal Implementation
+
+# Plan: Update eamuse_id Mappings from CSV
 
 ## Overview
-When a user taps a song card on the Scores page, a modal opens showing:
-- Song header (jacket, artist, title)
-- All SP difficulty charts from musicdb with user scores
-- Each row displays: difficulty chip, score, rank, flare, halo badge, and source icon
+Create an edge function to update the `eamuse_id` column in the `musicdb` table using the provided CSV file. The function will use `song_id` as the source of truth and update the corresponding `eamuse_id` values, then verify there are no duplicate eamuse_ids.
 
-## New Files
+## Current State
+- **musicdb table**: 1,395 unique songs, but only 1,301 unique eamuse_ids
+- **Existing duplicates**: ~20+ eamuse_ids are currently mapped to multiple song_ids
+- **CSV file**: Contains 1,323 song_id to eamuse_id mappings (header + 1,323 data rows)
 
-### 1. Source Icons
-Save the uploaded SVGs to the assets folder:
-- `src/assets/sources/sanbai.svg`
-- `src/assets/sources/phaseii.svg`
+## Implementation Steps
 
-### 2. SourceIcon Component
-**File:** `src/components/ui/SourceIcon.tsx`
+### Step 1: Create Update Edge Function
+Create a new edge function `update-eamuse-ids` that:
+1. Accepts CSV content (directly, via URL, or storage path)
+2. Parses the CSV to extract song_id → eamuse_id mappings
+3. Updates all charts in musicdb matching each song_id with the new eamuse_id
+4. Returns a summary of updates made
 
-A small component displaying the data source icon (similar pattern to FlareChip/HaloChip):
-- Props: `source: 'sanbai' | 'phaseii' | string`
-- Size: 16x16px circular icon
-- Future sources can be added by adding new SVG files
+### Step 2: Deploy and Execute
+1. Add function configuration to `supabase/config.toml`
+2. Deploy the edge function
+3. Call the function with the CSV content to perform the update
 
-### 3. Song Detail Modal
-**File:** `src/components/scores/SongDetailModal.tsx`
+### Step 3: Verify Data Integrity
+After the update, run verification queries to:
+1. Confirm all mappings were applied
+2. Check for any remaining duplicate eamuse_ids
+3. Report any song_ids not found in musicdb
 
-The main modal component with:
+---
 
-**Header Section:**
-- 80x80px song jacket (no difficulty shadow - just the song art)
-- Artist name (10px uppercase, muted color, letter-spacing)
-- Song title (16px bold white)
+## Technical Details
 
-**Difficulty Rows:**
-- Query all SP charts from musicdb for the song
-- Order: Challenge, Expert, Difficult, Basic, Beginner (descending by level)
-- Only show rows where `difficulty_level` is not null
-- Each row contains:
-  - Difficulty chip (14x14px, colored by level)
-  - Score (formatted) or "No play" text
-  - Rank badge (AAA, AA+, etc.)
-  - FlareChip (if score exists with flare)
-  - HaloChip (full badge, if score exists with halo)
-  - SourceIcon (if score exists)
+### New Edge Function: `supabase/functions/update-eamuse-ids/index.ts`
 
-**Footer:**
-- Close button (primary style, full-width, rounded-full)
-
-## Modified Files
-
-### 1. SongCard Component
-**File:** `src/components/scores/SongCard.tsx`
-
-Add:
-- `onClick?: () => void` prop
-- Wrapper with click handler and cursor-pointer styling
-
-### 2. Scores Page
-**File:** `src/pages/Scores.tsx`
-
-Add:
-- State: `selectedSongId: number | null`
-- State: `isDetailModalOpen: boolean`
-- Click handler passed to SongCard
-- SongDetailModal rendered conditionally
-- Pass song_id and eamuse_id to modal for data fetching
-
-## Data Fetching Strategy
-
-When modal opens with a `song_id`:
-
-1. **Fetch all SP charts for this song:**
 ```typescript
-const { data: charts } = await supabase
-  .from('musicdb')
-  .select('id, difficulty_name, difficulty_level, eamuse_id')
-  .eq('song_id', songId)
-  .eq('playstyle', 'SP')
-  .not('difficulty_level', 'is', null)
-  .order('difficulty_level', { ascending: false });
+// Key logic:
+// 1. Parse CSV: song_id,EncodedID
+// 2. For each row, update musicdb SET eamuse_id = EncodedID WHERE song_id = song_id
+// 3. Batch updates (100 at a time) for efficiency
+// 4. Return summary with success/failure counts
 ```
 
-2. **Fetch user's scores for these charts:**
-```typescript
-const chartIds = charts.map(c => c.id);
-const { data: scores } = await supabase
-  .from('user_scores')
-  .select('musicdb_id, score, rank, flare, halo, source_type')
-  .eq('user_id', userId)
-  .in('musicdb_id', chartIds);
+**Function capabilities:**
+- Accept CSV via `content`, `url`, or `storage_path` parameter
+- Parse CSV format (header: `song_id,EncodedID`)
+- Batch UPDATE operations to musicdb table
+- Include duplicate check logic after updates
+- Return detailed summary including:
+  - Songs updated
+  - Songs not found
+  - Duplicate eamuse_ids detected
+
+### Config Update: `supabase/config.toml`
+Add the new function entry:
+```toml
+[functions.update-eamuse-ids]
+verify_jwt = false
 ```
 
-3. **Merge data:** Map each chart to its score (or null if no play)
-
-## Visual Layout
-
-```text
-+------------------------------------------+
-|                                          |
-|    [  80x80 Jacket  ]                    |
-|                                          |
-|    ARTIST NAME                           |
-|    Song Title                            |
-|                                          |
-+------------------------------------------+
-|                                          |
-|  [18] 999,870  AAA [IX] [PFC] [sanbai]   |
-|  [15] 998,420  AA+ [VI] [GFC] [phaseii]  |
-|  [10] No play                            |
-|  [5]  No play                            |
-|                                          |
-|           [    Close    ]                |
-|                                          |
-+------------------------------------------+
+### Post-Update Verification
+The function will include a final check that queries:
+```sql
+SELECT eamuse_id, COUNT(DISTINCT song_id) as song_count
+FROM musicdb 
+WHERE eamuse_id IS NOT NULL
+GROUP BY eamuse_id 
+HAVING COUNT(DISTINCT song_id) > 1
 ```
 
-## Styling Notes
+If duplicates are found, they will be reported in the response.
 
-- Modal uses Dialog component from existing UI library
-- Background follows visual hierarchy: modal content uses `#3B3F51`
-- Inner content uses standard padding patterns (px-6, py-4)
-- Difficulty chips reuse existing `getDifficultyColorClass` helper from SongCard
-- 12MS Mode transformations apply to halo display (using existing HaloChip)
-- Rows use flexbox with `justify-between` for even spacing
+---
 
-## Edge Cases
+## Expected Outcome
+- All 1,323 song_ids from the CSV will have their eamuse_id updated in musicdb
+- Each eamuse_id will be unique to a single song_id (no duplicates)
+- The function will report any songs in the CSV that don't exist in musicdb
+- Song jackets will correctly load using the updated eamuse_ids
 
-| Case | Behavior |
-|------|----------|
-| No CHALLENGE chart exists | Row not shown |
-| User hasn't played a difficulty | Show "No play" (muted text) |
-| No rank/flare/halo/source | Hide that element |
-| Unknown source_type | Hide source icon |
-| Song has no SP charts | Show empty state message |
-
-## Technical Considerations
-
-- Modal receives `song_id`, `eamuse_id`, `songName`, and `artist` from clicked card
-- Jacket uses same fallback chain as SongCard (eamuse_id → song_id → placeholder)
-- Loading state shown while fetching chart/score data
-- The `source_type` field already exists in `user_scores` table
