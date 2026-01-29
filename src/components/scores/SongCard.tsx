@@ -155,19 +155,19 @@ export function SongCard({
         <div 
           className="w-[38px] h-[38px] flex-shrink-0 flex items-center justify-center"
           style={{ 
-            filter: difficultyLevel ? `drop-shadow(1px 1px 0 ${getDifficultyHexColor(difficultyLevel)})` : undefined 
+            filter: difficultyLevel ? `drop-shadow(2px 2px 0 ${getDifficultyHexColor(difficultyLevel)})` : undefined 
           }}
         >
           {/* Song jacket image or placeholder */}
           {showPlaceholder ? (
-            <div className="w-full h-full rounded-[2px] bg-muted flex items-center justify-center border border-[#3B3F51]">
+            <div className="w-full h-full rounded-[2px] bg-muted flex items-center justify-center border-2 border-[#3B3F51]">
               <span className="text-muted-foreground text-xs">♪</span>
             </div>
           ) : (
             <img
               src={currentImgUrl!}
               alt=""
-              className="w-full h-full object-cover rounded-[2px] border border-[#3B3F51]"
+              className="w-full h-full object-cover rounded-[2px] border-2 border-[#3B3F51]"
               onError={handleImageError}
             />
           )}
