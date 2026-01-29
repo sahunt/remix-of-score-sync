@@ -376,15 +376,36 @@ function parseSanbaiFlare(flare: string | null | undefined): number | null {
 /**
  * Normalize song names for matching:
  * - Convert escaped double-quotes "" to single "
+ * - Normalize full-width vs ASCII punctuation (！→!, ？→?, ×→x, etc.)
  * - Remove spaces before parentheses: "Name (Suffix)" -> "Name(Suffix)"
+ * - Normalize whitespace around punctuation marks
  * - Trim whitespace
  */
 function normalizeSanbaiName(name: string): string {
   return name
     // Convert escaped double-quotes to single quotes
     .replace(/""/g, '"')
-    // Remove space before opening parenthesis
-    .replace(/\s+\(/g, '(')
+    // Normalize full-width punctuation to ASCII equivalents
+    .replace(/！/g, '!')       // Full-width exclamation mark
+    .replace(/？/g, '?')       // Full-width question mark
+    .replace(/：/g, ':')       // Full-width colon
+    .replace(/；/g, ';')       // Full-width semicolon
+    .replace(/（/g, '(')       // Full-width left parenthesis
+    .replace(/）/g, ')')       // Full-width right parenthesis
+    .replace(/［/g, '[')       // Full-width left bracket
+    .replace(/］/g, ']')       // Full-width right bracket
+    .replace(/＊/g, '*')       // Full-width asterisk
+    .replace(/×/g, 'x')        // Multiplication sign to x
+    .replace(/☆/g, '☆')       // Keep star as-is (both use same char)
+    // Normalize spaces around punctuation - remove spaces before/after certain chars
+    .replace(/\s+\(/g, '(')    // Remove space before (
+    .replace(/\(\s+/g, '(')    // Remove space after (
+    .replace(/\s+\)/g, ')')    // Remove space before )
+    .replace(/\s+!/g, '!')     // Remove space before !
+    .replace(/!\s+/g, '!')     // Remove space after ! (in sequences like "!! ")
+    .replace(/\s+\?/g, '?')    // Remove space before ?
+    // Collapse multiple spaces into one
+    .replace(/\s+/g, ' ')
     // Trim
     .trim();
 }
