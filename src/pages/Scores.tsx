@@ -157,40 +157,54 @@ export default function Scores() {
   }, []);
 
   useEffect(() => {
-    const fetchScores = async () => {
+    const fetchAllScores = async () => {
       if (!user) return;
 
       try {
-        // Fetch scores without the timestamp ordering issue
-        // Using a higher limit to ensure we get all scores
-        const { data, error } = await supabase
-          .from('user_scores')
-          .select(`
-            id,
-            score,
-            timestamp,
-            playstyle,
-            difficulty_name,
-            difficulty_level,
-            rank,
-            flare,
-            halo,
-            musicdb (
-              name,
-              artist,
-              eamuse_id,
-              song_id
-            )
-          `)
-          .eq('user_id', user.id)
-          // IMPORTANT: Supabase defaults to 1000 rows if no limit specified!
-          // Must set explicit high limit to fetch all scores (musicdb has 10k+ charts)
-          .limit(100000);
+        // Supabase limits responses to 1000 rows per request
+        // Must paginate to fetch all scores (users can have 4500+ scores)
+        const PAGE_SIZE = 1000;
+        let allScores: ScoreWithSong[] = [];
+        let from = 0;
+        let hasMore = true;
 
-        if (error) throw error;
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('user_scores')
+            .select(`
+              id,
+              score,
+              timestamp,
+              playstyle,
+              difficulty_name,
+              difficulty_level,
+              rank,
+              flare,
+              halo,
+              musicdb (
+                name,
+                artist,
+                eamuse_id,
+                song_id
+              )
+            `)
+            .eq('user_id', user.id)
+            .range(from, from + PAGE_SIZE - 1);
+
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            allScores = [...allScores, ...data];
+            from += PAGE_SIZE;
+            // If we got fewer than PAGE_SIZE, we've fetched everything
+            hasMore = data.length === PAGE_SIZE;
+          } else {
+            hasMore = false;
+          }
+        }
         
         // Sort client-side by timestamp (recent first), with nulls last
-        const sortedData = [...(data ?? [])].sort((a, b) => {
+        const sortedData = allScores.sort((a, b) => {
           if (!a.timestamp && !b.timestamp) return 0;
           if (!a.timestamp) return 1;
           if (!b.timestamp) return -1;
@@ -205,7 +219,7 @@ export default function Scores() {
       }
     };
 
-    fetchScores();
+    fetchAllScores();
   }, [user]);
 
   // Calculate stats based on filtered scores

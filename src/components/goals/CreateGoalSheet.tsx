@@ -101,16 +101,33 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
 
   useEffect(() => {
     if (open && user) {
-      const fetchScores = async () => {
-        const { data } = await supabase
-          .from('user_scores')
-          .select('score, difficulty_level, difficulty_name, rank, halo, flare, musicdb(name, artist)')
-          .eq('user_id', user.id);
-        if (data) {
-          setUserScores(data);
+      const fetchAllScores = async () => {
+        // Supabase limits responses to 1000 rows per request
+        // Must paginate to fetch all scores (users can have 4500+ scores)
+        const PAGE_SIZE = 1000;
+        let allScores: typeof userScores = [];
+        let from = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data } = await supabase
+            .from('user_scores')
+            .select('score, difficulty_level, difficulty_name, rank, halo, flare, musicdb(name, artist)')
+            .eq('user_id', user.id)
+            .range(from, from + PAGE_SIZE - 1);
+          
+          if (data && data.length > 0) {
+            allScores = [...allScores, ...data];
+            from += PAGE_SIZE;
+            hasMore = data.length === PAGE_SIZE;
+          } else {
+            hasMore = false;
+          }
         }
+        
+        setUserScores(allScores);
       };
-      fetchScores();
+      fetchAllScores();
     }
   }, [open, user]);
 
