@@ -112,8 +112,9 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
         while (hasMore) {
           const { data } = await supabase
             .from('user_scores')
-            .select('score, difficulty_level, difficulty_name, rank, halo, flare, musicdb(name, artist)')
+            .select('score, difficulty_level, difficulty_name, rank, halo, flare, playstyle, musicdb(name, artist)')
             .eq('user_id', user.id)
+            .eq('playstyle', 'SP')
             .range(from, from + PAGE_SIZE - 1);
           
           if (data && data.length > 0) {
