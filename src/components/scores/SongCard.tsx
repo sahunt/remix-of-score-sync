@@ -152,21 +152,21 @@ export function SongCard({
       {/* Main content - pt-[14px] pb-2 to center content in dark area below the 4px bar */}
       <div className="flex items-center gap-3 px-3 pt-[14px] pb-2">
         {/* Album art with difficulty shadow element */}
-        <div className="relative w-[38px] h-[38px] flex-shrink-0">
-          {/* Solid color shadow element - positioned behind, smaller and offset to create L-shape */}
+        <div className="relative w-[41px] h-[41px] flex-shrink-0">
+          {/* Solid color shadow element - positioned behind, extends past image */}
           {difficultyLevel && (
             <div 
-              className="absolute top-[6px] left-[6px] w-[32px] h-[32px] rounded-[3px]"
+              className="absolute top-[5px] left-[5px] w-[36px] h-[36px] rounded-[3px]"
               style={{ backgroundColor: getDifficultyHexColor(difficultyLevel) }}
             />
           )}
-          {/* Song jacket image or placeholder - on top */}
+          {/* Song jacket image or placeholder - on top at origin */}
           {showPlaceholder ? (
-            <div className="relative w-full h-full rounded-[3px] bg-muted flex items-center justify-center border-2 border-[#3B3F51] overflow-hidden">
+            <div className="absolute top-0 left-0 w-[38px] h-[38px] rounded-[3px] bg-muted flex items-center justify-center border-2 border-[#3B3F51] overflow-hidden">
               <span className="text-muted-foreground text-xs">♪</span>
             </div>
           ) : (
-            <div className="relative w-full h-full rounded-[3px] border-2 border-[#3B3F51] overflow-hidden">
+            <div className="absolute top-0 left-0 w-[38px] h-[38px] rounded-[3px] border-2 border-[#3B3F51] overflow-hidden">
               <img
                 src={currentImgUrl!}
                 alt=""
