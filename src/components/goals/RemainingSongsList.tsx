@@ -53,6 +53,8 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
                   rank={song.rank}
                   flare={song.flare}
                   halo={song.halo}
+                  eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
+                  songId={song.musicdb?.song_id ?? song.song_id}
                 />
                 {proximityLabel && (
                   <div className="absolute bottom-2 left-3 right-3">
@@ -82,6 +84,8 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
                 rank={null}
                 flare={null}
                 halo={null}
+                eamuseId={song.eamuse_id}
+                songId={song.song_id}
               />
             </div>
           ))}

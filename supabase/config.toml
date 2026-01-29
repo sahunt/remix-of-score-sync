@@ -2,3 +2,6 @@ project_id = "cjosawtrjeyqavdsffuy"
 
 [functions.import-musicdb]
 verify_jwt = false
+
+[functions.extract-jackets]
+verify_jwt = false
