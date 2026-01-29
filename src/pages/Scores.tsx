@@ -6,7 +6,7 @@ import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
 import { FiltersSection, type ActiveFilter } from '@/components/scores/FiltersSection';
 import { StatsSummary } from '@/components/scores/StatsSummary';
-import { SearchSortBar, type SortOption } from '@/components/scores/SearchSortBar';
+import { SearchSortBar, type SortOption, type SortDirection } from '@/components/scores/SearchSortBar';
 import { SongCard } from '@/components/scores/SongCard';
 import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Icon } from '@/components/ui/Icon';
@@ -136,6 +136,7 @@ export default function Scores() {
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
   // Modal state
   const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
@@ -329,27 +330,34 @@ export default function Scores() {
 
     // Sort
     result.sort((a, b) => {
+      let comparison = 0;
       switch (sortBy) {
         case 'name':
-          return (a.musicdb?.name ?? '').localeCompare(b.musicdb?.name ?? '');
+          comparison = (a.musicdb?.name ?? '').localeCompare(b.musicdb?.name ?? '');
+          break;
         case 'difficulty':
-          return (b.difficulty_level ?? 0) - (a.difficulty_level ?? 0);
+          comparison = (a.difficulty_level ?? 0) - (b.difficulty_level ?? 0);
+          break;
         case 'score':
-          return (b.score ?? 0) - (a.score ?? 0);
+          comparison = (a.score ?? 0) - (b.score ?? 0);
+          break;
         case 'flare':
-          return (b.flare ?? 0) - (a.flare ?? 0);
+          comparison = (a.flare ?? 0) - (b.flare ?? 0);
+          break;
         case 'rank':
           const rankOrder: Record<string, number> = { 
             'AAA': 5, 'AA+': 4, 'AA': 3, 'AA-': 2, 'A+': 1, 'A': 0 
           };
-          return (rankOrder[b.rank ?? ''] ?? -1) - (rankOrder[a.rank ?? ''] ?? -1);
+          comparison = (rankOrder[a.rank ?? ''] ?? -1) - (rankOrder[b.rank ?? ''] ?? -1);
+          break;
         default:
-          return 0;
+          comparison = 0;
       }
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [scores, selectedLevel, activeFilters, searchQuery, sortBy]);
+  }, [scores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection]);
 
   const handleRemoveFilter = useCallback((id: string) => {
     setActiveFilters(prev => prev.filter(f => f.id !== id));
@@ -392,7 +400,11 @@ export default function Scores() {
         <SearchSortBar
           onSearchChange={setSearchQuery}
           sortBy={sortBy}
-          onSortChange={setSortBy}
+          sortDirection={sortDirection}
+          onSortChange={(sort, direction) => {
+            setSortBy(sort);
+            setSortDirection(direction);
+          }}
         />
 
         {/* Song list */}
