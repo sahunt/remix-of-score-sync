@@ -182,8 +182,8 @@ export default function Scores() {
               song_id
             )
           `)
-          .eq('user_id', user.id)
-          .limit(10000); // Increase limit to get all scores
+          .eq('user_id', user.id);
+          // No limit - fetch all user scores (could be 10k+ matching musicdb charts)
 
         if (error) throw error;
         
