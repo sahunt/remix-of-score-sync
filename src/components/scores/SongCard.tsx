@@ -156,7 +156,7 @@ export function SongCard({
           {/* Solid color shadow element - positioned behind */}
           {difficultyLevel && (
             <div 
-              className="absolute top-[4px] left-[4px] w-full h-full rounded-[2px]"
+              className="absolute top-[3px] left-[3px] w-full h-full rounded-[2px]"
               style={{ backgroundColor: getDifficultyHexColor(difficultyLevel) }}
             />
           )}
