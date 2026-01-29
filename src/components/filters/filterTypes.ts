@@ -140,7 +140,8 @@ export const DIFFICULTY_OPTIONS = [
 ];
 
 // Flare options (using FlareChip graphics)
-export const FLARE_OPTIONS: { value: number; flareType: FlareType }[] = [
+// Value 0 represents "no flare" (null flare in the database)
+export const FLARE_OPTIONS: { value: number; flareType: FlareType | 'none' }[] = [
   { value: 10, flareType: 'ex' },
   { value: 9, flareType: 'ix' },
   { value: 8, flareType: 'viii' },
@@ -151,6 +152,7 @@ export const FLARE_OPTIONS: { value: number; flareType: FlareType }[] = [
   { value: 3, flareType: 'iii' },
   { value: 2, flareType: 'ii' },
   { value: 1, flareType: 'i' },
+  { value: 0, flareType: 'none' }, // No flare
 ];
 
 // Helper to generate a unique rule ID

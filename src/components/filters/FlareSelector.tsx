@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { FlareChip } from '@/components/ui/FlareChip';
+import { Icon } from '@/components/ui/Icon';
 import { FLARE_OPTIONS } from './filterTypes';
 
 interface FlareSelectorProps {
@@ -13,6 +14,9 @@ export function FlareSelector({
   onChange,
   isBetween = false,
 }: FlareSelectorProps) {
+  // Filter out the "none" option for range selection (doesn't make sense for between)
+  const rangeOptions = FLARE_OPTIONS.filter(o => o.flareType !== 'none');
+  
   if (isBetween) {
     // For "is between", value is a tuple [min, max]
     const [min, max] = Array.isArray(value) && value.length === 2 ? value : [1, 10];
@@ -22,7 +26,7 @@ export function FlareSelector({
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">From</p>
           <div className="flex flex-wrap gap-2">
-            {FLARE_OPTIONS.map((option) => (
+            {rangeOptions.map((option) => (
               <button
                 key={`from-${option.value}`}
                 onClick={() => onChange([option.value, max])}
@@ -33,7 +37,7 @@ export function FlareSelector({
                     : 'bg-[#3B3F51] hover:bg-[#454A5E]'
                 )}
               >
-                <FlareChip type={option.flareType} className="h-5" />
+                <FlareChip type={option.flareType as any} className="h-5" />
               </button>
             ))}
           </div>
@@ -41,7 +45,7 @@ export function FlareSelector({
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">To</p>
           <div className="flex flex-wrap gap-2">
-            {FLARE_OPTIONS.map((option) => (
+            {rangeOptions.map((option) => (
               <button
                 key={`to-${option.value}`}
                 onClick={() => onChange([min, option.value])}
@@ -52,7 +56,7 @@ export function FlareSelector({
                     : 'bg-[#3B3F51] hover:bg-[#454A5E]'
                 )}
               >
-                <FlareChip type={option.flareType} className="h-5" />
+                <FlareChip type={option.flareType as any} className="h-5" />
               </button>
             ))}
           </div>
@@ -77,6 +81,7 @@ export function FlareSelector({
     <div className="flex flex-wrap gap-2">
       {FLARE_OPTIONS.map((option) => {
         const isSelected = selectedFlares.includes(option.value);
+        const isNoFlare = option.flareType === 'none';
         
         return (
           <button
@@ -89,7 +94,13 @@ export function FlareSelector({
                 : 'bg-[#3B3F51] hover:bg-[#454A5E]'
             )}
           >
-            <FlareChip type={option.flareType} className="h-5" />
+            {isNoFlare ? (
+              <div className="h-5 px-2 flex items-center justify-center">
+                <Icon name="do_not_disturb_on_total_silence" size={20} className="text-muted-foreground" />
+              </div>
+            ) : (
+              <FlareChip type={option.flareType as any} className="h-5" />
+            )}
           </button>
         );
       })}

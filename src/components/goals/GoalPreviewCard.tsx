@@ -33,8 +33,8 @@ function getFlareType(targetValue: string | null | undefined): FlareType | null 
     if (targetValue.toUpperCase() === 'EX') return 'ex';
     return null;
   }
-  const flareOption = FLARE_OPTIONS.find(f => f.value === numValue);
-  return flareOption?.flareType ?? null;
+  const flareOption = FLARE_OPTIONS.find(f => f.value === numValue && f.flareType !== 'none');
+  return flareOption ? (flareOption.flareType as FlareType) : null;
 }
 
 // Get progress bar color based on target

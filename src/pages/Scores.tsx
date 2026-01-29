@@ -90,22 +90,38 @@ function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
   };
 
   // Handle numeric multi-select (level, flare)
+  // Special case: value 0 for flare means "no flare" (null in DB)
   const compareNumericMulti = (actual: number | null, target: number | number[] | [number, number]): boolean => {
-    if (actual === null) return false;
-    
     // Range comparison for "is_between"
     if (operator === 'is_between' && Array.isArray(target) && target.length === 2) {
+      if (actual === null) return false;
       const [min, max] = target as [number, number];
       return actual >= Math.min(min, max) && actual <= Math.max(min, max);
     }
     
     // Multi-select array
     if (Array.isArray(target)) {
+      // Check if "no flare" (0) is in the target array
+      const includesNoFlare = target.includes(0);
+      
+      if (actual === null) {
+        // null flare matches "no flare" (0) selection
+        const matches = includesNoFlare;
+        return operator === 'is' ? matches : !matches;
+      }
+      
       const matches = target.includes(actual);
       return operator === 'is' ? matches : !matches;
     }
     
-    // Single value
+    // Single value - treat 0 as "no flare"
+    if (target === 0) {
+      const matches = actual === null;
+      return operator === 'is' ? matches : !matches;
+    }
+    
+    if (actual === null) return false;
+    
     switch (operator) {
       case 'is': return actual === target;
       case 'is_not': return actual !== target;
