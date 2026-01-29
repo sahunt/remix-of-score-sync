@@ -435,15 +435,15 @@ async function batchMatchBySongId(
   return matchMap;
 }
 
-// Batch match by sanbai_song_id for performance
-async function batchMatchBySanbaiId(
+// Batch match by eamuse_id for performance
+async function batchMatchByEamuseId(
   supabase: any,
-  sanbaiSongIds: string[]
-): Promise<Map<string, MusicdbMatch & { sanbai_song_id: string }>> {
-  if (sanbaiSongIds.length === 0) return new Map();
+  eamuseIds: string[]
+): Promise<Map<string, MusicdbMatch & { eamuse_id: string }>> {
+  if (eamuseIds.length === 0) return new Map();
   
-  const uniqueIds = [...new Set(sanbaiSongIds)];
-  console.log(`batchMatchBySanbaiId: attempting to match ${uniqueIds.length} unique sanbai IDs`);
+  const uniqueIds = [...new Set(eamuseIds)];
+  console.log(`batchMatchByEamuseId: attempting to match ${uniqueIds.length} unique eamuse IDs`);
   
   const BATCH_SIZE = 100;
   const allData: any[] = [];
@@ -453,11 +453,11 @@ async function batchMatchBySanbaiId(
     
     const { data, error } = await supabase
       .from('musicdb')
-      .select('id, song_id, chart_id, sanbai_song_id, playstyle, difficulty_name, name, difficulty_level')
-      .in('sanbai_song_id', batchIds);
+      .select('id, song_id, chart_id, eamuse_id, playstyle, difficulty_name, name, difficulty_level')
+      .in('eamuse_id', batchIds);
     
     if (error) {
-      console.error(`batchMatchBySanbaiId batch ${i / BATCH_SIZE} error:`, error);
+      console.error(`batchMatchByEamuseId batch ${i / BATCH_SIZE} error:`, error);
       continue;
     }
     
@@ -466,17 +466,17 @@ async function batchMatchBySanbaiId(
     }
   }
   
-  console.log(`batchMatchBySanbaiId: got ${allData.length} chart matches`);
+  console.log(`batchMatchByEamuseId: got ${allData.length} chart matches`);
   
-  // Create lookup map: sanbai_song_id|playstyle|difficulty_name -> match
-  const matchMap = new Map<string, MusicdbMatch & { sanbai_song_id: string }>();
+  // Create lookup map: eamuse_id|playstyle|difficulty_name -> match
+  const matchMap = new Map<string, MusicdbMatch & { eamuse_id: string }>();
   for (const row of allData) {
-    const key = `${row.sanbai_song_id}|${row.playstyle}|${row.difficulty_name}`;
+    const key = `${row.eamuse_id}|${row.playstyle}|${row.difficulty_name}`;
     matchMap.set(key, { 
       id: row.id, 
       song_id: row.song_id, 
       chart_id: row.chart_id,
-      sanbai_song_id: row.sanbai_song_id 
+      eamuse_id: row.eamuse_id 
     });
   }
   
@@ -550,19 +550,19 @@ async function batchMatchByNameAndChart(
   return matchMap;
 }
 
-// Batch update sanbai_song_id discoveries
-async function batchDiscoverSanbaiSongIds(
+// Batch update eamuse_id discoveries
+async function batchDiscoverEamuseIds(
   supabase: any,
-  discoveries: Array<{ songId: number; sanbaiSongId: string }>
+  discoveries: Array<{ songId: number; eamuseId: string }>
 ): Promise<void> {
   if (discoveries.length === 0) return;
   
-  console.log(`Batch discovering ${discoveries.length} sanbai_song_id mappings...`);
+  console.log(`Batch discovering ${discoveries.length} eamuse_id mappings...`);
   
   // Group by song_id to avoid duplicate updates
   const uniqueDiscoveries = new Map<number, string>();
   for (const d of discoveries) {
-    uniqueDiscoveries.set(d.songId, d.sanbaiSongId);
+    uniqueDiscoveries.set(d.songId, d.eamuseId);
   }
   
   // Do updates in parallel batches
@@ -572,21 +572,21 @@ async function batchDiscoverSanbaiSongIds(
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
     const batch = updates.slice(i, i + BATCH_SIZE);
     await Promise.all(
-      batch.map(async ([songId, sanbaiSongId]) => {
+      batch.map(async ([songId, eamuseId]) => {
         const { error } = await supabase
           .from('musicdb')
-          .update({ sanbai_song_id: sanbaiSongId })
+          .update({ eamuse_id: eamuseId })
           .eq('song_id', songId)
-          .is('sanbai_song_id', null); // Only update if not already set
+          .is('eamuse_id', null); // Only update if not already set
         
         if (error) {
-          console.error(`discoverSanbaiSongId error for ${songId}:`, error);
+          console.error(`discoverEamuseId error for ${songId}:`, error);
         }
       })
     );
   }
   
-  console.log(`Discovered ${uniqueDiscoveries.size} sanbai_song_id mappings`);
+  console.log(`Discovered ${uniqueDiscoveries.size} eamuse_id mappings`);
 }
 
 // matchByNameAndChart and discoverSanbaiSongId replaced by batch versions above
@@ -1095,7 +1095,7 @@ async function processSanbai(
   
   // PHASE 1: Parse all rows and collect data for batch matching
   interface ParsedRow {
-    sanbaiSongId: string;
+    eamuseId: string;
     songName: string;
     diffInfo: { playstyle: string; difficulty_name: string };
     rating: number;
@@ -1106,7 +1106,7 @@ async function processSanbai(
   }
   
   const parsedRows: ParsedRow[] = [];
-  const allSanbaiIds: string[] = [];
+  const allEamuseIds: string[] = [];
   
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -1133,23 +1133,23 @@ async function processSanbai(
       continue;
     }
     
-    parsedRows.push({ sanbaiSongId, songName, diffInfo, rating, scoreVal, grade, lamp, flare });
-    allSanbaiIds.push(sanbaiSongId);
+    parsedRows.push({ eamuseId: sanbaiSongId, songName, diffInfo, rating, scoreVal, grade, lamp, flare });
+    allEamuseIds.push(sanbaiSongId);
   }
   
   console.log(`Parsed ${parsedRows.length} valid rows, ${unmatchedSongs.length} invalid`);
   
-  // PHASE 2: Batch fetch all charts with known sanbai_song_ids
-  const sanbaiMatchMap = await batchMatchBySanbaiId(supabase, allSanbaiIds);
-  console.log(`Sanbai ID match map has ${sanbaiMatchMap.size} entries`);
+  // PHASE 2: Batch fetch all charts with known eamuse_ids
+  const eamuseMatchMap = await batchMatchByEamuseId(supabase, allEamuseIds);
+  console.log(`Eamuse ID match map has ${eamuseMatchMap.size} entries`);
   
   // PHASE 3: Identify rows that need fallback matching and batch fetch those
   const needsFallback: ParsedRow[] = [];
   const matchedRows: Array<{ row: ParsedRow; match: MusicdbMatch }> = [];
   
   for (const row of parsedRows) {
-    const key = `${row.sanbaiSongId}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}`;
-    const match = sanbaiMatchMap.get(key);
+    const key = `${row.eamuseId}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}`;
+    const match = eamuseMatchMap.get(key);
     
     if (match) {
       matchedRows.push({ row, match });
@@ -1158,10 +1158,10 @@ async function processSanbai(
     }
   }
   
-  console.log(`Direct sanbai matches: ${matchedRows.length}, need fallback: ${needsFallback.length}`);
+  console.log(`Direct eamuse matches: ${matchedRows.length}, need fallback: ${needsFallback.length}`);
   
   // PHASE 4: Batch fallback matching by name+chart
-  const discoveries: Array<{ songId: number; sanbaiSongId: string }> = [];
+  const discoveries: Array<{ songId: number; eamuseId: string }> = [];
   
   if (needsFallback.length > 0) {
     const fallbackEntries = needsFallback
@@ -1194,7 +1194,7 @@ async function processSanbai(
       if (match) {
         matchedRows.push({ row, match });
         // Queue for discovery
-        discoveries.push({ songId: match.song_id, sanbaiSongId: row.sanbaiSongId });
+        discoveries.push({ songId: match.song_id, eamuseId: row.eamuseId });
       } else {
         unmatchedSongs.push({ 
           name: row.songName, 
@@ -1205,9 +1205,9 @@ async function processSanbai(
     }
   }
   
-  // PHASE 5: Batch discover sanbai_song_ids for fallback matches
+  // PHASE 5: Batch discover eamuse_ids for fallback matches
   if (discoveries.length > 0) {
-    await batchDiscoverSanbaiSongIds(supabase, discoveries);
+    await batchDiscoverEamuseIds(supabase, discoveries);
   }
   
   // PHASE 6: Build score records

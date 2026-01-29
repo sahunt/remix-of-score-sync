@@ -23,6 +23,7 @@ export type Database = {
           created_at: string | null
           difficulty_level: number | null
           difficulty_name: string | null
+          eamuse_id: string | null
           eventno: number | null
           flare: number | null
           halo: string | null
@@ -32,7 +33,6 @@ export type Database = {
           name_romanized: string | null
           playstyle: string | null
           rank: string | null
-          sanbai_song_id: string | null
           score: number | null
           series: number | null
           song_id: number
@@ -49,6 +49,7 @@ export type Database = {
           created_at?: string | null
           difficulty_level?: number | null
           difficulty_name?: string | null
+          eamuse_id?: string | null
           eventno?: number | null
           flare?: number | null
           halo?: string | null
@@ -58,7 +59,6 @@ export type Database = {
           name_romanized?: string | null
           playstyle?: string | null
           rank?: string | null
-          sanbai_song_id?: string | null
           score?: number | null
           series?: number | null
           song_id: number
@@ -75,6 +75,7 @@ export type Database = {
           created_at?: string | null
           difficulty_level?: number | null
           difficulty_name?: string | null
+          eamuse_id?: string | null
           eventno?: number | null
           flare?: number | null
           halo?: string | null
@@ -84,7 +85,6 @@ export type Database = {
           name_romanized?: string | null
           playstyle?: string | null
           rank?: string | null
-          sanbai_song_id?: string | null
           score?: number | null
           series?: number | null
           song_id?: number
