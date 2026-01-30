@@ -12,6 +12,7 @@ import { SongCard } from '@/components/scores/SongCard';
 import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
+import rinonFilter from '@/assets/rinon-filter.png';
 import type { SavedFilter, FilterRule } from '@/components/filters/filterTypes';
 
 interface ScoreWithSong {
@@ -589,12 +590,16 @@ export default function Scores() {
 
         {/* Song list */}
         {!shouldFetchScores ? (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <Icon name="filter_alt" size={40} className="mb-3 text-muted-foreground" />
-              <p className="font-medium">Select a difficulty level</p>
-              <p className="text-sm text-muted-foreground">
-                Choose a level from the grid above to view your scores
+          <Card className="card-base border-none">
+            <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+              <img 
+                src={rinonFilter} 
+                alt="Rinon character" 
+                className="w-[140px] h-auto object-contain mb-6"
+              />
+              <h2 className="text-foreground text-xl font-bold mb-2">Choose a filter</h2>
+              <p className="text-muted-foreground text-base">
+                Let's see those scores
               </p>
             </CardContent>
           </Card>
