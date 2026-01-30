@@ -476,18 +476,21 @@ export default function Scores() {
 
   // Calculate stats based on fully filtered scores (including active filters)
   // Uses noPlayCount from displayedScores calculation for consistency
-  const stats = useMemo(() => {
+  const { stats, averageScore } = useMemo(() => {
     // Return empty stats if no level is selected
     if (!shouldFetchScores) {
-      return [
-        { label: 'Total', value: 0 },
-        { label: transformHaloLabel('MFC') || 'MFC', value: 0 },
-        { label: transformHaloLabel('PFC') || 'PFC', value: 0 },
-        { label: 'AAA', value: 0 },
-        { label: 'Clear', value: 0 },
-        { label: 'Fail', value: 0 },
-        { label: '', value: 0, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
-      ];
+      return {
+        stats: [
+          { label: 'Total', value: 0 },
+          { label: transformHaloLabel('MFC') || 'MFC', value: 0 },
+          { label: transformHaloLabel('PFC') || 'PFC', value: 0 },
+          { label: 'AAA', value: 0 },
+          { label: 'Clear', value: 0 },
+          { label: 'Fail', value: 0 },
+          { label: '', value: 0, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
+        ],
+        averageScore: 0,
+      };
     }
     
     // Use displayedScores which already has level + active filters applied
@@ -532,15 +535,24 @@ export default function Scores() {
     
     const fail = filteredForStats.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
 
-    return [
-      { label: 'Total', value: total },
-      { label: transformHaloLabel('MFC') || 'MFC', value: mfc },
-      { label: transformHaloLabel('PFC') || 'PFC', value: pfc },
-      { label: 'AAA', value: aaa },
-      { label: 'Clear', value: clear },
-      { label: 'Fail', value: fail },
-      { label: '', value: noPlayCount, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
-    ];
+    // Calculate average score (only for played songs with non-null score)
+    const playedWithScores = filteredForStats.filter(s => s.score !== null);
+    const avgScore = playedWithScores.length > 0
+      ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length)
+      : 0;
+
+    return {
+      stats: [
+        { label: 'Total', value: total },
+        { label: transformHaloLabel('MFC') || 'MFC', value: mfc },
+        { label: transformHaloLabel('PFC') || 'PFC', value: pfc },
+        { label: 'AAA', value: aaa },
+        { label: 'Clear', value: clear },
+        { label: 'Fail', value: fail },
+        { label: '', value: noPlayCount, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
+      ],
+      averageScore: avgScore,
+    };
   }, [scores, selectedLevel, activeFilters, transformHaloLabel, shouldFetchScores, noPlayCount]);
 
 
@@ -580,7 +592,7 @@ export default function Scores() {
         />
 
         {/* Stats summary */}
-        <StatsSummary stats={stats} />
+        <StatsSummary stats={stats} averageScore={averageScore} />
 
         {/* Search and sort bar */}
         <SearchSortBar
