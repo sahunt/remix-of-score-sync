@@ -536,9 +536,10 @@ export default function Scores() {
     const fail = filteredForStats.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
 
     // Calculate average score (only for played songs with non-null score)
+    // DDR scores are always multiples of 10, so round to nearest 10
     const playedWithScores = filteredForStats.filter(s => s.score !== null);
     const avgScore = playedWithScores.length > 0
-      ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length)
+      ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length / 10) * 10
       : 0;
 
     return {
