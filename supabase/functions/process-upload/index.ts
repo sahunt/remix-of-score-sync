@@ -285,21 +285,31 @@ function phaseii_extractBlocks(content: string): string[] {
     console.log(`PhaseII: Found ${playerObjects.length} player objects`);
     
     if (playerObjects.length > 0) {
-      // Log sample player structure to see available fields
-      const samplePlayer = playerObjects[0].substring(0, 300);
-      console.log(`PhaseII: Sample player object: ${samplePlayer}`);
+      // Log sample player structure - show more to find all keys
+      const samplePlayer = playerObjects[0];
+      console.log(`PhaseII: Sample player object (first 500 chars): ${samplePlayer.substring(0, 500)}`);
+      
+      // Log all array keys we find in the first player object
+      const arrayKeyMatches = samplePlayer.matchAll(/"(\w+)"\s*:\s*\[/g);
+      const arrayKeys = [...arrayKeyMatches].map(m => m[1]);
+      console.log(`PhaseII: Array keys found in player object: ${arrayKeys.join(', ') || 'none'}`);
     }
     
     // Now extract scores from each player object
     const allScoreBlocks: string[] = [];
     
+    // Try multiple possible array key names for scores
+    const possibleScoreKeys = ['scores', 'ddr', 'records', 'plays', 'history', 'results'];
+    
     for (const playerObj of playerObjects) {
-      // Try "scores" array first
-      let scoresArray = phaseii_extractArray(playerObj, 'scores');
-      
-      if (scoresArray) {
-        const scoreObjects = phaseii_extractObjectsFromArray(scoresArray);
-        allScoreBlocks.push(...scoreObjects);
+      for (const key of possibleScoreKeys) {
+        const scoresArray = phaseii_extractArray(playerObj, key);
+        if (scoresArray) {
+          console.log(`PhaseII: Found '${key}' array in player object`);
+          const scoreObjects = phaseii_extractObjectsFromArray(scoresArray);
+          allScoreBlocks.push(...scoreObjects);
+          break; // Found scores for this player, move to next
+        }
       }
     }
     
