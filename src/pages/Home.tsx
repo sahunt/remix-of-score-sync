@@ -14,6 +14,7 @@ import { SearchBar } from '@/components/home/SearchBar';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { GoalCard } from '@/components/home/GoalCard';
+import { GoalsEmptyState } from '@/components/home/GoalsEmptyState';
 import { CreateGoalSheet } from '@/components/goals/CreateGoalSheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -194,16 +195,7 @@ export default function Home() {
               <Skeleton className="h-32 w-full rounded-[10px]" />
             </>
           ) : goals.length === 0 ? (
-            <div className="card-base w-full text-center py-8">
-              <p className="text-foreground text-lg font-medium">No goals yet</p>
-              <p className="text-sm text-muted-foreground mt-1 mb-4">
-                Create your first goal to start tracking progress!
-              </p>
-              <Button onClick={() => setCreateGoalOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Goal
-              </Button>
-            </div>
+            <GoalsEmptyState onCreateGoal={() => setCreateGoalOpen(true)} />
           ) : (
             goals.map((goal) => (
               <GoalCardWithProgress
