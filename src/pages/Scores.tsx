@@ -208,13 +208,19 @@ export default function Scores() {
     setIsDetailModalOpen(false);
   }, []);
 
-  // Determine if we should fetch scores (level selected or has active filters with level rules)
-  const shouldFetchScores = selectedLevel !== null || levelsFromFilters.length > 0;
+  // Determine if we should fetch scores:
+  // - Level selected, OR
+  // - Has active filters with level rules, OR  
+  // - Has any active filter (show all matching scores across all levels)
+  const hasActiveFilters = activeFilters.length > 0;
+  const shouldFetchScores = selectedLevel !== null || levelsFromFilters.length > 0 || hasActiveFilters;
   
-  // Compute the levels to fetch - either the selected level or levels from filters
+  // Compute the levels to fetch - either the selected level, levels from filters, or null (all levels)
   const levelsToFetch = selectedLevel !== null 
     ? [selectedLevel] 
-    : levelsFromFilters;
+    : levelsFromFilters.length > 0
+      ? levelsFromFilters
+      : []; // Empty means fetch all levels when hasActiveFilters is true
 
   useEffect(() => {
     const fetchScoresForLevels = async () => {
@@ -251,11 +257,13 @@ export default function Scores() {
           .eq('playstyle', 'SP');
         
         // Filter by levels if we have specific levels to fetch
+        // If levelsToFetch is empty but we're fetching (hasActiveFilters), fetch all levels
         if (levelsToFetch.length === 1) {
           query = query.eq('difficulty_level', levelsToFetch[0]);
         } else if (levelsToFetch.length > 1) {
           query = query.in('difficulty_level', levelsToFetch);
         }
+        // else: no level filter, fetch all levels (for filter-only queries)
         
         // Paginate to handle large result sets
         const PAGE_SIZE = 1000;
@@ -294,7 +302,7 @@ export default function Scores() {
     };
 
     fetchScoresForLevels();
-  }, [user, shouldFetchScores, selectedLevel, levelsFromFilters.join(',')]); // Join array for stable dependency
+  }, [user, shouldFetchScores, selectedLevel, levelsFromFilters.join(','), hasActiveFilters]); // Join array for stable dependency
 
   // Fetch musicdb charts for the current level (to show "no play" songs)
   const [musicDbTotal, setMusicDbTotal] = useState<number>(0);
