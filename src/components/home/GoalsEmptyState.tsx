@@ -19,11 +19,11 @@ export function GoalsEmptyState({ onCreateGoal }: GoalsEmptyStateProps) {
         </Button>
       </div>
       
-      {/* Character image flush to bottom */}
+      {/* Character image centered and flush to bottom */}
       <img
         src={rinonEmpty}
         alt="Rinon character"
-        className="w-[100px] h-auto object-contain mt-2"
+        className="w-[120px] h-auto object-contain mt-2 mx-auto"
       />
     </div>
   );
