@@ -18,7 +18,16 @@ import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import AdminUpdateMappings from "./pages/AdminUpdateMappings";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes - scores don't change frequently
+      gcTime: 10 * 60 * 1000,   // 10 minutes garbage collection
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
