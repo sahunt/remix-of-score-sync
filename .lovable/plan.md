@@ -1,68 +1,70 @@
 
-# Fix Songs Not Displaying on Scores Page
+# Update musicdb with eamuse_id Mappings from ZIP
 
-## Problem Summary
-Stats show correct counts (e.g., 237 Level 14 songs) but the song list displays "No scores found" - data exists in the database but isn't rendering in the UI.
+## Overview
+Update the `musicdb` table by mapping `eamuse_id` values to rows based on `song_id` as the source of truth. The mappings are contained in 14 CSV files within the uploaded zip archive.
 
-## Root Cause
-**Inconsistent `musicdb` queries across the codebase**
+## Current State
+- **Total unique songs in musicdb:** 1,395
+- **Rows with eamuse_id set:** 0 (recently cleared)
+- **Success criteria:** 1,376 rows updated
 
-Several files fetch incomplete `musicdb` data (only `name, artist`) while the display components expect the full shape including `eamuse_id` and `song_id`. This causes rendering logic to fail when trying to use missing fields.
+## Approach
+Since the existing `update-eamuse-ids` edge function expects CSV content with `song_id` and `EncodedID` headers, we need to:
 
-## Files to Update
-
-### 1. Home.tsx (Line 109)
-**Current:**
-```typescript
-musicdb(name, artist)
-```
-**Change to:**
-```typescript
-musicdb(name, artist, eamuse_id, song_id)
-```
-
-### 2. CreateGoalSheet.tsx (Line 115)
-**Current:**
-```typescript
-musicdb(name, artist)
-```
-**Change to:**
-```typescript
-musicdb(name, artist, eamuse_id, song_id)
-```
-
-### 3. useFilterResults.ts - Update Interface (Lines 4-12)
-**Current:**
-```typescript
-interface ScoreData {
-  ...
-  musicdb: { name: string | null; artist: string | null } | null;
-}
-```
-**Change to:**
-```typescript
-interface ScoreData {
-  ...
-  musicdb: { 
-    name: string | null; 
-    artist: string | null;
-    eamuse_id: string | null;
-    song_id: number | null;
-  } | null;
-}
-```
+1. Extract the 14 CSV files from the zip archive
+2. Process each CSV file sequentially through the edge function
+3. Track cumulative results to ensure 1,376 total mappings
 
 ## Implementation Steps
 
-1. Update `src/pages/Home.tsx` - Add `eamuse_id, song_id` to musicdb query
-2. Update `src/components/goals/CreateGoalSheet.tsx` - Add `eamuse_id, song_id` to musicdb query  
-3. Update `src/hooks/useFilterResults.ts` - Expand `ScoreData` interface to include all musicdb fields
+### Step 1: Copy ZIP to Public Directory
+Copy the uploaded zip file to the `public/` directory so it can be accessed:
+```
+lov-copy user-uploads://files.zip public/eamuse-mappings.zip
+```
 
-## Expected Outcome
-After these changes, the song cards will render correctly because:
-- All queries will return the complete `musicdb` object
-- TypeScript interfaces will match the actual data shape
-- Display components will have access to `song_id` for unique keys and `eamuse_id` for jacket art lookups
+### Step 2: Create a Batch Processing Script
+Create an admin page or script that:
+1. Fetches and extracts the zip file
+2. Reads each of the 14 CSV files (batch_01_of_14.csv through batch_14_of_14.csv)
+3. Calls the `update-eamuse-ids` edge function for each batch
+4. Accumulates and displays results
 
-## Additional Note
-The user should also perform a hard browser refresh (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows) after deployment to ensure the latest JavaScript is loaded.
+### Step 3: Update Edge Function (if needed)
+The current edge function expects headers `song_id` and `EncodedID`. I need to verify the CSV format matches this expectation.
+
+### Step 4: Execute Updates
+Run the batch processor to update all 14 files sequentially, tracking:
+- Songs updated per batch
+- Songs not found
+- Any duplicate eamuse_ids
+- Total cumulative count
+
+## Files to Create/Modify
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `public/eamuse-mappings.zip` | Copy | Store the mapping data |
+| `src/pages/AdminUpdateMappings.tsx` | Create | Admin page to trigger batch updates |
+| `src/App.tsx` | Modify | Add route for admin page |
+
+## Alternative Approach (Simpler)
+If the CSV files follow the expected format, we can:
+1. Manually extract the zip locally
+2. Call the edge function 14 times via curl/API, passing each CSV's content
+3. This avoids creating UI code
+
+## Verification Query
+After completion, run:
+```sql
+SELECT COUNT(DISTINCT song_id) as songs_with_mapping 
+FROM musicdb 
+WHERE eamuse_id IS NOT NULL;
+```
+Expected result: 1,376
+
+## Technical Notes
+- The edge function updates ALL chart rows for a given `song_id` (multiple difficulty levels)
+- `song_id` is the primary key for matching, not `chart_id`
+- The function already handles batch processing (50 at a time) and reports unmatched songs
