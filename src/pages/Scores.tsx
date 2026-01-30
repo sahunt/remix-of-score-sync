@@ -572,6 +572,7 @@ export default function Scores() {
                 key={s.id}
                 name={s.name ?? 'Unknown Song'}
                 difficultyLevel={s.difficulty_level}
+                difficultyName={s.difficulty_name}
                 score={s.score}
                 rank={s.rank}
                 flare={s.flare}
