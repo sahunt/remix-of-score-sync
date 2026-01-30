@@ -21,6 +21,7 @@ export type Database = {
           bpm_max: number | null
           chart_id: number | null
           created_at: string | null
+          deleted: boolean
           difficulty_level: number | null
           difficulty_name: string | null
           eamuse_id: string | null
@@ -47,6 +48,7 @@ export type Database = {
           bpm_max?: number | null
           chart_id?: number | null
           created_at?: string | null
+          deleted?: boolean
           difficulty_level?: number | null
           difficulty_name?: string | null
           eamuse_id?: string | null
@@ -73,6 +75,7 @@ export type Database = {
           bpm_max?: number | null
           chart_id?: number | null
           created_at?: string | null
+          deleted?: boolean
           difficulty_level?: number | null
           difficulty_name?: string | null
           eamuse_id?: string | null

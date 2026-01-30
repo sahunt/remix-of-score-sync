@@ -114,12 +114,13 @@ export function SongDetailModal({
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch all SP charts for this song
+        // Fetch all SP charts for this song (exclude deleted)
         const { data: chartData, error: chartError } = await supabase
           .from('musicdb')
           .select('id, difficulty_name, difficulty_level')
           .eq('song_id', songId)
           .eq('playstyle', 'SP')
+          .eq('deleted', false)
           .not('difficulty_level', 'is', null)
           .order('difficulty_level', { ascending: false });
 

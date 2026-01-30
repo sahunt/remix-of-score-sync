@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.fix-musicdb-rows]
 verify_jwt = false
+
+[functions.import-deleted-songs]
+verify_jwt = false
