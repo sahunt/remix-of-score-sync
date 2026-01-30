@@ -1,23 +1,23 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGoal, useGoals } from '@/hooks/useGoals';
-import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
+import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useMusicDbCount } from '@/hooks/useMusicDbCount';
+import { useUserScores } from '@/hooks/useUserScores';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 import { GoalDetailHeader } from '@/components/goals/GoalDetailHeader';
 import { GoalCard } from '@/components/home/GoalCard';
 import { GoalSongTabs } from '@/components/goals/GoalSongTabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import type { FilterRule } from '@/components/filters/filterTypes';
+import type { ScoreWithSong } from '@/hooks/useGoalProgress';
 
 export default function GoalDetail() {
   const { goalId } = useParams<{ goalId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { deleteGoal } = useGoals();
   const { reverseTransformHalo } = use12MSMode();
   const { toast } = useToast();
@@ -26,10 +26,8 @@ export default function GoalDetail() {
   // Fetch the goal
   const { data: goal, isLoading: goalLoading } = useGoal(goalId);
 
-  // Extract level and difficulty from criteria for queries
+  // Extract criteria for queries
   const criteriaRules = (goal?.criteria_rules as FilterRule[]) ?? [];
-  const levelRule = criteriaRules.find(r => r.type === 'level');
-  const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
 
   // Get total from musicdb based on goal criteria
   const { data: musicDbData } = useMusicDbCount(
@@ -39,72 +37,17 @@ export default function GoalDetail() {
   );
   const musicDbTotal = musicDbData?.total ?? 0;
 
-  // Fetch user scores (filtered by criteria)
-  const { data: scores = [], isLoading: scoresLoading } = useQuery({
-    queryKey: ['user-scores-for-goal', user?.id, goal?.id],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      
-      const PAGE_SIZE = 1000;
-      let allScores: ScoreWithSong[] = [];
-      let from = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        let query = supabase
-          .from('user_scores')
-          .select(`
-            id,
-            score,
-            timestamp,
-            playstyle,
-            difficulty_name,
-            difficulty_level,
-            rank,
-            flare,
-            halo,
-            musicdb_id,
-            musicdb(name, artist, eamuse_id, song_id)
-          `)
-          .eq('user_id', user.id)
-          .eq('playstyle', 'SP');
-        
-        // Apply level filter if present
-        if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
-          if (levelRule.operator === 'is') {
-            query = query.in('difficulty_level', levelRule.value as number[]);
-          }
-        }
-        
-        // Apply difficulty filter if present
-        if (difficultyRule && Array.isArray(difficultyRule.value) && difficultyRule.value.length > 0) {
-          const diffs = (difficultyRule.value as string[]).map(d => d.toUpperCase());
-          if (difficultyRule.operator === 'is') {
-            query = query.in('difficulty_name', diffs);
-          }
-        }
-        
-        const { data, error } = await query
-          .order('timestamp', { ascending: false, nullsFirst: false })
-          .range(from, from + PAGE_SIZE - 1);
-
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allScores = [...allScores, ...(data as ScoreWithSong[])];
-          from += PAGE_SIZE;
-          hasMore = data.length === PAGE_SIZE;
-        } else {
-          hasMore = false;
-        }
-      }
-      
-      return allScores;
-    },
-    enabled: !!user?.id && !!goal,
+  // Use shared hook for consistent score data - pass filter rules for DB-level optimization
+  const { data: scores = [], isLoading: scoresLoading } = useUserScores({
+    filterRules: criteriaRules,
+    enabled: !!goal,
+    queryKeySuffix: `goal-${goal?.id}`,
   });
 
   // Fetch all matching charts from musicdb to identify unplayed ones
+  const levelRule = criteriaRules.find(r => r.type === 'level');
+  const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
+
   const { data: allMatchingCharts = [] } = useQuery({
     queryKey: ['musicdb-charts-for-goal', goal?.id],
     queryFn: async () => {
@@ -138,7 +81,7 @@ export default function GoalDetail() {
 
   // Create set of played chart IDs (musicdb.id) for quick lookup
   const playedChartIds = new Set(
-    scores.map(s => (s as any).musicdb_id).filter(Boolean)
+    scores.map(s => s.musicdb_id).filter(Boolean)
   );
 
   // Identify unplayed charts and convert to ScoreWithSong format
