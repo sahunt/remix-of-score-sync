@@ -55,6 +55,7 @@ export default function GoalDetail() {
         .from('musicdb')
         .select('id, name, artist, eamuse_id, song_id, difficulty_level, difficulty_name, playstyle')
         .eq('playstyle', 'SP')
+        .eq('deleted', false)
         .not('difficulty_level', 'is', null);
       
       // Apply level filter

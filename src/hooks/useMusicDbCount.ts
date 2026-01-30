@@ -16,11 +16,13 @@ async function getFilteredCount(
 
   // Build base query - use head:true to only get count, not rows
   // Filter to SP (Single Play) only - app doesn't support DP yet
+  // Exclude deleted songs from catalog counts
   let query = supabase
     .from('musicdb')
     .select('*', { count: 'exact', head: true })
     .not('difficulty_level', 'is', null)
-    .eq('playstyle', 'SP');
+    .eq('playstyle', 'SP')
+    .eq('deleted', false);
 
   // Apply level filter server-side
   if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {

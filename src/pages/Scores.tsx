@@ -325,6 +325,7 @@ export default function Scores() {
           .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle', { count: 'exact' })
           .not('difficulty_level', 'is', null)
           .eq('playstyle', 'SP')
+          .eq('deleted', false)
           .eq('difficulty_level', selectedLevel);
         
         if (error) throw error;

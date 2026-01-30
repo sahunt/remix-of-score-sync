@@ -96,7 +96,9 @@ export function useUserScores(options?: {
         if (error) throw error;
         
         if (data && data.length > 0) {
-          allScores = [...allScores, ...(data as ScoreWithSong[])];
+          // Filter out scores linked to deleted songs (musicdb is null or deleted)
+          const validScores = (data as ScoreWithSong[]).filter(score => score.musicdb !== null);
+          allScores = [...allScores, ...validScores];
           from += PAGE_SIZE;
           hasMore = data.length === PAGE_SIZE;
         } else {
