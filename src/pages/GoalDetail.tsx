@@ -163,17 +163,6 @@ export default function GoalDetail() {
     );
   }
 
-  // Map target type to goal card type
-  const getGoalCardType = () => {
-    if (goal.target_type === 'lamp') {
-      const value = goal.target_value.toLowerCase();
-      if (value === 'pfc') return 'pfc';
-      if (value === 'mfc') return 'mfc';
-      if (value === 'gfc') return 'gfc';
-    }
-    return 'pfc'; // Default fallback
-  };
-
   return (
     <div className="relative min-h-screen bg-background">
       <div className="px-[28px] pt-[60px] pb-8">
@@ -183,7 +172,8 @@ export default function GoalDetail() {
         <div className="mt-4">
           <GoalCard
             title={goal.name}
-            type={getGoalCardType()}
+            targetType={goal.target_type as 'lamp' | 'grade' | 'flare' | 'score'}
+            targetValue={goal.target_value}
             current={progress.current}
             total={musicDbTotal > 0 ? musicDbTotal : progress.total}
           />

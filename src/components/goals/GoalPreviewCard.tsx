@@ -1,40 +1,14 @@
 import { cn } from '@/lib/utils';
-import { GoalBadge, GoalType } from '@/components/home/GoalBadge';
-import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
-import { FLARE_OPTIONS } from '@/components/filters/filterTypes';
+import { GoalBadge, GoalTargetType } from '@/components/home/GoalBadge';
 
 interface GoalPreviewCardProps {
   name?: string;
-  targetType?: 'lamp' | 'grade' | 'flare' | 'score' | null;
+  targetType?: GoalTargetType | null;
   targetValue?: string | null;
   goalMode: 'all' | 'count';
   goalCount?: number;
   matchingTotal?: number;
   currentProgress?: number;
-}
-
-// Map target to badge type
-function getBadgeType(targetType: string | null | undefined, targetValue: string | null | undefined): GoalType | null {
-  if (targetType === 'lamp' && targetValue) {
-    const value = targetValue.toLowerCase();
-    if (value === 'pfc') return 'pfc';
-    if (value === 'mfc') return 'mfc';
-    if (value === 'gfc') return 'gfc';
-  }
-  return null;
-}
-
-// Get flare type from target value
-function getFlareType(targetValue: string | null | undefined): FlareType | null {
-  if (!targetValue) return null;
-  const numValue = parseInt(targetValue);
-  if (isNaN(numValue)) {
-    // Check if it's "EX"
-    if (targetValue.toUpperCase() === 'EX') return 'ex';
-    return null;
-  }
-  const flareOption = FLARE_OPTIONS.find(f => f.value === numValue && f.flareType !== 'none');
-  return flareOption ? (flareOption.flareType as FlareType) : null;
 }
 
 // Get progress bar color based on target
@@ -48,7 +22,7 @@ function getProgressBarClass(targetType: string | null | undefined, targetValue:
     if (value === 'life4') return 'bg-red-400';
   }
   if (targetType === 'grade') return 'bg-amber-400';
-  if (targetType === 'flare') return 'bg-orange-400';
+  if (targetType === 'flare') return 'bg-gradient-to-r from-orange-400 to-yellow-400';
   if (targetType === 'score') return 'bg-primary';
   return 'bg-muted-foreground';
 }
@@ -62,8 +36,6 @@ export function GoalPreviewCard({
   matchingTotal = 0,
   currentProgress = 0,
 }: GoalPreviewCardProps) {
-  const badgeType = getBadgeType(targetType, targetValue);
-  const flareType = targetType === 'flare' ? getFlareType(targetValue) : null;
   const progressBarClass = getProgressBarClass(targetType, targetValue);
   
   // Calculate display values
@@ -84,15 +56,9 @@ export function GoalPreviewCard({
       {/* Preview label */}
       <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Preview</p>
       
-      {/* Badge */}
-      {badgeType ? (
-        <GoalBadge type={badgeType} />
-      ) : flareType ? (
-        <FlareChip type={flareType} className="h-6" />
-      ) : targetValue ? (
-        <div className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-xs font-medium text-foreground">
-          {targetValue.toUpperCase()}
-        </div>
+      {/* Badge - use GoalBadge for all types when we have valid data */}
+      {targetType && targetValue ? (
+        <GoalBadge targetType={targetType} targetValue={targetValue} />
       ) : (
         <div className="inline-flex items-center px-2 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
           Select target...

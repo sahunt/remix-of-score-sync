@@ -43,17 +43,6 @@ function GoalCardWithProgress({
 
   const progress = useGoalProgress(goal, scores, [], isLoadingScores, reverseTransformHalo);
 
-  // Map target type to goal card type
-  const getGoalCardType = () => {
-    if (goal.target_type === 'lamp') {
-      const value = goal.target_value.toLowerCase();
-      if (value === 'pfc') return 'pfc' as const;
-      if (value === 'mfc') return 'mfc' as const;
-      if (value === 'gfc') return 'gfc' as const;
-    }
-    return 'pfc' as const;
-  };
-
   // For "count" mode, use goal_count as the denominator
   // For "all" mode, use musicdb total (all matching charts)
   const total = goal.goal_mode === 'count' 
@@ -64,7 +53,8 @@ function GoalCardWithProgress({
     <GoalCard
       id={goal.id}
       title={goal.name}
-      type={getGoalCardType()}
+      targetType={goal.target_type as 'lamp' | 'grade' | 'flare' | 'score'}
+      targetValue={goal.target_value}
       current={progress.current}
       total={total}
     />
