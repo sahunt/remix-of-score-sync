@@ -591,14 +591,14 @@ export default function Scores() {
         {/* Song list */}
         {!shouldFetchScores ? (
           <Card className="card-base border-none">
-            <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+            <CardContent className="flex flex-col items-center justify-center py-10 text-center !p-6">
               <img 
                 src={rinonFilter} 
                 alt="Rinon character" 
-                className="w-[140px] h-auto object-contain mb-6"
+                className="w-[100px] h-auto object-contain mb-6 mx-auto"
               />
-              <h2 className="text-foreground text-xl font-bold mb-2">Choose a filter</h2>
-              <p className="text-muted-foreground text-base">
+              <h2 className="text-foreground text-xl font-bold mb-2 w-full text-center">Choose a filter</h2>
+              <p className="text-muted-foreground text-base w-full text-center">
                 Let's see those scores
               </p>
             </CardContent>
