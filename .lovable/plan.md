@@ -1,70 +1,65 @@
 
-# Update musicdb with eamuse_id Mappings from ZIP
+# Fix Corrupted musicdb Rows
 
 ## Overview
-Update the `musicdb` table by mapping `eamuse_id` values to rows based on `song_id` as the source of truth. The mappings are contained in 14 CSV files within the uploaded zip archive.
+Update 7 songs in the musicdb table to fix corrupted `eamuse_id` values. The XML metadata (name, artist, bpm, etc.) is already correct - only the `eamuse_id` field needs fixing.
 
-## Current State
-- **Total unique songs in musicdb:** 1,395
-- **Rows with eamuse_id set:** 0 (recently cleared)
-- **Success criteria:** 1,376 rows updated
+## Songs to Fix
 
-## Approach
-Since the existing `update-eamuse-ids` edge function expects CSV content with `song_id` and `EncodedID` headers, we need to:
+| song_id | Song Name | Corrupted eamuse_id | Correct eamuse_id |
+|---------|-----------|---------------------|-------------------|
+| 38433 | MOVE! (We Keep It Movin') | Artist fragment | `19old9dq1q9DilPQDol88d19dI96blb6` |
+| 37278 | Every Day, Every Night(NM STYLE) | `3 4 6 9 0 0 4 7 10 0` | `61Q6Q8OOiiQIbIi0l6l10qQ0Ii8P0Qb6` |
+| 38524 | DUAL STRIKER | diffLv array | `9b60DI1OQddDI6D9D1qPoDPODD19Db8d` |
+| 38105 | Help me, ERINNNNNN!! | `4 5 9 12 0 0 6 9 12 0` | `9dDOQo8bQ6blDdd989l1QIO8liDq9O0q` |
+| 38436 | スーパー戦湯ババンバーン | diffLv array | `boqo0IoO8DodOl99Q8P8qOi8PqDq11b1` |
+| 38527 | 斑咲花 | `3 7 12 16 0 0 7 12 15 0` | `I86OI9lQ1qQ66dPDlddo8PoPo01PO66i` |
+| 38439 | ユメブキ | Artist fragment | `IPid909iDid06d68IDo816OqbdQq8O0O` |
 
-1. Extract the 14 CSV files from the zip archive
-2. Process each CSV file sequentially through the edge function
-3. Track cumulative results to ensure 1,376 total mappings
+## Implementation
 
-## Implementation Steps
+### Step 1: Create Edge Function for Batch Metadata Updates
+Create a new edge function `fix-musicdb-rows` that accepts an array of song fixes:
 
-### Step 1: Copy ZIP to Public Directory
-Copy the uploaded zip file to the `public/` directory so it can be accessed:
+```text
+POST body: {
+  "fixes": [
+    {
+      "song_id": 38433,
+      "eamuse_id": "19old9dq1q9DilPQDol88d19dI96blb6"
+    },
+    ...
+  ]
+}
 ```
-lov-copy user-uploads://files.zip public/eamuse-mappings.zip
-```
 
-### Step 2: Create a Batch Processing Script
-Create an admin page or script that:
-1. Fetches and extracts the zip file
-2. Reads each of the 14 CSV files (batch_01_of_14.csv through batch_14_of_14.csv)
-3. Calls the `update-eamuse-ids` edge function for each batch
-4. Accumulates and displays results
+The function will:
+1. Loop through each fix
+2. Update ALL chart rows for that song_id (typically 7-10 rows per song)
+3. Set the correct `eamuse_id` value
+4. Return a summary of rows updated
 
-### Step 3: Update Edge Function (if needed)
-The current edge function expects headers `song_id` and `EncodedID`. I need to verify the CSV format matches this expectation.
+### Step 2: Call the Edge Function
+Invoke the function with the 7 song fixes to update all ~50 affected chart rows.
 
-### Step 4: Execute Updates
-Run the batch processor to update all 14 files sequentially, tracking:
-- Songs updated per batch
-- Songs not found
-- Any duplicate eamuse_ids
-- Total cumulative count
+## Affected Chart Rows
+Each song has 7-10 chart entries (SP + DP difficulties). The update will fix approximately 50-60 rows total across the 7 songs.
 
-## Files to Create/Modify
+## Technical Details
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `public/eamuse-mappings.zip` | Copy | Store the mapping data |
-| `src/pages/AdminUpdateMappings.tsx` | Create | Admin page to trigger batch updates |
-| `src/App.tsx` | Modify | Add route for admin page |
+**Why edge function instead of direct SQL?**
+- Edge functions use the service role key for admin access
+- Consistent with existing patterns (update-eamuse-ids, import-musicdb)
+- Better logging and error handling
+- Can be reused for future fixes
 
-## Alternative Approach (Simpler)
-If the CSV files follow the expected format, we can:
-1. Manually extract the zip locally
-2. Call the edge function 14 times via curl/API, passing each CSV's content
-3. This avoids creating UI code
+**Database constraint:**
+- Uses `song_id` as the lookup key (source of truth per memory)
+- Updates `eamuse_id` column only - metadata is already correct
+- All chart rows for a song share the same eamuse_id
 
-## Verification Query
-After completion, run:
-```sql
-SELECT COUNT(DISTINCT song_id) as songs_with_mapping 
-FROM musicdb 
-WHERE eamuse_id IS NOT NULL;
-```
-Expected result: 1,376
-
-## Technical Notes
-- The edge function updates ALL chart rows for a given `song_id` (multiple difficulty levels)
-- `song_id` is the primary key for matching, not `chart_id`
-- The function already handles batch processing (50 at a time) and reports unmatched songs
+## Expected Outcome
+After running this fix:
+- 7 songs will have correct 32-character eamuse_id values
+- Your next Sanbai upload should match these songs successfully
+- Approximately 50+ score entries from the skipped 101 should now match
