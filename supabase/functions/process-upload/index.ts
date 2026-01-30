@@ -918,16 +918,30 @@ function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skip
   
   console.log(`Found ${entryBlocks.length} entry blocks to process`);
   
+  // Log first block for debugging
+  if (entryBlocks.length > 0) {
+    console.log(`Sample entry block (first 500 chars): ${entryBlocks[0].substring(0, 500)}`);
+  }
+  
   // Process each block with regex extraction
+  let successCount = 0;
+  let missingSongId = 0;
+  let missingChart = 0;
+  
   for (const block of entryBlocks) {
     try {
       const entry = extractFieldsFromBlock(block);
       if (entry.songId !== null && entry.chart !== null) {
         entries.push(entry);
+        successCount++;
       } else {
-        // Missing required fields
+        // Missing required fields - track which field is missing
         skippedCount++;
-        console.log(`Skipped entry: missing songId or chart`);
+        if (entry.songId === null) missingSongId++;
+        if (entry.chart === null) missingChart++;
+        if (skippedCount <= 3) {
+          console.log(`Skipped entry: songId=${entry.songId}, chart=${entry.chart}, block preview: ${block.substring(0, 200)}`);
+        }
       }
     } catch (err) {
       skippedCount++;
@@ -935,15 +949,69 @@ function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skip
     }
   }
   
+  console.log(`Extraction results: ${successCount} success, ${skippedCount} skipped (${missingSongId} missing songId, ${missingChart} missing chart)`);
+  
   return { entries, skippedCount };
 }
 
 function extractFieldsFromBlock(block: string): PhaseIIEntry {
-  // Extract song.id - look for "song":{..."id":12345...}
+  // Extract song.id - look for "song":{...} and find the "id" field within it
+  // Strategy: Find the song object bounds first, then extract id from within
   let songId: number | null = null;
-  const songIdMatch = block.match(/"song"\s*:\s*\{[^}]*?"id"\s*:\s*(\d+)/);
-  if (songIdMatch) {
-    songId = parseInt(songIdMatch[1]);
+  
+  // Find where "song": { starts
+  const songStartMatch = block.match(/"song"\s*:\s*\{/);
+  if (songStartMatch && songStartMatch.index !== undefined) {
+    // Find the matching closing brace for the song object
+    const startIdx = songStartMatch.index + songStartMatch[0].length;
+    let depth = 1;
+    let endIdx = startIdx;
+    let inString = false;
+    let escaped = false;
+    
+    for (let i = startIdx; i < block.length && depth > 0; i++) {
+      const char = block[i];
+      
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      
+      if (char === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+      
+      if (char === '"' && !escaped) {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === '{') depth++;
+        else if (char === '}') depth--;
+      }
+      
+      endIdx = i;
+    }
+    
+    // Now we have the song object content
+    const songContent = block.substring(startIdx, endIdx);
+    
+    // Extract id from within the song object
+    const idMatch = songContent.match(/"id"\s*:\s*(\d+)/);
+    if (idMatch) {
+      songId = parseInt(idMatch[1]);
+    }
+  }
+  
+  // Fallback: try direct pattern if nested extraction failed
+  if (songId === null) {
+    // Try finding id directly after song (for simpler structures)
+    const directIdMatch = block.match(/"song"\s*:\s*\{\s*"id"\s*:\s*(\d+)/);
+    if (directIdMatch) {
+      songId = parseInt(directIdMatch[1]);
+    }
   }
   
   // Extract song.chart - "chart":"SP EXPERT - 15"
