@@ -26,29 +26,32 @@ export default function GoalDetail() {
   // Fetch the goal
   const { data: goal, isLoading: goalLoading } = useGoal(goalId);
 
+  // Extract level and difficulty from criteria for queries
+  const criteriaRules = (goal?.criteria_rules as FilterRule[]) ?? [];
+  const levelRule = criteriaRules.find(r => r.type === 'level');
+  const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
+
   // Get total from musicdb based on goal criteria
   const { data: musicDbData } = useMusicDbCount(
-    (goal?.criteria_rules as FilterRule[]) ?? [],
+    criteriaRules,
     goal?.criteria_match_mode ?? 'all',
     !!goal
   );
   const musicDbTotal = musicDbData?.total ?? 0;
 
-  // Fetch user scores
+  // Fetch user scores (filtered by criteria)
   const { data: scores = [], isLoading: scoresLoading } = useQuery({
-    queryKey: ['user-scores', user?.id],
+    queryKey: ['user-scores-for-goal', user?.id, goal?.id],
     queryFn: async () => {
       if (!user?.id) return [];
       
-      // Supabase limits responses to 1000 rows per request
-      // Must paginate to fetch all scores (users can have 4500+ scores)
       const PAGE_SIZE = 1000;
       let allScores: ScoreWithSong[] = [];
       let from = 0;
       let hasMore = true;
 
       while (hasMore) {
-        const { data, error } = await supabase
+        let query = supabase
           .from('user_scores')
           .select(`
             id,
@@ -60,10 +63,28 @@ export default function GoalDetail() {
             rank,
             flare,
             halo,
+            musicdb_id,
             musicdb(name, artist, eamuse_id, song_id)
           `)
           .eq('user_id', user.id)
-          .eq('playstyle', 'SP')
+          .eq('playstyle', 'SP');
+        
+        // Apply level filter if present
+        if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
+          if (levelRule.operator === 'is') {
+            query = query.in('difficulty_level', levelRule.value as number[]);
+          }
+        }
+        
+        // Apply difficulty filter if present
+        if (difficultyRule && Array.isArray(difficultyRule.value) && difficultyRule.value.length > 0) {
+          const diffs = (difficultyRule.value as string[]).map(d => d.toUpperCase());
+          if (difficultyRule.operator === 'is') {
+            query = query.in('difficulty_name', diffs);
+          }
+        }
+        
+        const { data, error } = await query
           .order('timestamp', { ascending: false, nullsFirst: false })
           .range(from, from + PAGE_SIZE - 1);
 
@@ -80,11 +101,70 @@ export default function GoalDetail() {
       
       return allScores;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !!goal,
   });
+
+  // Fetch all matching charts from musicdb to identify unplayed ones
+  const { data: allMatchingCharts = [] } = useQuery({
+    queryKey: ['musicdb-charts-for-goal', goal?.id],
+    queryFn: async () => {
+      let query = supabase
+        .from('musicdb')
+        .select('id, name, artist, eamuse_id, song_id, difficulty_level, difficulty_name, playstyle')
+        .eq('playstyle', 'SP')
+        .not('difficulty_level', 'is', null);
+      
+      // Apply level filter
+      if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
+        if (levelRule.operator === 'is') {
+          query = query.in('difficulty_level', levelRule.value as number[]);
+        }
+      }
+      
+      // Apply difficulty filter
+      if (difficultyRule && Array.isArray(difficultyRule.value) && difficultyRule.value.length > 0) {
+        const diffs = (difficultyRule.value as string[]).map(d => d.toUpperCase());
+        if (difficultyRule.operator === 'is') {
+          query = query.in('difficulty_name', diffs);
+        }
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!goal,
+  });
+
+  // Create set of played chart IDs (musicdb.id) for quick lookup
+  const playedChartIds = new Set(
+    scores.map(s => (s as any).musicdb_id).filter(Boolean)
+  );
+
+  // Identify unplayed charts and convert to ScoreWithSong format
+  const unplayedCharts: ScoreWithSong[] = allMatchingCharts
+    .filter(chart => !playedChartIds.has(chart.id))
+    .map(chart => ({
+      id: `unplayed-${chart.id}`,
+      score: null,
+      rank: null,
+      flare: null,
+      halo: null,
+      difficulty_level: chart.difficulty_level,
+      difficulty_name: chart.difficulty_name,
+      playstyle: chart.playstyle,
+      name: chart.name,
+      artist: chart.artist,
+      eamuse_id: chart.eamuse_id,
+      song_id: chart.song_id,
+      isUnplayed: true,
+    }));
 
   // Calculate progress with 12MS mode transformation
   const progress = useGoalProgress(goal ?? null, scores, [], scoresLoading, reverseTransformHalo);
+
+  // Combine remaining songs with unplayed charts for the tabs
+  const allRemainingSongs = [...progress.remainingSongs, ...unplayedCharts];
 
   const handleBack = () => {
     navigate('/home');
@@ -171,7 +251,7 @@ export default function GoalDetail() {
           <GoalSongTabs
             goal={goal}
             completedSongs={progress.completedSongs}
-            remainingSongs={progress.remainingSongs}
+            remainingSongs={allRemainingSongs}
             suggestedSongs={progress.suggestedSongs}
             isLoading={scoresLoading}
           />

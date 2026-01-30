@@ -104,6 +104,7 @@ export interface ScoreWithSong {
   difficulty_level: number | null;
   difficulty_name: string | null;
   playstyle: string | null;
+  musicdb_id?: number | null;
   musicdb?: {
     name: string | null;
     artist: string | null;
