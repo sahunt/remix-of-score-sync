@@ -327,82 +327,9 @@ export default function Scores() {
     fetchMusicDbCharts();
   }, [selectedLevel]);
 
-  // Calculate stats based on fully filtered scores (including active filters)
-  const stats = useMemo(() => {
-    // Return empty stats if no level is selected
-    if (!shouldFetchScores) {
-      return [
-        { label: 'Total', value: 0 },
-        { label: transformHaloLabel('MFC') || 'MFC', value: 0 },
-        { label: transformHaloLabel('PFC') || 'PFC', value: 0 },
-        { label: 'AAA', value: 0 },
-        { label: 'Clear', value: 0 },
-        { label: 'Fail', value: 0 },
-        { label: '', value: 0, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
-      ];
-    }
-    
-    // Use displayedScores which already has level + active filters applied
-    // But we need to compute stats before search query is applied
-    let filteredForStats = [...scores];
-    
-    // Apply difficulty filter
-    if (selectedLevel !== null) {
-      filteredForStats = filteredForStats.filter(s => s.difficulty_level === selectedLevel);
-    }
-    
-    // Apply active filters (same logic as displayedScores)
-    if (activeFilters.length > 0) {
-      filteredForStats = filteredForStats.filter(score => {
-        return activeFilters.every(af => {
-          const filter = af.filter;
-          if (filter.matchMode === 'all') {
-            return filter.rules.every(rule => matchesRule(score, rule));
-          } else {
-            return filter.rules.some(rule => matchesRule(score, rule));
-          }
-        });
-      });
-    }
-
-    const total = filteredForStats.length;
-    const mfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'mfc').length;
-    const pfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'pfc').length;
-    const aaa = filteredForStats.filter(s => s.rank?.toUpperCase() === 'AAA').length;
-    
-    // Clear = passed songs that are NOT MFC, NOT PFC, and NOT AAA (the leftovers)
-    const clear = filteredForStats.filter(s => {
-      const halo = s.halo?.toLowerCase();
-      const rank = s.rank?.toUpperCase();
-      const isMfc = halo === 'mfc';
-      const isPfc = halo === 'pfc';
-      const isAaa = rank === 'AAA';
-      const hasPassed = s.rank !== null; // Has a rank means passed
-      
-      return hasPassed && !isMfc && !isPfc && !isAaa;
-    }).length;
-    
-    const fail = filteredForStats.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
-    
-    // No play is only meaningful when no active filters are applied
-    // When filters are active, we're showing a subset so "no play" doesn't make sense
-    const noPlay = activeFilters.length === 0 
-      ? Math.max(0, musicDbTotal - total) 
-      : 0;
-
-    return [
-      { label: 'Total', value: total },
-      { label: transformHaloLabel('MFC') || 'MFC', value: mfc },
-      { label: transformHaloLabel('PFC') || 'PFC', value: pfc },
-      { label: 'AAA', value: aaa },
-      { label: 'Clear', value: clear },
-      { label: 'Fail', value: fail },
-      { label: '', value: noPlay, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
-    ];
-  }, [scores, selectedLevel, activeFilters, transformHaloLabel, musicDbTotal, shouldFetchScores]);
-
   // Filter and sort scores for display, including "no play" songs from musicdb
-  const displayedScores = useMemo((): DisplaySong[] => {
+  // Moved above stats calculation so we can use noPlaySongs.length for accurate count
+  const { displayedScores, noPlayCount } = useMemo((): { displayedScores: DisplaySong[], noPlayCount: number } => {
     // Convert user scores to DisplaySong format
     let playedSongs: DisplaySong[] = scores.map(s => ({
       id: s.id,
@@ -462,9 +389,9 @@ export default function Scores() {
       playedSongs.map(s => `${s.song_id}|${s.difficulty_name}`)
     );
 
-    // Add "no play" songs from musicdb (only when a level is selected)
+    // Add "no play" songs from musicdb (only when a level is selected and no active filters)
     let noPlaySongs: DisplaySong[] = [];
-    if (selectedLevel !== null && musicDbCharts.length > 0) {
+    if (selectedLevel !== null && musicDbCharts.length > 0 && activeFilters.length === 0) {
       noPlaySongs = musicDbCharts
         .filter(chart => !playedChartKeys.has(`${chart.song_id}|${chart.difficulty_name}`))
         .map(chart => ({
@@ -533,8 +460,78 @@ export default function Scores() {
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
-    return result;
+    return { displayedScores: result, noPlayCount: noPlaySongs.length };
   }, [scores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection, musicDbCharts]);
+
+  // Calculate stats based on fully filtered scores (including active filters)
+  // Uses noPlayCount from displayedScores calculation for consistency
+  const stats = useMemo(() => {
+    // Return empty stats if no level is selected
+    if (!shouldFetchScores) {
+      return [
+        { label: 'Total', value: 0 },
+        { label: transformHaloLabel('MFC') || 'MFC', value: 0 },
+        { label: transformHaloLabel('PFC') || 'PFC', value: 0 },
+        { label: 'AAA', value: 0 },
+        { label: 'Clear', value: 0 },
+        { label: 'Fail', value: 0 },
+        { label: '', value: 0, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
+      ];
+    }
+    
+    // Use displayedScores which already has level + active filters applied
+    // But we need to compute stats before search query is applied
+    let filteredForStats = [...scores];
+    
+    // Apply difficulty filter
+    if (selectedLevel !== null) {
+      filteredForStats = filteredForStats.filter(s => s.difficulty_level === selectedLevel);
+    }
+    
+    // Apply active filters (same logic as displayedScores)
+    if (activeFilters.length > 0) {
+      filteredForStats = filteredForStats.filter(score => {
+        return activeFilters.every(af => {
+          const filter = af.filter;
+          if (filter.matchMode === 'all') {
+            return filter.rules.every(rule => matchesRule(score, rule));
+          } else {
+            return filter.rules.some(rule => matchesRule(score, rule));
+          }
+        });
+      });
+    }
+
+    const total = filteredForStats.length;
+    const mfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'mfc').length;
+    const pfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'pfc').length;
+    const aaa = filteredForStats.filter(s => s.rank?.toUpperCase() === 'AAA').length;
+    
+    // Clear = passed songs that are NOT MFC, NOT PFC, and NOT AAA (the leftovers)
+    const clear = filteredForStats.filter(s => {
+      const halo = s.halo?.toLowerCase();
+      const rank = s.rank?.toUpperCase();
+      const isMfc = halo === 'mfc';
+      const isPfc = halo === 'pfc';
+      const isAaa = rank === 'AAA';
+      const hasPassed = s.rank !== null; // Has a rank means passed
+      
+      return hasPassed && !isMfc && !isPfc && !isAaa;
+    }).length;
+    
+    const fail = filteredForStats.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
+
+    return [
+      { label: 'Total', value: total },
+      { label: transformHaloLabel('MFC') || 'MFC', value: mfc },
+      { label: transformHaloLabel('PFC') || 'PFC', value: pfc },
+      { label: 'AAA', value: aaa },
+      { label: 'Clear', value: clear },
+      { label: 'Fail', value: fail },
+      { label: '', value: noPlayCount, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
+    ];
+  }, [scores, selectedLevel, activeFilters, transformHaloLabel, shouldFetchScores, noPlayCount]);
+
 
   const handleRemoveFilter = useCallback((id: string) => {
     setActiveFilters(prev => prev.filter(f => f.id !== id));
