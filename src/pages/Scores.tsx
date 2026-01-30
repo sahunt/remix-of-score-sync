@@ -173,7 +173,7 @@ export default function Scores() {
   const { transformHaloLabel } = use12MSMode();
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
   const [musicDbCharts, setMusicDbCharts] = useState<MusicDbChart[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start as false - no initial load
   
   // Persistent filter state
   const {
@@ -208,48 +208,69 @@ export default function Scores() {
     setIsDetailModalOpen(false);
   }, []);
 
-  useEffect(() => {
-    const fetchAllScores = async () => {
-      if (!user) return;
+  // Determine if we should fetch scores (level selected or has active filters with level rules)
+  const shouldFetchScores = selectedLevel !== null || levelsFromFilters.length > 0;
+  
+  // Compute the levels to fetch - either the selected level or levels from filters
+  const levelsToFetch = selectedLevel !== null 
+    ? [selectedLevel] 
+    : levelsFromFilters;
 
+  useEffect(() => {
+    const fetchScoresForLevels = async () => {
+      if (!user || !shouldFetchScores) {
+        setScores([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      
       try {
-        // Supabase limits responses to 1000 rows per request
-        // Must paginate to fetch all scores (users can have 4500+ scores)
+        // Build query with level filter for better performance
+        let query = supabase
+          .from('user_scores')
+          .select(`
+            id,
+            score,
+            timestamp,
+            playstyle,
+            difficulty_name,
+            difficulty_level,
+            rank,
+            flare,
+            halo,
+            musicdb (
+              name,
+              artist,
+              eamuse_id,
+              song_id
+            )
+          `)
+          .eq('user_id', user.id)
+          .eq('playstyle', 'SP');
+        
+        // Filter by levels if we have specific levels to fetch
+        if (levelsToFetch.length === 1) {
+          query = query.eq('difficulty_level', levelsToFetch[0]);
+        } else if (levelsToFetch.length > 1) {
+          query = query.in('difficulty_level', levelsToFetch);
+        }
+        
+        // Paginate to handle large result sets
         const PAGE_SIZE = 1000;
         let allScores: ScoreWithSong[] = [];
         let from = 0;
         let hasMore = true;
 
         while (hasMore) {
-          const { data, error } = await supabase
-            .from('user_scores')
-            .select(`
-              id,
-              score,
-              timestamp,
-              playstyle,
-              difficulty_name,
-              difficulty_level,
-              rank,
-              flare,
-              halo,
-              musicdb (
-                name,
-                artist,
-                eamuse_id,
-                song_id
-              )
-            `)
-            .eq('user_id', user.id)
-            .eq('playstyle', 'SP')
-            .range(from, from + PAGE_SIZE - 1);
+          const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
 
           if (error) throw error;
           
           if (data && data.length > 0) {
             allScores = [...allScores, ...data];
             from += PAGE_SIZE;
-            // If we got fewer than PAGE_SIZE, we've fetched everything
             hasMore = data.length === PAGE_SIZE;
           } else {
             hasMore = false;
@@ -272,8 +293,8 @@ export default function Scores() {
       }
     };
 
-    fetchAllScores();
-  }, [user]);
+    fetchScoresForLevels();
+  }, [user, shouldFetchScores, selectedLevel, levelsFromFilters.join(',')]); // Join array for stable dependency
 
   // Fetch musicdb charts for the current level (to show "no play" songs)
   const [musicDbTotal, setMusicDbTotal] = useState<number>(0);
@@ -308,6 +329,19 @@ export default function Scores() {
 
   // Calculate stats based on fully filtered scores (including active filters)
   const stats = useMemo(() => {
+    // Return empty stats if no level is selected
+    if (!shouldFetchScores) {
+      return [
+        { label: 'Total', value: 0 },
+        { label: transformHaloLabel('MFC') || 'MFC', value: 0 },
+        { label: transformHaloLabel('PFC') || 'PFC', value: 0 },
+        { label: 'AAA', value: 0 },
+        { label: 'Clear', value: 0 },
+        { label: 'Fail', value: 0 },
+        { label: '', value: 0, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
+      ];
+    }
+    
     // Use displayedScores which already has level + active filters applied
     // But we need to compute stats before search query is applied
     let filteredForStats = [...scores];
@@ -365,7 +399,7 @@ export default function Scores() {
       { label: 'Fail', value: fail },
       { label: '', value: noPlay, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
     ];
-  }, [scores, selectedLevel, activeFilters, transformHaloLabel, musicDbTotal]);
+  }, [scores, selectedLevel, activeFilters, transformHaloLabel, musicDbTotal, shouldFetchScores]);
 
   // Filter and sort scores for display, including "no play" songs from musicdb
   const displayedScores = useMemo((): DisplaySong[] => {
@@ -549,7 +583,17 @@ export default function Scores() {
         />
 
         {/* Song list */}
-        {loading ? (
+        {!shouldFetchScores ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <Icon name="filter_alt" size={40} className="mb-3 text-muted-foreground" />
+              <p className="font-medium">Select a difficulty level</p>
+              <p className="text-sm text-muted-foreground">
+                Choose a level from the grid above to view your scores
+              </p>
+            </CardContent>
+          </Card>
+        ) : loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
@@ -559,9 +603,9 @@ export default function Scores() {
               <Icon name="music_note" size={40} className="mb-3 text-muted-foreground" />
               <p className="font-medium">No scores found</p>
               <p className="text-sm text-muted-foreground">
-                {searchQuery || selectedLevel
-                  ? 'Try adjusting your filters'
-                  : 'Upload a score file to get started'}
+                {searchQuery
+                  ? 'Try adjusting your search'
+                  : 'No scores at this level yet'}
               </p>
             </CardContent>
           </Card>
