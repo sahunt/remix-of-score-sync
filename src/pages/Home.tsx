@@ -106,7 +106,7 @@ export default function Home() {
             rank,
             flare,
             halo,
-            musicdb(name, artist)
+            musicdb(name, artist, eamuse_id, song_id)
           `)
           .eq('user_id', user.id)
           .eq('playstyle', 'SP')
