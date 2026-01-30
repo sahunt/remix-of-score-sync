@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { CompletedSongsList } from './CompletedSongsList';
 import { RemainingSongsList } from './RemainingSongsList';
-import { SuggestionsList } from './SuggestionsList';
 import type { Goal, ScoreWithSong } from '@/hooks/useGoalProgress';
 import { cn } from '@/lib/utils';
 
@@ -9,7 +8,6 @@ interface GoalSongTabsProps {
   goal: Goal;
   completedSongs: ScoreWithSong[];
   remainingSongs: ScoreWithSong[];
-  suggestedSongs: ScoreWithSong[];
   isLoading: boolean;
 }
 
@@ -17,12 +15,10 @@ export function GoalSongTabs({
   goal,
   completedSongs,
   remainingSongs,
-  suggestedSongs,
   isLoading,
 }: GoalSongTabsProps) {
-  const isCountMode = goal.goal_mode === 'count';
-  const firstTabLabel = isCountMode ? 'Suggestions' : 'Remaining';
-  const firstTabCount = isCountMode ? suggestedSongs.length : remainingSongs.length;
+  const firstTabLabel = 'Remaining';
+  const firstTabCount = remainingSongs.length;
   
   // Default to "remaining" (first tab)
   const [activeTab, setActiveTab] = useState<'remaining' | 'completed'>('remaining');
@@ -67,19 +63,11 @@ export function GoalSongTabs({
 
       {/* Tab content */}
       {activeTab === 'remaining' ? (
-        isCountMode ? (
-          <SuggestionsList 
-            songs={suggestedSongs} 
-            goal={goal}
-            isLoading={isLoading} 
-          />
-        ) : (
-          <RemainingSongsList 
-            songs={remainingSongs} 
-            goal={goal}
-            isLoading={isLoading} 
-          />
-        )
+        <RemainingSongsList 
+          songs={remainingSongs} 
+          goal={goal}
+          isLoading={isLoading} 
+        />
       ) : (
         <CompletedSongsList songs={completedSongs} isLoading={isLoading} />
       )}

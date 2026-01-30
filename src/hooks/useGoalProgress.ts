@@ -328,17 +328,37 @@ export function useGoalProgress(
       !meetsTarget(s, goal.target_type, goal.target_value, reverseTransformHalo)
     );
 
-    // Sort incomplete by proximity (closest to goal first)
+    // Sort incomplete songs by their actual value (highest first)
     const sortedIncomplete = [...incompleteSongs].sort((a, b) => {
-      const proximityA = calculateProximityScore(a, goal.target_type, goal.target_value);
-      const proximityB = calculateProximityScore(b, goal.target_type, goal.target_value);
-      return proximityB - proximityA; // Higher proximity = closer to goal = first
+      switch (goal.target_type) {
+        case 'score': {
+          const scoreA = a.score ?? -1;
+          const scoreB = b.score ?? -1;
+          return scoreB - scoreA;
+        }
+        case 'flare': {
+          const flareA = a.flare ?? -1;
+          const flareB = b.flare ?? -1;
+          return flareB - flareA;
+        }
+        case 'lamp': {
+          const indexA = a.halo ? LAMP_ORDER.indexOf(a.halo.toLowerCase() as any) : LAMP_ORDER.length;
+          const indexB = b.halo ? LAMP_ORDER.indexOf(b.halo.toLowerCase() as any) : LAMP_ORDER.length;
+          return indexA - indexB;
+        }
+        case 'grade': {
+          const indexA = a.rank ? GRADE_ORDER.indexOf(a.rank.toUpperCase() as any) : GRADE_ORDER.length;
+          const indexB = b.rank ? GRADE_ORDER.indexOf(b.rank.toUpperCase() as any) : GRADE_ORDER.length;
+          return indexA - indexB;
+        }
+        default:
+          return 0;
+      }
     });
 
-    // For "all" mode, remaining is what's left to complete
-    // For "count" mode, suggestions are the best candidates to work on
-    const remainingSongs = goal.goal_mode === 'all' ? sortedIncomplete : [];
-    const suggestedSongs = goal.goal_mode === 'count' ? sortedIncomplete.slice(0, 20) : [];
+    // Both modes now show remaining songs sorted by value
+    const remainingSongs = sortedIncomplete;
+    const suggestedSongs: ScoreWithSong[] = [];
 
     // Calculate totals
     const total = goal.goal_mode === 'all' 
