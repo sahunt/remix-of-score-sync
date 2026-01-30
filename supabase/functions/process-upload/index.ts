@@ -160,21 +160,64 @@ interface PhaseIIEntry {
   timestamp: string | null;
 }
 
-// Remove control characters that break JSON parsing
+// Remove control characters and invalid unicode sequences that break JSON parsing
+// This handles Shift-JIS corruption, invalid UTF-8, and other encoding issues
 function phaseii_sanitizeContent(content: string): string {
   let sanitized = content.replace(/^\uFEFF/, ''); // Remove BOM
   
+  // Replace common problematic sequences that appear in corrupted exports
+  // These patterns appear when Shift-JIS is incorrectly decoded as UTF-8
+  sanitized = sanitized.replace(/<0x[a-fA-F0-9]+>/g, '?'); // Hex escape sequences like <0xad>
+  sanitized = sanitized.replace(/\\x[a-fA-F0-9]{2}/g, '?'); // Escaped hex like \xad
+  
   // Remove ASCII control characters except tab/newline/carriage return
+  // Also remove high surrogates that are unpaired (common with encoding errors)
   const cleanedChars: string[] = [];
+  let removedCount = 0;
+  
   for (let i = 0; i < sanitized.length; i++) {
     const code = sanitized.charCodeAt(i);
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) continue;
-    if (code === 127) continue;
+    
+    // Skip ASCII control characters (except whitespace)
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+      removedCount++;
+      continue;
+    }
+    
+    // Skip DEL character
+    if (code === 127) {
+      removedCount++;
+      continue;
+    }
+    
+    // Skip replacement character (often indicates encoding errors)
+    if (code === 0xFFFD) {
+      removedCount++;
+      cleanedChars.push('?');
+      continue;
+    }
+    
+    // Skip unpaired surrogates (0xD800-0xDFFF)
+    if (code >= 0xD800 && code <= 0xDFFF) {
+      const nextCode = i + 1 < sanitized.length ? sanitized.charCodeAt(i + 1) : 0;
+      // Check if this is a proper surrogate pair
+      if (code >= 0xD800 && code <= 0xDBFF && nextCode >= 0xDC00 && nextCode <= 0xDFFF) {
+        // Valid surrogate pair - keep both
+        cleanedChars.push(sanitized[i]);
+        cleanedChars.push(sanitized[i + 1]);
+        i++; // Skip the next char since we already processed it
+        continue;
+      }
+      // Unpaired surrogate - skip
+      removedCount++;
+      continue;
+    }
+    
     cleanedChars.push(sanitized[i]);
   }
   sanitized = cleanedChars.join('');
   
-  console.log(`PhaseII: Removed ${content.length - sanitized.length} control characters`);
+  console.log(`PhaseII: Sanitized content - removed ${removedCount} problematic characters`);
   return sanitized;
 }
 
@@ -408,78 +451,113 @@ function phaseii_extractNestedObject(block: string, key: string): string | null 
 //   "data": { "halo": "CLEARED", "rank": "AAA", "flare": 10, ... },
 //   "timestamp": "2026-01-20 08:27:37"
 // }
+// Safely extract fields from a block, tolerating encoding errors
+// CRITICAL: This function must never throw - it wraps all operations in try-catch
+// and focuses on extracting the essential numeric IDs (songId) and chart info
 function phaseii_extractFields(block: string): PhaseIIEntry {
-  // Extract song.id, song.name from nested song object
   let songId: number | null = null;
   let songName: string | null = null;
   let chart: string | null = null;
-  
-  const songContent = phaseii_extractNestedObject(block, 'song');
-  if (songContent) {
-    // Extract id from song object
-    const idMatch = songContent.match(/"id"\s*:\s*(\d+)/);
-    if (idMatch) songId = parseInt(idMatch[1]);
-    
-    // Extract name from song object
-    const nameMatch = songContent.match(/"name"\s*:\s*"([^"]+)"/);
-    if (nameMatch) songName = nameMatch[1];
-    
-    // Extract chart from song object (e.g., "SP EXPERT - 16")
-    const chartMatch = songContent.match(/"chart"\s*:\s*"([^"]+)"/);
-    if (chartMatch) chart = chartMatch[1];
-  }
-  
-  // Fallback: check for chart at top level (old format)
-  if (chart === null) {
-    const topLevelChart = block.match(/"chart"\s*:\s*"([^"]+)"/);
-    if (topLevelChart) chart = topLevelChart[1];
-  }
-  
-  // Extract points (quoted or unquoted) - at top level
   let points: string | null = null;
-  const quotedPoints = block.match(/"points"\s*:\s*"([^"]+)"/);
-  if (quotedPoints) {
-    points = quotedPoints[1];
-  } else {
-    const unquotedPoints = block.match(/"points"\s*:\s*(\d+)/);
-    if (unquotedPoints) points = unquotedPoints[1];
-  }
-  
-  // Extract halo, rank, flare from nested "data" object
   let halo: string | null = null;
   let rank: string | null = null;
   let flare: number | null = null;
-  
-  const dataContent = phaseii_extractNestedObject(block, 'data');
-  if (dataContent) {
-    const haloMatch = dataContent.match(/"halo"\s*:\s*"([^"]+)"/);
-    if (haloMatch) halo = haloMatch[1];
-    
-    const rankMatch = dataContent.match(/"rank"\s*:\s*"([^"]+)"/);
-    if (rankMatch) rank = rankMatch[1];
-    
-    const flareMatch = dataContent.match(/"flare"\s*:\s*(\d+)/);
-    if (flareMatch) flare = parseInt(flareMatch[1]);
-  }
-  
-  // Fallback: check top level (old format)
-  if (halo === null) {
-    const haloMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
-    if (haloMatch) halo = haloMatch[1];
-  }
-  if (rank === null) {
-    const rankMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
-    if (rankMatch) rank = rankMatch[1];
-  }
-  if (flare === null) {
-    const flareMatch = block.match(/"flare"\s*:\s*(\d+)/);
-    if (flareMatch) flare = parseInt(flareMatch[1]);
-  }
-  
-  // Extract timestamp - at top level
   let timestamp: string | null = null;
-  const timestampMatch = block.match(/"timestamp"\s*:\s*"([^"]+)"/);
-  if (timestampMatch) timestamp = timestampMatch[1];
+  
+  try {
+    // PRIORITY: Extract song.id first - this is the critical matching field
+    // Use a simple regex that works even with corrupted surrounding content
+    // Look for "id": followed by a number anywhere after "song"
+    const songIdMatch = block.match(/"song"\s*:\s*\{[^}]*?"id"\s*:\s*(\d+)/);
+    if (songIdMatch) {
+      songId = parseInt(songIdMatch[1]);
+    } else {
+      // Fallback: try to find id in a song object using nested extraction
+      const songContent = phaseii_extractNestedObject(block, 'song');
+      if (songContent) {
+        const idMatch = songContent.match(/"id"\s*:\s*(\d+)/);
+        if (idMatch) songId = parseInt(idMatch[1]);
+      }
+    }
+  } catch (e) {
+    // If song ID extraction fails, try a more aggressive pattern
+    try {
+      // Look for any "id": number pattern after "song"
+      const songSection = block.substring(block.indexOf('"song"'));
+      const idMatch = songSection.match(/"id"\s*:\s*(\d+)/);
+      if (idMatch) songId = parseInt(idMatch[1]);
+    } catch (_) { /* Continue without songId */ }
+  }
+  
+  try {
+    // Extract chart - second most critical field for matching
+    // Chart format is reliable: "SP EXPERT - 16" or "DP CHALLENGE - 18"
+    const chartMatch = block.match(/"chart"\s*:\s*"((SP|DP)\s+\w+\s*-\s*\d+)"/);
+    if (chartMatch) {
+      chart = chartMatch[1];
+    }
+  } catch (_) { /* Continue without chart */ }
+  
+  try {
+    // Extract song name - used for error reporting only, not for matching
+    // This field is most likely to be corrupted due to encoding issues
+    const nameMatch = block.match(/"name"\s*:\s*"([^"]{1,200})"/);
+    if (nameMatch) {
+      songName = nameMatch[1];
+      // If the name looks corrupted (contains replacement chars or weird patterns), 
+      // just mark it as unknown
+      if (songName.includes('?') && songName.length < 10) {
+        songName = `(encoding error - id:${songId || 'unknown'})`;
+      }
+    }
+  } catch (_) { 
+    songName = `(failed to extract name - id:${songId || 'unknown'})`;
+  }
+  
+  try {
+    // Extract points
+    const quotedPoints = block.match(/"points"\s*:\s*"([^"]+)"/);
+    if (quotedPoints) {
+      points = quotedPoints[1];
+    } else {
+      const unquotedPoints = block.match(/"points"\s*:\s*(\d+)/);
+      if (unquotedPoints) points = unquotedPoints[1];
+    }
+  } catch (_) { /* Continue without points */ }
+  
+  try {
+    // Extract halo, rank, flare from nested "data" object or top level
+    const dataContent = phaseii_extractNestedObject(block, 'data');
+    if (dataContent) {
+      const haloMatch = dataContent.match(/"halo"\s*:\s*"([^"]+)"/);
+      if (haloMatch) halo = haloMatch[1];
+      
+      const rankMatch = dataContent.match(/"rank"\s*:\s*"([^"]+)"/);
+      if (rankMatch) rank = rankMatch[1];
+      
+      const flareMatch = dataContent.match(/"flare"\s*:\s*(\d+)/);
+      if (flareMatch) flare = parseInt(flareMatch[1]);
+    }
+    
+    // Fallback: check top level
+    if (halo === null) {
+      const haloMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
+      if (haloMatch) halo = haloMatch[1];
+    }
+    if (rank === null) {
+      const rankMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
+      if (rankMatch) rank = rankMatch[1];
+    }
+    if (flare === null) {
+      const flareMatch = block.match(/"flare"\s*:\s*(\d+)/);
+      if (flareMatch) flare = parseInt(flareMatch[1]);
+    }
+  } catch (_) { /* Continue without halo/rank/flare */ }
+  
+  try {
+    const timestampMatch = block.match(/"timestamp"\s*:\s*"([^"]+)"/);
+    if (timestampMatch) timestamp = timestampMatch[1];
+  } catch (_) { /* Continue without timestamp */ }
   
   return { songId, songName, chart, points, halo, rank, flare, timestamp };
 }
@@ -571,42 +649,69 @@ async function processPhaseII(supabase: any, content: string): Promise<ParseResu
   
   // Log sample for debugging (already logged in extractBlocks, but log more details here)
   
-  // Step 2: Parse fields from blocks
+  // Step 2: Parse fields from blocks with error tolerance
+  // CRITICAL: Wrap each block in try-catch to ensure encoding errors don't stop processing
   const parsedEntries: Array<{ entry: PhaseIIEntry; chartInfo: { playstyle: string; difficulty_name: string; difficulty_level: number } }> = [];
   let skippedMissingSongId = 0;
   let skippedMissingChart = 0;
   let skippedInvalidChart = 0;
+  let skippedDueToError = 0;
   
-  for (const block of blocks) {
-    const entry = phaseii_extractFields(block);
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+    const block = blocks[blockIndex];
     
-    if (entry.songId === null) {
-      skippedMissingSongId++;
+    try {
+      const entry = phaseii_extractFields(block);
+      
+      if (entry.songId === null) {
+        skippedMissingSongId++;
+        // Log a sample of the problematic block for debugging
+        if (skippedMissingSongId <= 3) {
+          const sample = block.substring(0, 200).replace(/[\n\r]/g, ' ');
+          console.log(`PhaseII: Block ${blockIndex} missing songId, sample: ${sample}`);
+        }
+        continue;
+      }
+      
+      if (!entry.chart) {
+        skippedMissingChart++;
+        console.log(`PhaseII: Block ${blockIndex} has songId ${entry.songId} but missing chart`);
+        continue;
+      }
+      
+      const chartInfo = phaseii_parseChart(entry.chart);
+      if (!chartInfo) {
+        skippedInvalidChart++;
+        unmatchedSongs.push({ name: entry.songName, difficulty: entry.chart, reason: 'invalid_chart_format' });
+        continue;
+      }
+      
+      parsedEntries.push({ entry, chartInfo });
+    } catch (blockError) {
+      // This block caused an error - log it but continue processing
+      skippedDueToError++;
+      if (skippedDueToError <= 5) {
+        const errorMsg = blockError instanceof Error ? blockError.message : String(blockError);
+        console.error(`PhaseII: Error parsing block ${blockIndex}: ${errorMsg}`);
+        // Try to extract just the song ID for logging
+        try {
+          const idMatch = block.match(/"id"\s*:\s*(\d+)/);
+          if (idMatch) {
+            console.log(`PhaseII: Block ${blockIndex} contained song_id ${idMatch[1]}`);
+          }
+        } catch (_) { /* ignore */ }
+      }
       continue;
     }
-    
-    if (!entry.chart) {
-      skippedMissingChart++;
-      continue;
-    }
-    
-    const chartInfo = phaseii_parseChart(entry.chart);
-    if (!chartInfo) {
-      skippedInvalidChart++;
-      unmatchedSongs.push({ name: null, difficulty: entry.chart, reason: 'invalid_chart_format' });
-      continue;
-    }
-    
-    parsedEntries.push({ entry, chartInfo });
   }
   
-  console.log(`PhaseII: Parsed ${parsedEntries.length} entries (skipped: ${skippedMissingSongId} missing songId, ${skippedMissingChart} missing chart, ${skippedInvalidChart} invalid chart)`);
+  console.log(`PhaseII: Parsed ${parsedEntries.length} entries (skipped: ${skippedMissingSongId} missing songId, ${skippedMissingChart} missing chart, ${skippedInvalidChart} invalid chart, ${skippedDueToError} errors)`);
   
-  if (skippedMissingSongId > 0 || skippedMissingChart > 0) {
+  if (skippedMissingSongId > 0 || skippedMissingChart > 0 || skippedDueToError > 0) {
     unmatchedSongs.push({
-      name: `${skippedMissingSongId + skippedMissingChart} entries`,
+      name: `${skippedMissingSongId + skippedMissingChart + skippedDueToError} entries`,
       difficulty: null,
-      reason: 'missing_required_fields'
+      reason: 'missing_required_fields_or_parse_errors'
     });
   }
   
