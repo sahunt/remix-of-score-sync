@@ -151,6 +151,7 @@ function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
 
 interface PhaseIIEntry {
   songId: number | null;
+  songName: string | null;  // Added for better error reporting
   chart: string | null;
   points: string | null;
   halo: string | null;
@@ -408,8 +409,9 @@ function phaseii_extractNestedObject(block: string, key: string): string | null 
 //   "timestamp": "2026-01-20 08:27:37"
 // }
 function phaseii_extractFields(block: string): PhaseIIEntry {
-  // Extract song.id from nested song object
+  // Extract song.id, song.name from nested song object
   let songId: number | null = null;
+  let songName: string | null = null;
   let chart: string | null = null;
   
   const songContent = phaseii_extractNestedObject(block, 'song');
@@ -417,6 +419,10 @@ function phaseii_extractFields(block: string): PhaseIIEntry {
     // Extract id from song object
     const idMatch = songContent.match(/"id"\s*:\s*(\d+)/);
     if (idMatch) songId = parseInt(idMatch[1]);
+    
+    // Extract name from song object
+    const nameMatch = songContent.match(/"name"\s*:\s*"([^"]+)"/);
+    if (nameMatch) songName = nameMatch[1];
     
     // Extract chart from song object (e.g., "SP EXPERT - 16")
     const chartMatch = songContent.match(/"chart"\s*:\s*"([^"]+)"/);
@@ -475,7 +481,7 @@ function phaseii_extractFields(block: string): PhaseIIEntry {
   const timestampMatch = block.match(/"timestamp"\s*:\s*"([^"]+)"/);
   if (timestampMatch) timestamp = timestampMatch[1];
   
-  return { songId, chart, points, halo, rank, flare, timestamp };
+  return { songId, songName, chart, points, halo, rank, flare, timestamp };
 }
 
 // Parse chart string like "SP EXPERT - 15"
@@ -627,9 +633,9 @@ async function processPhaseII(supabase: any, content: string): Promise<ParseResu
     
     if (!match) {
       unmatchedSongs.push({
-        name: null,
+        name: entry.songName,  // Now includes song name from PhaseII data
         difficulty: `${chartInfo.playstyle} ${chartInfo.difficulty_name} ${chartInfo.difficulty_level}`,
-        reason: 'no_match_by_id'
+        reason: `no_match_by_id (song_id: ${entry.songId})`
       });
       continue;
     }
