@@ -491,10 +491,74 @@ function phaseii_extractFields(block: string): PhaseIIEntry {
   
   try {
     // Extract chart - second most critical field for matching
-    // Chart format is reliable: "SP EXPERT - 16" or "DP CHALLENGE - 18"
-    const chartMatch = block.match(/"chart"\s*:\s*"((SP|DP)\s+\w+\s*-\s*\d+)"/);
-    if (chartMatch) {
-      chart = chartMatch[1];
+    // Chart can be a string "SP EXPERT - 16" OR a numeric index (0-9)
+    // Numeric chart format: 0-4 = SP (BEGINNER, BASIC, DIFFICULT, EXPERT, CHALLENGE)
+    //                       5-9 = DP (BEGINNER, BASIC, DIFFICULT, EXPERT, CHALLENGE) but often 5 is omitted
+    //                       so 5/6/7/8/9 are BASIC, DIFFICULT, EXPERT, CHALLENGE for DP
+    
+    // First try string format
+    const chartStrMatch = block.match(/"chart"\s*:\s*"((SP|DP)\s+\w+\s*-\s*\d+)"/);
+    if (chartStrMatch) {
+      chart = chartStrMatch[1];
+    } else {
+      // Try numeric chart format - look inside "song" object
+      const songContent = phaseii_extractNestedObject(block, 'song');
+      if (songContent) {
+        const numericChartMatch = songContent.match(/"chart"\s*:\s*(\d+)/);
+        if (numericChartMatch) {
+          const chartIndex = parseInt(numericChartMatch[1]);
+          // Also extract difficulty level from song.data.difficulty
+          const diffMatch = songContent.match(/"difficulty"\s*:\s*(\d+)/);
+          const diffLevel = diffMatch ? parseInt(diffMatch[1]) : 0;
+          
+          // Convert chart index to playstyle + difficulty name
+          const CHART_MAP: Record<number, { playstyle: string; difficulty: string }> = {
+            0: { playstyle: 'SP', difficulty: 'BEGINNER' },
+            1: { playstyle: 'SP', difficulty: 'BASIC' },
+            2: { playstyle: 'SP', difficulty: 'DIFFICULT' },
+            3: { playstyle: 'SP', difficulty: 'EXPERT' },
+            4: { playstyle: 'SP', difficulty: 'CHALLENGE' },
+            5: { playstyle: 'DP', difficulty: 'BEGINNER' },
+            6: { playstyle: 'DP', difficulty: 'BASIC' },
+            7: { playstyle: 'DP', difficulty: 'DIFFICULT' },
+            8: { playstyle: 'DP', difficulty: 'EXPERT' },
+            9: { playstyle: 'DP', difficulty: 'CHALLENGE' },
+          };
+          
+          const chartInfo = CHART_MAP[chartIndex];
+          if (chartInfo && diffLevel > 0) {
+            chart = `${chartInfo.playstyle} ${chartInfo.difficulty} - ${diffLevel}`;
+          }
+        }
+      }
+      
+      // Fallback: try numeric chart at top level
+      if (!chart) {
+        const topLevelChart = block.match(/"chart"\s*:\s*(\d+)/);
+        if (topLevelChart) {
+          const chartIndex = parseInt(topLevelChart[1]);
+          const diffMatch = block.match(/"difficulty"\s*:\s*(\d+)/);
+          const diffLevel = diffMatch ? parseInt(diffMatch[1]) : 0;
+          
+          const CHART_MAP: Record<number, { playstyle: string; difficulty: string }> = {
+            0: { playstyle: 'SP', difficulty: 'BEGINNER' },
+            1: { playstyle: 'SP', difficulty: 'BASIC' },
+            2: { playstyle: 'SP', difficulty: 'DIFFICULT' },
+            3: { playstyle: 'SP', difficulty: 'EXPERT' },
+            4: { playstyle: 'SP', difficulty: 'CHALLENGE' },
+            5: { playstyle: 'DP', difficulty: 'BEGINNER' },
+            6: { playstyle: 'DP', difficulty: 'BASIC' },
+            7: { playstyle: 'DP', difficulty: 'DIFFICULT' },
+            8: { playstyle: 'DP', difficulty: 'EXPERT' },
+            9: { playstyle: 'DP', difficulty: 'CHALLENGE' },
+          };
+          
+          const chartInfo = CHART_MAP[chartIndex];
+          if (chartInfo && diffLevel > 0) {
+            chart = `${chartInfo.playstyle} ${chartInfo.difficulty} - ${diffLevel}`;
+          }
+        }
+      }
     }
   } catch (_) { /* Continue without chart */ }
   
@@ -527,29 +591,54 @@ function phaseii_extractFields(block: string): PhaseIIEntry {
   
   try {
     // Extract halo, rank, flare from nested "data" object or top level
+    // IMPORTANT: These can be strings OR numeric codes
+    // Numeric halo: 1000=fail, 200=clear, 2000=FC?, etc.
+    // Numeric rank: 100=E, 200=D, 300=C, 400=B, 500=A, 600=AA, 700=AAA
     const dataContent = phaseii_extractNestedObject(block, 'data');
     if (dataContent) {
-      const haloMatch = dataContent.match(/"halo"\s*:\s*"([^"]+)"/);
-      if (haloMatch) halo = haloMatch[1];
+      // Try string halo first, then numeric
+      const haloStrMatch = dataContent.match(/"halo"\s*:\s*"([^"]+)"/);
+      if (haloStrMatch) {
+        halo = haloStrMatch[1];
+      } else {
+        const haloNumMatch = dataContent.match(/"halo"\s*:\s*(\d+)/);
+        if (haloNumMatch) halo = haloNumMatch[1]; // Keep as string, will convert later
+      }
       
-      const rankMatch = dataContent.match(/"rank"\s*:\s*"([^"]+)"/);
-      if (rankMatch) rank = rankMatch[1];
+      // Try string rank first, then numeric
+      const rankStrMatch = dataContent.match(/"rank"\s*:\s*"([^"]+)"/);
+      if (rankStrMatch) {
+        rank = rankStrMatch[1];
+      } else {
+        const rankNumMatch = dataContent.match(/"rank"\s*:\s*(\d+)/);
+        if (rankNumMatch) rank = rankNumMatch[1]; // Keep as string, will convert later
+      }
       
-      const flareMatch = dataContent.match(/"flare"\s*:\s*(\d+)/);
+      const flareMatch = dataContent.match(/"flare"\s*:\s*(-?\d+)/);
       if (flareMatch) flare = parseInt(flareMatch[1]);
     }
     
     // Fallback: check top level
     if (halo === null) {
-      const haloMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
-      if (haloMatch) halo = haloMatch[1];
+      const haloStrMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
+      if (haloStrMatch) {
+        halo = haloStrMatch[1];
+      } else {
+        const haloNumMatch = block.match(/"halo"\s*:\s*(\d+)/);
+        if (haloNumMatch) halo = haloNumMatch[1];
+      }
     }
     if (rank === null) {
-      const rankMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
-      if (rankMatch) rank = rankMatch[1];
+      const rankStrMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
+      if (rankStrMatch) {
+        rank = rankStrMatch[1];
+      } else {
+        const rankNumMatch = block.match(/"rank"\s*:\s*(\d+)/);
+        if (rankNumMatch) rank = rankNumMatch[1];
+      }
     }
     if (flare === null) {
-      const flareMatch = block.match(/"flare"\s*:\s*(\d+)/);
+      const flareMatch = block.match(/"flare"\s*:\s*(-?\d+)/);
       if (flareMatch) flare = parseInt(flareMatch[1]);
     }
   } catch (_) { /* Continue without halo/rank/flare */ }
@@ -573,9 +662,43 @@ function phaseii_parseChart(chart: string): { playstyle: string; difficulty_name
   };
 }
 
-// Normalize halo string to standard format
+// Normalize halo string or numeric code to standard format
+// Numeric codes from PhaseII: 
+//   1000 = fail/no play, 200 = clear, 2000 = FC-ish?, etc.
+//   Based on observed data, higher numbers generally = better halos
 function phaseii_normalizeHalo(halo: string | null): string | null {
   if (!halo) return null;
+  
+  // Check if it's a numeric code
+  const numericValue = parseInt(halo);
+  if (!isNaN(numericValue) && halo === String(numericValue)) {
+    // Numeric halo code mapping based on observed PhaseII data
+    // These codes appear to follow a pattern where higher = better
+    const numericMap: Record<number, string> = {
+      1000: 'fail',      // Failed
+      200: 'clear',      // Cleared 
+      2000: 'fc',        // Full Combo (possibly Great FC)
+      3000: 'gfc',       // Great Full Combo
+      4000: 'pfc',       // Perfect Full Combo  
+      5000: 'mfc',       // Marvelous Full Combo
+    };
+    
+    // Check exact matches first
+    if (numericMap[numericValue]) {
+      return numericMap[numericValue];
+    }
+    
+    // Handle ranges for life4 and other in-between values
+    if (numericValue < 200) return 'fail';
+    if (numericValue < 1000) return 'clear';
+    if (numericValue < 2000) return 'life4';
+    if (numericValue < 3000) return 'fc';
+    if (numericValue < 4000) return 'gfc';
+    if (numericValue < 5000) return 'pfc';
+    return 'mfc';
+  }
+  
+  // String-based normalization
   const normalized = halo.toUpperCase();
   const map: Record<string, string> = {
     'MARVELOUS FULL COMBO': 'mfc', 'MFC': 'mfc',
@@ -583,9 +706,56 @@ function phaseii_normalizeHalo(halo: string | null): string | null {
     'GREAT FULL COMBO': 'gfc', 'GFC': 'gfc',
     'GOOD FULL COMBO': 'fc', 'FULL COMBO': 'fc', 'FC': 'fc',
     'LIFE4': 'life4', 'LIFE 4': 'life4',
-    'CLEAR': 'clear', 'FAILED': 'fail', 'FAIL': 'fail',
+    'CLEAR': 'clear', 'CLEARED': 'clear',
+    'FAILED': 'fail', 'FAIL': 'fail',
   };
   return map[normalized] || 'clear';
+}
+
+// Normalize rank string or numeric code to standard format
+// Numeric codes from PhaseII:
+//   100=E, 200=D, 300=C, 400=B, 500=A, 600=AA, 700=AAA
+// Also handles + and - variants
+function phaseii_normalizeRank(rank: string | null): string | null {
+  if (!rank) return null;
+  
+  // Check if it's a numeric code
+  const numericValue = parseInt(rank);
+  if (!isNaN(numericValue) && rank === String(numericValue)) {
+    // Numeric rank code mapping based on observed PhaseII data
+    const numericMap: Record<number, string> = {
+      100: 'E',
+      200: 'D', 210: 'D', 220: 'D+',
+      300: 'C-', 310: 'C', 320: 'C+',
+      400: 'B-', 410: 'B', 420: 'B+',
+      500: 'A-', 510: 'A', 520: 'A+',
+      600: 'AA-', 610: 'AA', 620: 'AA+',
+      700: 'AAA',
+    };
+    
+    // Check exact matches first
+    if (numericMap[numericValue]) {
+      return numericMap[numericValue];
+    }
+    
+    // Handle ranges
+    if (numericValue < 200) return 'E';
+    if (numericValue < 300) return 'D';
+    if (numericValue < 400) return 'C';
+    if (numericValue < 500) return 'B';
+    if (numericValue < 600) return 'A';
+    if (numericValue < 700) return 'AA';
+    return 'AAA';
+  }
+  
+  // Already a string - just normalize case
+  const upper = rank.toUpperCase();
+  // Valid ranks in DDR
+  const validRanks = ['E', 'D', 'D+', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'AA-', 'AA', 'AA+', 'AAA'];
+  if (validRanks.includes(upper)) {
+    return upper;
+  }
+  return upper; // Return as-is if not recognized
 }
 
 // Parse score points
@@ -756,7 +926,7 @@ async function processPhaseII(supabase: any, content: string): Promise<ParseResu
       score: phaseii_parseScore(entry.points),
       timestamp: entry.timestamp,
       username: null,
-      rank: entry.rank,
+      rank: phaseii_normalizeRank(entry.rank),
       flare: entry.flare,
       halo: phaseii_normalizeHalo(entry.halo),
       source_type: 'phaseii',
