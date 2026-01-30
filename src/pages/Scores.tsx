@@ -212,9 +212,11 @@ export default function Scores() {
   // Determine if we should fetch scores:
   // - Level selected, OR
   // - Has active filters with level rules, OR  
-  // - Has any active filter (show all matching scores across all levels)
+  // - Has any active filter (show all matching scores across all levels), OR
+  // - Has a search query (search across all scores)
   const hasActiveFilters = activeFilters.length > 0;
-  const shouldFetchScores = selectedLevel !== null || levelsFromFilters.length > 0 || hasActiveFilters;
+  const hasSearchQuery = searchQuery.trim().length > 0;
+  const shouldFetchScores = selectedLevel !== null || levelsFromFilters.length > 0 || hasActiveFilters || hasSearchQuery;
   
   // Compute the levels to fetch - either the selected level, levels from filters, or null (all levels)
   const levelsToFetch = selectedLevel !== null 
