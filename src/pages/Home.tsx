@@ -5,9 +5,8 @@ import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useGoals } from '@/hooks/useGoals';
 import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
 import { useMusicDbCount } from '@/hooks/useMusicDbCount';
+import { useUserScores } from '@/hooks/useUserScores';
 import { use12MSMode } from '@/hooks/use12MSMode';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
@@ -81,52 +80,8 @@ export default function Home() {
   const { reverseTransformHalo } = use12MSMode();
   const [createGoalOpen, setCreateGoalOpen] = useState(false);
 
-  // Fetch user scores for progress calculation
-  const { data: scores = [], isLoading: scoresLoading } = useQuery({
-    queryKey: ['user-scores', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      
-      // Supabase limits responses to 1000 rows per request
-      // Must paginate to fetch all scores (users can have 4500+ scores)
-      const PAGE_SIZE = 1000;
-      let allScores: ScoreWithSong[] = [];
-      let from = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('user_scores')
-          .select(`
-            id,
-            score,
-            timestamp,
-            playstyle,
-            difficulty_name,
-            difficulty_level,
-            rank,
-            flare,
-            halo,
-            musicdb(name, artist, eamuse_id, song_id)
-          `)
-          .eq('user_id', user.id)
-          .eq('playstyle', 'SP')
-          .order('timestamp', { ascending: false, nullsFirst: false })
-          .range(from, from + PAGE_SIZE - 1);
-
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allScores = [...allScores, ...(data as ScoreWithSong[])];
-          from += PAGE_SIZE;
-          hasMore = data.length === PAGE_SIZE;
-        } else {
-          hasMore = false;
-        }
-      }
-      
-      return allScores;
-    },
+  // Use shared hook for consistent score data across all views
+  const { data: scores = [], isLoading: scoresLoading } = useUserScores({
     enabled: !!user?.id,
   });
 
