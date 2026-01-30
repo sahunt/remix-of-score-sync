@@ -1,75 +1,68 @@
 
-# Investigation Summary: Songs Not Displaying on Scores Page
+# Fix Songs Not Displaying on Scores Page
 
-## Problem
-- Stats show correct counts (237 total Level 14 songs)
-- Song cards display "No scores found"
-- Data exists in database but isn't rendering
+## Problem Summary
+Stats show correct counts (e.g., 237 Level 14 songs) but the song list displays "No scores found" - data exists in the database but isn't rendering in the UI.
 
-## Root Cause Identified
+## Root Cause
+**Inconsistent `musicdb` queries across the codebase**
 
-**Primary Issue: Stale Cached JavaScript**
+Several files fetch incomplete `musicdb` data (only `name, artist`) while the display components expect the full shape including `eamuse_id` and `song_id`. This causes rendering logic to fail when trying to use missing fields.
 
-The network request captured from your browser shows:
+## Files to Update
+
+### 1. Home.tsx (Line 109)
+**Current:**
+```typescript
+musicdb(name, artist)
 ```
-musicdb(name,artist)
-```
-
-But the current code in Scores.tsx (lines 236-241) includes:
-```
-musicdb(name, artist, eamuse_id, song_id)
-```
-
-This indicates your browser is running an **older cached version** of the JavaScript that doesn't include the recent query updates. The stats work because they use `difficulty_level` directly from `user_scores`, but the song card rendering likely depends on the full `musicdb` data including `song_id` for proper display.
-
-**Secondary Issue: Inconsistent Queries Across Files**
-
-Several files still use incomplete musicdb queries:
-- `Home.tsx` line 109: `musicdb(name, artist)` - missing `eamuse_id, song_id`  
-- `CreateGoalSheet.tsx` line 115: `musicdb(name, artist)` - missing fields
-
-While `GoalDetail.tsx` correctly includes all 4 fields.
-
-## Recommended Fix
-
-### Step 1: Force Browser Cache Refresh
-Try a hard refresh in your browser (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows) to load the latest JavaScript.
-
-### Step 2: Update Inconsistent Queries
-Update the following files to include all musicdb fields:
-
-**Home.tsx** (line 109):
+**Change to:**
 ```typescript
 musicdb(name, artist, eamuse_id, song_id)
 ```
 
-**CreateGoalSheet.tsx** (line 115):
+### 2. CreateGoalSheet.tsx (Line 115)
+**Current:**
+```typescript
+musicdb(name, artist)
+```
+**Change to:**
 ```typescript
 musicdb(name, artist, eamuse_id, song_id)
 ```
 
-### Step 3: Update TypeScript Interfaces
-Ensure all `ScoreWithSong` and similar interfaces include the full musicdb shape:
+### 3. useFilterResults.ts - Update Interface (Lines 4-12)
+**Current:**
 ```typescript
-musicdb: {
-  name: string | null;
-  artist: string | null;
-  eamuse_id: string | null;
-  song_id: number | null;
-} | null;
+interface ScoreData {
+  ...
+  musicdb: { name: string | null; artist: string | null } | null;
+}
+```
+**Change to:**
+```typescript
+interface ScoreData {
+  ...
+  musicdb: { 
+    name: string | null; 
+    artist: string | null;
+    eamuse_id: string | null;
+    song_id: number | null;
+  } | null;
+}
 ```
 
-## Technical Details
+## Implementation Steps
 
-**Database Status:**
-- All 2,328 SP scores have `musicdb_id` set correctly
-- All 237 Level 14 scores have valid `musicdb` relationships
-- Data joins work correctly at the database level
+1. Update `src/pages/Home.tsx` - Add `eamuse_id, song_id` to musicdb query
+2. Update `src/components/goals/CreateGoalSheet.tsx` - Add `eamuse_id, song_id` to musicdb query  
+3. Update `src/hooks/useFilterResults.ts` - Expand `ScoreData` interface to include all musicdb fields
 
-**Files Requiring Updates:**
-1. `src/pages/Home.tsx` - Update query to include all musicdb fields
-2. `src/components/goals/CreateGoalSheet.tsx` - Update query to include all musicdb fields  
-3. `src/hooks/useFilterResults.ts` - Update interface type
-4. `src/components/filters/FilterModal.tsx` - Update interface type
-5. `src/components/filters/CreateFilterSheet.tsx` - Update interface type
-6. `src/components/scores/FiltersSection.tsx` - Update interface type
+## Expected Outcome
+After these changes, the song cards will render correctly because:
+- All queries will return the complete `musicdb` object
+- TypeScript interfaces will match the actual data shape
+- Display components will have access to `song_id` for unique keys and `eamuse_id` for jacket art lookups
+
+## Additional Note
+The user should also perform a hard browser refresh (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows) after deployment to ensure the latest JavaScript is loaded.
