@@ -1,6 +1,6 @@
 import { SongCard } from '@/components/scores/SongCard';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getProximityLabel, type Goal, type ScoreWithSong } from '@/hooks/useGoalProgress';
+import type { Goal, ScoreWithSong } from '@/hooks/useGoalProgress';
 
 interface SuggestionsListProps {
   songs: ScoreWithSong[];
@@ -35,32 +35,20 @@ export function SuggestionsList({ songs, goal, isLoading }: SuggestionsListProps
       <p className="text-xs text-muted-foreground uppercase tracking-wide px-1 mb-3">
         Songs closest to achieving this goal
       </p>
-      {songs.map((song) => {
-        const proximityLabel = getProximityLabel(song, goal.target_type, goal.target_value);
-        
-        return (
-          <div key={song.id} className="relative">
-            <SongCard
-              name={song.musicdb?.name ?? song.name ?? 'Unknown Song'}
-              difficultyLevel={song.difficulty_level}
-              difficultyName={song.difficulty_name}
-              score={song.score}
-              rank={song.rank}
-              flare={song.flare}
-              halo={song.halo}
-              eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
-              songId={song.musicdb?.song_id ?? song.song_id}
-            />
-            {proximityLabel && (
-              <div className="absolute bottom-2 left-3 right-3">
-                <p className="text-[10px] text-muted-foreground">
-                  {proximityLabel}
-                </p>
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {songs.map((song) => (
+        <SongCard
+          key={song.id}
+          name={song.musicdb?.name ?? song.name ?? 'Unknown Song'}
+          difficultyLevel={song.difficulty_level}
+          difficultyName={song.difficulty_name}
+          score={song.score}
+          rank={song.rank}
+          flare={song.flare}
+          halo={song.halo}
+          eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
+          songId={song.musicdb?.song_id ?? song.song_id}
+        />
+      ))}
     </div>
   );
 }
