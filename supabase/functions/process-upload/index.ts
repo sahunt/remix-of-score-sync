@@ -177,58 +177,51 @@ function phaseii_sanitizeContent(content: string): string {
   return sanitized;
 }
 
-// Extract entry blocks from JSON content using bracket matching
-function phaseii_extractBlocks(content: string): string[] {
-  const sanitized = phaseii_sanitizeContent(content);
+// Extract a JSON array from content by key name using bracket matching
+function phaseii_extractArray(content: string, key: string): string | null {
+  const pattern = new RegExp(`"${key}"\\s*:\\s*\\[`);
+  const match = content.match(pattern);
   
-  // PhaseII exports can have two formats:
-  // 1. Array of score objects: [{ song: {...}, chart: "...", ... }, ...]
-  // 2. Wrapper object with data array: { headers: [...], data: [...] }
+  if (!match || match.index === undefined) return null;
   
-  // First, check if this is a wrapper object with "data" array
-  const dataArrayMatch = sanitized.match(/"data"\s*:\s*\[/);
+  const startIdx = match.index + match[0].length - 1; // Include the '['
+  let depth = 0;
+  let endIdx = startIdx;
+  let inString = false;
+  let escaped = false;
   
-  let jsonToProcess = sanitized;
-  if (dataArrayMatch && dataArrayMatch.index !== undefined) {
-    // Extract just the data array portion
-    const startIdx = dataArrayMatch.index + dataArrayMatch[0].length - 1; // Include the '['
+  for (let i = startIdx; i < content.length; i++) {
+    const char = content[i];
     
-    let depth = 0;
-    let endIdx = startIdx;
-    let inString = false;
-    let escaped = false;
+    if (escaped) { escaped = false; continue; }
+    if (char === '\\' && inString) { escaped = true; continue; }
+    if (char === '"' && !escaped) { inString = !inString; continue; }
     
-    for (let i = startIdx; i < sanitized.length; i++) {
-      const char = sanitized[i];
-      
-      if (escaped) { escaped = false; continue; }
-      if (char === '\\' && inString) { escaped = true; continue; }
-      if (char === '"' && !escaped) { inString = !inString; continue; }
-      
-      if (!inString) {
-        if (char === '[') depth++;
-        else if (char === ']') {
-          depth--;
-          if (depth === 0) {
-            endIdx = i + 1;
-            break;
-          }
+    if (!inString) {
+      if (char === '[') depth++;
+      else if (char === ']') {
+        depth--;
+        if (depth === 0) {
+          endIdx = i + 1;
+          break;
         }
       }
     }
-    
-    jsonToProcess = sanitized.substring(startIdx, endIdx);
-    console.log(`PhaseII: Found wrapper object, extracted data array (length: ${jsonToProcess.length})`);
   }
   
-  const entryBlocks: string[] = [];
+  return content.substring(startIdx, endIdx);
+}
+
+// Extract objects from a JSON array string
+function phaseii_extractObjectsFromArray(arrayContent: string): string[] {
+  const objects: string[] = [];
   let depth = 0;
   let currentBlock = '';
   let inString = false;
   let escaped = false;
   
-  for (let i = 0; i < jsonToProcess.length; i++) {
-    const char = jsonToProcess[i];
+  for (let i = 0; i < arrayContent.length; i++) {
+    const char = arrayContent[i];
     
     if (escaped) {
       escaped = false;
@@ -250,41 +243,108 @@ function phaseii_extractBlocks(content: string): string[] {
     
     if (!inString) {
       if (char === '{') {
-        if (depth === 0 && currentBlock.trim()) {
-          currentBlock = '';
-        }
+        if (depth === 0) currentBlock = '';
         depth++;
         currentBlock += char;
       } else if (char === '}') {
         depth--;
         currentBlock += char;
         if (depth === 0 && currentBlock.trim()) {
-          entryBlocks.push(currentBlock);
+          objects.push(currentBlock);
           currentBlock = '';
         }
       } else if (char === '[' && depth === 0) {
-        continue; // Skip array start
+        continue;
       } else if (char === ']' && depth === 0) {
-        break; // End of array
+        break;
       } else {
-        if (depth > 0) {
-          currentBlock += char;
-        }
+        if (depth > 0) currentBlock += char;
       }
     } else {
       currentBlock += char;
     }
   }
   
-  console.log(`PhaseII: Extracted ${entryBlocks.length} entry blocks`);
+  return objects;
+}
+
+// Extract entry blocks from JSON content
+// PhaseII format: { headers: [...], data: [{ userId, username, scores: [...] }, ...] }
+// Each player in data array has a nested "scores" array with the actual score entries
+function phaseii_extractBlocks(content: string): string[] {
+  const sanitized = phaseii_sanitizeContent(content);
   
-  // Log first block sample for debugging
-  if (entryBlocks.length > 0) {
-    const sampleContent = entryBlocks[0].substring(0, 200);
-    console.log(`PhaseII: First block sample: ${sampleContent}`);
+  // Check if this is a wrapper with "data" array (format 2: player-level export)
+  const dataArrayContent = phaseii_extractArray(sanitized, 'data');
+  
+  if (dataArrayContent) {
+    console.log(`PhaseII: Found wrapper object with data array (length: ${dataArrayContent.length})`);
+    
+    // Extract player objects from data array
+    const playerObjects = phaseii_extractObjectsFromArray(dataArrayContent);
+    console.log(`PhaseII: Found ${playerObjects.length} player objects`);
+    
+    if (playerObjects.length > 0) {
+      // Log sample player structure to see available fields
+      const samplePlayer = playerObjects[0].substring(0, 300);
+      console.log(`PhaseII: Sample player object: ${samplePlayer}`);
+    }
+    
+    // Now extract scores from each player object
+    const allScoreBlocks: string[] = [];
+    
+    for (const playerObj of playerObjects) {
+      // Try "scores" array first
+      let scoresArray = phaseii_extractArray(playerObj, 'scores');
+      
+      if (scoresArray) {
+        const scoreObjects = phaseii_extractObjectsFromArray(scoresArray);
+        allScoreBlocks.push(...scoreObjects);
+      }
+    }
+    
+    console.log(`PhaseII: Extracted ${allScoreBlocks.length} score blocks from player objects`);
+    
+    if (allScoreBlocks.length > 0) {
+      const sampleScore = allScoreBlocks[0].substring(0, 300);
+      console.log(`PhaseII: Sample score block: ${sampleScore}`);
+      return allScoreBlocks;
+    }
+    
+    // If no nested scores found, the data array might contain score objects directly
+    // (old format where scores are at top level)
+    console.log('PhaseII: No nested scores found, checking if data contains score objects directly');
+    
+    // Check first player object for score-like fields
+    if (playerObjects.length > 0) {
+      const firstObj = playerObjects[0];
+      if (firstObj.includes('"song"') || firstObj.includes('"chart"') || firstObj.includes('"points"')) {
+        console.log('PhaseII: Data array contains score objects directly');
+        return playerObjects;
+      }
+    }
+    
+    // Return player objects and let the parser handle field extraction
+    return playerObjects;
   }
   
-  return entryBlocks;
+  // Format 1: Direct array of score objects [{ song: {...}, chart: "...", ... }, ...]
+  if (sanitized.trim().startsWith('[')) {
+    console.log('PhaseII: Processing as direct array of score objects');
+    const objects = phaseii_extractObjectsFromArray(sanitized);
+    
+    if (objects.length > 0) {
+      const sampleContent = objects[0].substring(0, 200);
+      console.log(`PhaseII: First block sample: ${sampleContent}`);
+    }
+    
+    return objects;
+  }
+  
+  // Format 3: Single object - try to find any array within
+  console.log('PhaseII: Trying to find any array in the object');
+  const objects = phaseii_extractObjectsFromArray(sanitized);
+  return objects;
 }
 
 // Find the bounds of a nested JSON object and extract content within
