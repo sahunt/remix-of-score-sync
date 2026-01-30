@@ -1,88 +1,142 @@
 
-# Stats Card Enhancement Plan
+
+# Musicdb "Deleted" Songs Feature Plan
 
 ## Overview
-Update the stats card to use a new background image and add an average score calculation for all played songs based on the current filters.
 
-## Visual Changes
+This update introduces a `deleted` boolean column to the `musicdb` table to distinguish between active songs (available in the current game version) and deleted songs (removed from the game but may have historical scores). 
 
-The stats card will be updated to match the reference design:
-- New background image with a more vibrant purple gradient
-- A horizontal white divider line at 50% opacity below the stats row
-- A new "Avg. X,XXX,XXX" display centered below the divider
+**Important Clarification on the Data:**
+- The **existing** rows in musicdb are the **active songs** (deleted = FALSE)
+- The **new songs** from the CSV are the **deleted songs** (deleted = TRUE)
+- Deleted songs should be completely hidden from all UI, calculations, goals, and catalog counts
 
-## Changes Required
+## Data Analysis
 
-### 1. Add New Background Image
+The CSV contains **209 chart entries** representing **47 unique deleted songs** (identified by unique eamuse_id values). Since these songs don't exist in musicdb yet, we need to:
+1. Generate new song_ids for them (starting from max + 1 = 38887)
+2. Generate chart_ids using the formula: `(song_id * 100) + difficulty_position`
+3. Insert them with `deleted = TRUE`
 
-Copy the uploaded `newStats.png` to the assets folder and replace the current background.
-
-**File:** `src/assets/newStats.png` (new file)
-
----
-
-### 2. Update StatsSummary Component
-
-Modify the component to accept an optional `averageScore` prop and render the new layout.
-
-**File:** `src/components/scores/StatsSummary.tsx`
-
-**Changes:**
-- Add `averageScore` prop to the interface (optional, can be null/undefined)
-- Keep the existing stats row as-is
-- Add a horizontal divider below the stats row (white line at 50% opacity)
-- Add the "Avg. X,XXX,XXX" text below the divider, centered
-- Import and use the new background image
-- Only show the divider and average if `averageScore` is provided and greater than 0
+Difficulty position mapping for SP:
+- BEGINNER = 0
+- BASIC = 1
+- DIFFICULT = 2
+- EXPERT = 3
+- CHALLENGE = 4
 
 ---
 
-### 3. Calculate Average Score in Scores Page
+## Phase 1: Database Schema Update
 
-Add logic to compute the average score from all played songs matching the current filters (excluding songs with no score).
+### Migration
 
-**File:** `src/pages/Scores.tsx`
+Add the `deleted` column with default value `FALSE`, then set all existing rows to `FALSE` (active songs):
 
-**Changes:**
-- Within the `stats` useMemo, calculate the average:
-  - Filter to only songs with a non-null score
-  - Sum all scores and divide by count
-  - Round to whole number
-- Pass the `averageScore` to the `StatsSummary` component
+```sql
+ALTER TABLE musicdb 
+ADD COLUMN deleted boolean NOT NULL DEFAULT FALSE;
+```
+
+Since the default is FALSE, all 10,308 existing rows will automatically be marked as active.
+
+---
+
+## Phase 2: Insert Deleted Songs via Edge Function
+
+### New Edge Function: `import-deleted-songs`
+
+Create an edge function that:
+1. Accepts CSV content with columns: `eamuse_id, title, difficulty_level, difficulty_name, playstyle`
+2. Groups rows by unique `eamuse_id` to identify unique songs
+3. For each unique song, checks if `eamuse_id` already exists in musicdb
+   - If exists: Update those rows to set `deleted = TRUE`
+   - If not exists: Generate a new `song_id` and insert all chart rows
+4. Generates `chart_id` using the standard formula
+5. Inserts with `deleted = TRUE`
+
+---
+
+## Phase 3: Filter Deleted Songs from All Queries
+
+Every query that reads from `musicdb` must exclude deleted songs. The affected locations are:
+
+### 3.1 `src/hooks/useMusicDbCount.ts`
+Add `.eq('deleted', false)` to the query that counts catalog charts.
+
+### 3.2 `src/pages/Scores.tsx`
+Add `.eq('deleted', false)` to the fetchMusicDbCharts query (around line 324).
+
+### 3.3 `src/pages/GoalDetail.tsx`
+Add `.eq('deleted', false)` to the musicdb charts query (around line 55).
+
+### 3.4 `src/components/scores/SongDetailModal.tsx`
+Add `.eq('deleted', false)` to the charts query (around line 119).
+
+### 3.5 `src/hooks/useUserScores.ts`
+The user_scores table joins to musicdb - we need to ensure the join excludes deleted songs, or filter them out client-side. The safest approach is to add a filter on the joined musicdb relation or handle in the client layer.
+
+---
+
+## Phase 4: Update TypeScript Types
+
+### `src/integrations/supabase/types.ts`
+This file is auto-generated, but after the migration runs, it will automatically include the `deleted` field.
 
 ---
 
 ## Technical Details
 
-### Average Score Calculation Logic
+### Chart ID Generation for New Songs
+
+For each unique eamuse_id, we assign a new song_id starting from 38887. The chart_id formula:
 
 ```text
-1. Take the filtered scores (already filtered by level and active filters)
-2. Filter out songs where score is null (no play)
-3. If no played songs remain, average is 0/null
-4. Otherwise: average = sum of all scores / count of played songs
-5. Round to nearest integer
+song_id * 100 + difficulty_position
+
+Where difficulty_position:
+  BEGINNER = 0
+  BASIC = 1
+  DIFFICULT = 2
+  EXPERT = 3
+  CHALLENGE = 4
 ```
 
-### Divider Styling
+### Song Data from CSV
 
-- Width: Approximately 60-70% of the card width, centered
-- Height: 1px
-- Color: White with 50% opacity (`rgba(255, 255, 255, 0.5)`)
-- Margin: ~12px above and below for spacing
+| eamuse_id | title | Charts (levels) |
+|-----------|-------|-----------------|
+| 00ibl6biOOOdDd96OP0P0i8iObo8i09d | Realize | BEG:3, BAS:6, DIF:11, EXP:14 |
+| 00q86iQQIIiOlqi6Doqi6b9PiOodo10O | Believe | BEG:2, BAS:4, DIF:9, EXP:11 |
+| (47 unique songs total with ~209 chart rows) |
 
-### Average Display Styling
+### Why Not Check by `eamuse_id` Before Filtering?
 
-- Text: "Avg. " followed by the formatted number (with comma separators)
-- Font: Same as stats (12px bold, white)
-- Centered horizontally
+Since the deleted songs are new to the database (none of the 47 eamuse_ids exist in musicdb yet), we can safely:
+1. Insert all 209 chart rows with `deleted = TRUE`
+2. No risk of duplicates since eamuse_ids don't exist
 
 ---
 
-## Files to Modify
+## Files to Create/Modify
 
-| File | Action |
-|------|--------|
-| `src/assets/newStats.png` | Create (copy from uploaded file) |
-| `src/components/scores/StatsSummary.tsx` | Update to add divider and average display |
-| `src/pages/Scores.tsx` | Add average calculation and pass to component |
+| File | Action | Description |
+|------|--------|-------------|
+| Database Migration | Create | Add `deleted` boolean column |
+| `supabase/functions/import-deleted-songs/index.ts` | Create | Edge function to process CSV and insert deleted songs |
+| `src/hooks/useMusicDbCount.ts` | Modify | Add `.eq('deleted', false)` |
+| `src/pages/Scores.tsx` | Modify | Add `.eq('deleted', false)` |
+| `src/pages/GoalDetail.tsx` | Modify | Add `.eq('deleted', false)` |
+| `src/components/scores/SongDetailModal.tsx` | Modify | Add `.eq('deleted', false)` |
+| `src/hooks/useUserScores.ts` | Modify | Filter out scores linked to deleted songs |
+
+---
+
+## Execution Order
+
+1. Run database migration to add `deleted` column
+2. Create and deploy `import-deleted-songs` edge function
+3. Update all frontend queries to filter by `deleted = false`
+4. Call the edge function with the CSV data to insert the 209 deleted song charts
+5. Verify counts: should still show same catalog totals since deleted songs are filtered out
+
