@@ -21,7 +21,12 @@ interface CreateFilterSheetProps {
     rank: string | null;
     halo: string | null;
     flare: number | null;
-    musicdb: { name: string | null; artist: string | null } | null;
+    musicdb: { 
+      name: string | null; 
+      artist: string | null;
+      eamuse_id: string | null;
+      song_id: number | null;
+    } | null;
   }>;
   onSave: (name: string, rules: FilterRule[], matchMode: 'all' | 'any') => void;
   onShowResults: (rules: FilterRule[], matchMode: 'all' | 'any') => void;
