@@ -8,6 +8,7 @@ import { getJacketUrl, getJacketFallbackUrl } from '@/lib/jacketUrl';
 interface SongCardProps {
   name: string;
   difficultyLevel: number | null;
+  difficultyName: string | null;
   score: number | null;
   rank: string | null;
   flare: number | null;
@@ -58,14 +59,18 @@ function getHaloBarStyle(halo: string | null): React.CSSProperties {
   }
 }
 
-// Get difficulty color class based on level
-function getDifficultyColorClass(level: number | null): string {
-  if (!level) return '';
-  if (level <= 5) return 'bg-[hsl(var(--difficulty-beginner))]';
-  if (level <= 8) return 'bg-[hsl(var(--difficulty-basic))]';
-  if (level <= 12) return 'bg-[hsl(var(--difficulty-difficult))]';
-  if (level <= 16) return 'bg-[hsl(var(--difficulty-expert))]';
-  return 'bg-[hsl(var(--difficulty-challenge))]';
+// Get difficulty color class based on difficulty name
+function getDifficultyColorClass(difficultyName: string | null): string {
+  if (!difficultyName) return 'bg-[hsl(var(--difficulty-basic))]';
+  const normalized = difficultyName.toUpperCase();
+  switch (normalized) {
+    case 'BEGINNER': return 'bg-[hsl(var(--difficulty-beginner))]';
+    case 'BASIC': return 'bg-[hsl(var(--difficulty-basic))]';
+    case 'DIFFICULT': return 'bg-[hsl(var(--difficulty-difficult))]';
+    case 'EXPERT': return 'bg-[hsl(var(--difficulty-expert))]';
+    case 'CHALLENGE': return 'bg-[hsl(var(--difficulty-challenge))]';
+    default: return 'bg-[hsl(var(--difficulty-basic))]';
+  }
 }
 
 // Get difficulty hex color for drop shadow
@@ -111,6 +116,7 @@ function normalizeHaloType(halo: string | null): HaloType | null {
 export function SongCard({
   name,
   difficultyLevel,
+  difficultyName,
   score,
   rank,
   flare,
@@ -125,7 +131,7 @@ export function SongCard({
   // Apply 12MS transformation to halo for display
   const transformedHalo = transformHalo(halo);
   const haloType = normalizeHaloType(transformedHalo);
-  const difficultyClass = getDifficultyColorClass(difficultyLevel);
+  const difficultyClass = getDifficultyColorClass(difficultyName);
 
   // Image fallback state
   const [imgError, setImgError] = useState(false);

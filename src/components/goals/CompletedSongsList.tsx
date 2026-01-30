@@ -36,6 +36,7 @@ export function CompletedSongsList({ songs, isLoading }: CompletedSongsListProps
           key={song.id}
           name={song.musicdb?.name ?? song.name ?? 'Unknown Song'}
           difficultyLevel={song.difficulty_level}
+          difficultyName={song.difficulty_name}
           score={song.score}
           rank={song.rank}
           flare={song.flare}

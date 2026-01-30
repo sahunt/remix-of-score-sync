@@ -33,14 +33,18 @@ interface ChartWithScore {
 // Difficulty order for display (highest to lowest)
 const DIFFICULTY_ORDER = ['CHALLENGE', 'EXPERT', 'DIFFICULT', 'BASIC', 'BEGINNER'];
 
-// Get difficulty color class based on level
-function getDifficultyColorClass(level: number | null): string {
-  if (!level) return '';
-  if (level <= 5) return 'bg-[hsl(var(--difficulty-beginner))]';
-  if (level <= 8) return 'bg-[hsl(var(--difficulty-basic))]';
-  if (level <= 12) return 'bg-[hsl(var(--difficulty-difficult))]';
-  if (level <= 16) return 'bg-[hsl(var(--difficulty-expert))]';
-  return 'bg-[hsl(var(--difficulty-challenge))]';
+// Get difficulty color class based on difficulty name
+function getDifficultyColorClass(difficultyName: string | null): string {
+  if (!difficultyName) return 'bg-[hsl(var(--difficulty-basic))]';
+  const normalized = difficultyName.toUpperCase();
+  switch (normalized) {
+    case 'BEGINNER': return 'bg-[hsl(var(--difficulty-beginner))]';
+    case 'BASIC': return 'bg-[hsl(var(--difficulty-basic))]';
+    case 'DIFFICULT': return 'bg-[hsl(var(--difficulty-difficult))]';
+    case 'EXPERT': return 'bg-[hsl(var(--difficulty-expert))]';
+    case 'CHALLENGE': return 'bg-[hsl(var(--difficulty-challenge))]';
+    default: return 'bg-[hsl(var(--difficulty-basic))]';
+  }
 }
 
 // Convert numeric flare to FlareType
@@ -235,7 +239,7 @@ export function SongDetailModal({
                   <div
                     className={cn(
                       'flex-shrink-0 w-[22px] h-[22px] rounded-[5px] flex items-center justify-center',
-                      getDifficultyColorClass(chart.difficulty_level)
+                      getDifficultyColorClass(chart.difficulty_name)
                     )}
                   >
                     <span className="text-[11px] font-bold text-[#000F33]">

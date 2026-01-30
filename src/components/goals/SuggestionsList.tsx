@@ -43,6 +43,7 @@ export function SuggestionsList({ songs, goal, isLoading }: SuggestionsListProps
             <SongCard
               name={song.musicdb?.name ?? song.name ?? 'Unknown Song'}
               difficultyLevel={song.difficulty_level}
+              difficultyName={song.difficulty_name}
               score={song.score}
               rank={song.rank}
               flare={song.flare}

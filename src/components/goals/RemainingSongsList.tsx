@@ -49,6 +49,7 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
                 <SongCard
                   name={song.musicdb?.name ?? song.name ?? 'Unknown Song'}
                   difficultyLevel={song.difficulty_level}
+                  difficultyName={song.difficulty_name}
                   score={song.score}
                   rank={song.rank}
                   flare={song.flare}
@@ -80,6 +81,7 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
               <SongCard
                 name={song.name ?? 'Unknown Song'}
                 difficultyLevel={song.difficulty_level}
+                difficultyName={song.difficulty_name}
                 score={null}
                 rank={null}
                 flare={null}
