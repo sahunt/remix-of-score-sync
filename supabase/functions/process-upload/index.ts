@@ -1007,6 +1007,7 @@ async function smartUpsertScores(
             halo: newHalo,
             upload_id: uploadId,
             timestamp: score.timestamp || undefined,
+            source_type: score.source_type, // Update source_type to reflect the new upload source
           },
           change: {
             song_name: existing.song_name || 'Unknown',
