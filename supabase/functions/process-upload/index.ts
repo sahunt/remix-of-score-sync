@@ -6,7 +6,7 @@ const corsHeaders = {
 }
 
 // ============================================================================
-// Types
+// SHARED TYPES - Minimal shared interfaces for parser outputs
 // ============================================================================
 
 interface UnmatchedSong {
@@ -50,13 +50,11 @@ interface ExistingScore {
   rank: string | null;
   flare: number | null;
   halo: string | null;
-  // Enriched from musicdb join
   song_name?: string | null;
   difficulty_name?: string | null;
   difficulty_level?: number | null;
 }
 
-// Track individual score changes for the upload summary
 interface ScoreChange {
   song_name: string;
   difficulty_name: string;
@@ -72,10 +70,9 @@ interface ScoreChange {
 }
 
 // ============================================================================
-// Ranking Helpers - Used to determine "better" values
+// SHARED UTILITIES - Small, focused helpers used by both parsers
 // ============================================================================
 
-// Halo ranking: clear < life4 < fc < gfc < pfc < mfc
 const HALO_RANK: Record<string, number> = {
   'clear': 1,
   'life4': 2,
@@ -85,24 +82,10 @@ const HALO_RANK: Record<string, number> = {
   'mfc': 6,
 };
 
-// Rank/Grade ranking: E < D < C < B < A < AA < AAA
 const GRADE_RANK: Record<string, number> = {
-  'E': 1,
-  'D': 2,
-  'D+': 3,
-  'C-': 4,
-  'C': 5,
-  'C+': 6,
-  'B-': 7,
-  'B': 8,
-  'B+': 9,
-  'A-': 10,
-  'A': 11,
-  'A+': 12,
-  'AA-': 13,
-  'AA': 14,
-  'AA+': 15,
-  'AAA': 16,
+  'E': 1, 'D': 2, 'D+': 3, 'C-': 4, 'C': 5, 'C+': 6,
+  'B-': 7, 'B': 8, 'B+': 9, 'A-': 10, 'A': 11, 'A+': 12,
+  'AA-': 13, 'AA': 14, 'AA+': 15, 'AAA': 16,
 };
 
 function getHaloRank(halo: string | null): number {
@@ -136,666 +119,34 @@ function getBetterScore(a: number | null, b: number | null): number | null {
 }
 
 // ============================================================================
-// JSON Sanitization - Handle malformed JSON with control characters & bad Unicode
-// ============================================================================
-
-function sanitizeJsonString(content: string): string {
-  // Step 1: Remove BOM if present
-  let sanitized = content.replace(/^\uFEFF/, '');
-  
-  // Step 2: Remove ALL control characters (0x00-0x1F except tab/newline/carriage return)
-  // This handles characters like 0x05 (ENQ) that appear in PhaseII exports
-  const cleanedChars: string[] = [];
-  for (let i = 0; i < sanitized.length; i++) {
-    const code = sanitized.charCodeAt(i);
-    // Skip control characters except tab (9), newline (10), carriage return (13)
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
-      continue; // Skip this character entirely
-    }
-    // Also skip DEL character (127) and other problematic characters
-    if (code === 127) {
-      continue;
-    }
-    cleanedChars.push(sanitized[i]);
-  }
-  sanitized = cleanedChars.join('');
-  
-  console.log(`Sanitization removed ${content.length - sanitized.length} control characters`);
-  
-  // Step 3: Process character by character to handle strings properly
-  const chars: string[] = [];
-  let inString = false;
-  let escaped = false;
-  
-  for (let i = 0; i < sanitized.length; i++) {
-    const char = sanitized[i];
-    const code = sanitized.charCodeAt(i);
-    
-    if (escaped) {
-      // Handle specific escape sequences
-      if (char === 'n' || char === 'r' || char === 't' || char === '"' || 
-          char === '\\' || char === '/' || char === 'b' || char === 'f') {
-        chars.push(char);
-      } else if (char === 'u') {
-        // Unicode escape - pass through and grab next 4 chars
-        chars.push(char);
-        const unicode = sanitized.substring(i + 1, i + 5);
-        if (/^[0-9a-fA-F]{4}$/.test(unicode)) {
-          chars.push(unicode);
-          i += 4;
-        }
-      } else {
-        // Invalid escape - just keep the character without backslash
-        chars.push(char);
-      }
-      escaped = false;
-      continue;
-    }
-    
-    if (char === '\\' && inString) {
-      chars.push(char);
-      escaped = true;
-      continue;
-    }
-    
-    if (char === '"' && !escaped) {
-      inString = !inString;
-      chars.push(char);
-      continue;
-    }
-    
-    if (inString) {
-      // Inside string: escape control characters
-      if (code < 32) {
-        if (code === 9) {
-          chars.push('\\t');
-        } else if (code === 10) {
-          chars.push('\\n');
-        } else if (code === 13) {
-          chars.push('\\r');
-        }
-        // Skip other control characters
-        continue;
-      }
-      
-      // Handle high surrogate without low surrogate (broken UTF-16)
-      if (code >= 0xD800 && code <= 0xDBFF) {
-        const nextCode = sanitized.charCodeAt(i + 1);
-        if (nextCode < 0xDC00 || nextCode > 0xDFFF) {
-          // Broken surrogate pair - replace with replacement character
-          chars.push('\uFFFD');
-          continue;
-        }
-      }
-      // Handle lone low surrogate
-      if (code >= 0xDC00 && code <= 0xDFFF) {
-        const prevCode = sanitized.charCodeAt(i - 1);
-        if (prevCode < 0xD800 || prevCode > 0xDBFF) {
-          chars.push('\uFFFD');
-          continue;
-        }
-      }
-      
-      chars.push(char);
-    } else {
-      // Outside string: skip control characters except whitespace
-      if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
-        continue;
-      }
-      chars.push(char);
-    }
-  }
-  
-  return chars.join('');
-}
-
-// More aggressive sanitization that handles totally corrupted files
-function aggressiveSanitizeJson(content: string): string {
-  // First try normal sanitization
-  let sanitized = sanitizeJsonString(content);
-  
-  // If that doesn't work, try more aggressive fixes
-  // Remove any character sequences that aren't valid JSON
-  sanitized = sanitized
-    // Fix unescaped quotes in strings (common issue)
-    .replace(/([^\\])"([^:,\[\]{}]*)"([^:,\[\]{}]*?)"/g, '$1"$2\\"$3"')
-    // Remove any remaining null bytes
-    .replace(/\0/g, '')
-    // Replace sequences of weird characters with placeholder
-    .replace(/[\u0080-\u009F]/g, '');
-    
-  return sanitized;
-}
-
-// ============================================================================
-// Source Detection
-// ============================================================================
-// Source Type Detection
-// IMPORTANT: Sanbai exports can be EITHER CSV (comma-separated) OR TSV (tab-separated)!
-// DO NOT assume only TSV format - the user's actual exports use CSV format.
+// SOURCE DETECTION - Isolated, simple detection logic
 // ============================================================================
 
 function detectSourceType(content: string): 'phaseii' | 'sanbai' | 'unknown' {
   const trimmed = content.trim();
   
+  // Check for Sanbai CSV/TSV header
   const firstLine = trimmed.split('\n')[0];
-  // Sanbai can be TSV (tab-separated) or CSV (comma-separated)
   if (firstLine.includes('Song ID') && (firstLine.includes('\t') || firstLine.includes(','))) {
+    console.log('Source detected: Sanbai (header contains "Song ID")');
     return 'sanbai';
   }
   
+  // Check for JSON (PhaseII)
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    try {
-      const sanitized = sanitizeJsonString(trimmed);
-      const parsed = JSON.parse(sanitized);
-      
-      if (Array.isArray(parsed)) {
-        console.log(`JSON array with ${parsed.length} items`);
-        if (parsed.length > 0) {
-          console.log('First item keys:', Object.keys(parsed[0] || {}));
-          const first = parsed[0];
-          if (first?.song || first?.chart || first?.score !== undefined || 
-              first?.points !== undefined || first?.difficulty || first?.lamp ||
-              first?.flareRank !== undefined || first?.flareSkill !== undefined) {
-            return 'phaseii';
-          }
-        }
-      } else if (typeof parsed === 'object') {
-        console.log('JSON object keys:', Object.keys(parsed));
-        if (parsed.headers && parsed.data) return 'phaseii';
-        if (parsed.scores && Array.isArray(parsed.scores)) return 'phaseii';
-        if (parsed.data && Array.isArray(parsed.data)) return 'phaseii';
-      }
-      
-      return 'phaseii';
-    } catch (err) {
-      console.error('JSON parse error in detection:', err);
-      return 'phaseii';
-    }
+    console.log('Source detected: PhaseII (JSON structure)');
+    return 'phaseii';
   }
   
+  console.log('Source detection: unknown format');
   return 'unknown';
 }
 
 // ============================================================================
-// PhaseII Parser
+// PHASEII PARSER MODULE - Completely isolated
 // ============================================================================
-
-function parsePhaseIIChart(chart: string): { playstyle: string; difficulty_name: string; difficulty_level: number } | null {
-  const match = chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
-  if (!match) return null;
-  return {
-    playstyle: match[1],
-    difficulty_name: match[2].toUpperCase(),
-    difficulty_level: parseInt(match[3])
-  };
-}
-
-function normalizePhaseIIHalo(halo: string | null | undefined): string | null {
-  if (!halo) return null;
-  const map: Record<string, string> = {
-    'MARVELOUS FULL COMBO': 'mfc',
-    'PERFECT FULL COMBO': 'pfc',
-    'GREAT FULL COMBO': 'gfc',
-    'GOOD FULL COMBO': 'fc',
-  };
-  return map[halo.toUpperCase()] || 'clear';
-}
-
-function parsePhaseIIScore(points: string | number | null | undefined): number | null {
-  if (points === null || points === undefined) return null;
-  if (typeof points === 'number') return points;
-  return parseInt(points.replace(/,/g, '')) || null;
-}
-
-// ============================================================================
-// Sanbai Parser
-// ============================================================================
-
-function parseSanbaiDifficulty(code: string): { playstyle: string; difficulty_name: string } | null {
-  const playstyle = code.endsWith('DP') ? 'DP' : 'SP';
-  const diffChar = code[0];
-  const diffMap: Record<string, string> = {
-    'b': 'BEGINNER',
-    'B': 'BASIC',
-    'D': 'DIFFICULT',
-    'E': 'EXPERT',
-    'C': 'CHALLENGE'
-  };
-  const difficulty_name = diffMap[diffChar];
-  if (!difficulty_name) return null;
-  return { playstyle, difficulty_name };
-}
-
-function normalizeSanbaiLamp(lamp: string | null | undefined): string | null {
-  if (!lamp) return null;
-  const normalized = lamp.toLowerCase().trim();
-  if (['mfc', 'pfc', 'gfc', 'fc', 'clear', 'fail', 'life4'].includes(normalized)) {
-    return normalized;
-  }
-  if (normalized.includes('life')) return 'life4';
-  return 'clear';
-}
-
-function parseSanbaiFlare(flare: string | null | undefined): number | null {
-  if (!flare) return null;
-  const romanMap: Record<string, number> = {
-    'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
-    'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
-    'EX': 10
-  };
-  const upper = flare.toUpperCase().trim();
-  return romanMap[upper] ?? null;
-}
-
-// ============================================================================
-// Sanbai Name Normalization - Handle formatting differences between sources
-// ============================================================================
-
-/**
- * Normalize song names for matching:
- * - Convert escaped double-quotes "" to single "
- * - Normalize full-width vs ASCII punctuation (！→!, ？→?, ×→x, etc.)
- * - Remove spaces before parentheses: "Name (Suffix)" -> "Name(Suffix)"
- * - Normalize whitespace around punctuation marks
- * - Trim whitespace
- */
-function normalizeSanbaiName(name: string): string {
-  return name
-    // Convert escaped double-quotes to single quotes
-    .replace(/""/g, '"')
-    // Normalize full-width punctuation to ASCII equivalents
-    .replace(/！/g, '!')       // Full-width exclamation mark
-    .replace(/？/g, '?')       // Full-width question mark
-    .replace(/：/g, ':')       // Full-width colon
-    .replace(/；/g, ';')       // Full-width semicolon
-    .replace(/（/g, '(')       // Full-width left parenthesis
-    .replace(/）/g, ')')       // Full-width right parenthesis
-    .replace(/［/g, '[')       // Full-width left bracket
-    .replace(/］/g, ']')       // Full-width right bracket
-    .replace(/＊/g, '*')       // Full-width asterisk
-    .replace(/×/g, 'x')        // Multiplication sign to x
-    .replace(/☆/g, '☆')       // Keep star as-is (both use same char)
-    // Normalize spaces around punctuation - remove spaces before/after certain chars
-    .replace(/\s+\(/g, '(')    // Remove space before (
-    .replace(/\(\s+/g, '(')    // Remove space after (
-    .replace(/\s+\)/g, ')')    // Remove space before )
-    .replace(/\s+!/g, '!')     // Remove space before !
-    .replace(/!\s+/g, '!')     // Remove space after ! (in sequences like "!! ")
-    .replace(/\s+\?/g, '?')    // Remove space before ?
-    // Collapse multiple spaces into one
-    .replace(/\s+/g, ' ')
-    // Trim
-    .trim();
-}
-
-// ============================================================================
-// Matching Functions - BATCHED for performance
-// ============================================================================
-
-async function batchMatchBySongId(
-  supabase: any,
-  entries: Array<{ songId: number; playstyle: string; difficultyName: string; difficultyLevel: number }>
-): Promise<Map<string, MusicdbMatch>> {
-  if (entries.length === 0) return new Map();
-  
-  // Get unique song IDs
-  const songIds = [...new Set(entries.map(e => e.songId))];
-  
-  console.log(`batchMatchBySongId: attempting to match ${songIds.length} unique song IDs`);
-  console.log(`Sample song IDs: ${songIds.slice(0, 10).join(', ')}`);
-  
-  // Supabase has a default 1000 row limit that can't be overridden via .limit()
-  // We need to fetch in batches and combine the results
-  const BATCH_SIZE = 50; // Fetch songs in batches of 50 to stay well under any limits
-  const allData: any[] = [];
-  
-  for (let i = 0; i < songIds.length; i += BATCH_SIZE) {
-    const batchIds = songIds.slice(i, i + BATCH_SIZE);
-    
-    const { data, error } = await supabase
-      .from('musicdb')
-      .select('id, song_id, chart_id, playstyle, difficulty_name, difficulty_level')
-      .in('song_id', batchIds);
-    
-    if (error) {
-      console.error(`batchMatchBySongId batch ${i / BATCH_SIZE} error:`, error);
-      continue;
-    }
-    
-    if (data) {
-      allData.push(...data);
-    }
-  }
-  
-  console.log(`batchMatchBySongId: queried ${songIds.length} song IDs in ${Math.ceil(songIds.length / BATCH_SIZE)} batches, got ${allData.length} chart matches`);
-  
-  // Create a lookup map
-  const matchMap = new Map<string, MusicdbMatch>();
-  for (const row of allData) {
-    const key = `${row.song_id}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
-    matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
-  }
-  
-  return matchMap;
-}
-
-// Batch match by eamuse_id for performance
-async function batchMatchByEamuseId(
-  supabase: any,
-  eamuseIds: string[]
-): Promise<Map<string, MusicdbMatch & { eamuse_id: string }>> {
-  if (eamuseIds.length === 0) return new Map();
-  
-  const uniqueIds = [...new Set(eamuseIds)];
-  console.log(`batchMatchByEamuseId: attempting to match ${uniqueIds.length} unique eamuse IDs`);
-  
-  const BATCH_SIZE = 100;
-  const allData: any[] = [];
-  
-  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
-    const batchIds = uniqueIds.slice(i, i + BATCH_SIZE);
-    
-    const { data, error } = await supabase
-      .from('musicdb')
-      .select('id, song_id, chart_id, eamuse_id, playstyle, difficulty_name, name, difficulty_level')
-      .in('eamuse_id', batchIds);
-    
-    if (error) {
-      console.error(`batchMatchByEamuseId batch ${i / BATCH_SIZE} error:`, error);
-      continue;
-    }
-    
-    if (data) {
-      allData.push(...data);
-    }
-  }
-  
-  console.log(`batchMatchByEamuseId: got ${allData.length} chart matches`);
-  
-  // Create lookup map: eamuse_id|playstyle|difficulty_name -> match
-  const matchMap = new Map<string, MusicdbMatch & { eamuse_id: string }>();
-  for (const row of allData) {
-    const key = `${row.eamuse_id}|${row.playstyle}|${row.difficulty_name}`;
-    matchMap.set(key, { 
-      id: row.id, 
-      song_id: row.song_id, 
-      chart_id: row.chart_id,
-      eamuse_id: row.eamuse_id 
-    });
-  }
-  
-  return matchMap;
-}
-
-// Batch match by name and chart for fallback matching (Sanbai only)
-// Uses normalization to handle formatting differences between Sanbai exports and musicdb
-// Strategy: Fetch all musicdb charts once, build a normalized lookup map, then match in-memory
-async function batchMatchByNameAndChart(
-  supabase: any,
-  entries: Array<{ songName: string; playstyle: string; difficultyName: string; difficultyLevel: number }>
-): Promise<Map<string, MusicdbMatch>> {
-  if (entries.length === 0) return new Map();
-  
-  // Get unique normalized names we need to find
-  const uniqueNormalizedNames = new Set<string>();
-  for (const e of entries) {
-    uniqueNormalizedNames.add(normalizeSanbaiName(e.songName).toLowerCase());
-  }
-  console.log(`batchMatchByNameAndChart: attempting to match ${uniqueNormalizedNames.size} unique song names (after normalization)`);
-  
-  // Fetch ALL charts from musicdb (only ~10k records, manageable)
-  // This is more efficient than doing multiple queries with ILIKE
-  const allData: any[] = [];
-  const PAGE_SIZE = 1000;
-  let offset = 0;
-  let hasMore = true;
-  
-  while (hasMore) {
-    const { data, error } = await supabase
-      .from('musicdb')
-      .select('id, song_id, chart_id, name, playstyle, difficulty_name, difficulty_level')
-      .not('difficulty_level', 'is', null)
-      .range(offset, offset + PAGE_SIZE - 1);
-    
-    if (error) {
-      console.error(`batchMatchByNameAndChart fetch error at offset ${offset}:`, error);
-      break;
-    }
-    
-    if (data && data.length > 0) {
-      allData.push(...data);
-      offset += PAGE_SIZE;
-      hasMore = data.length === PAGE_SIZE;
-    } else {
-      hasMore = false;
-    }
-  }
-  
-  console.log(`batchMatchByNameAndChart: fetched ${allData.length} total charts from musicdb`);
-  
-  // Build lookup map: normalized_name|playstyle|difficulty_name|difficulty_level -> match
-  // Only include charts whose normalized name matches one we're looking for
-  const matchMap = new Map<string, MusicdbMatch>();
-  let matchCount = 0;
-  
-  for (const row of allData) {
-    const dbNameNormalized = normalizeSanbaiName(row.name || '').toLowerCase();
-    
-    // Only add to map if this is a name we're looking for
-    if (uniqueNormalizedNames.has(dbNameNormalized)) {
-      const key = `${dbNameNormalized}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
-      matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
-      matchCount++;
-    }
-  }
-  
-  console.log(`Name match map has ${matchMap.size} entries (from ${matchCount} chart matches)`);
-  
-  return matchMap;
-}
-
-// Batch update eamuse_id discoveries
-async function batchDiscoverEamuseIds(
-  supabase: any,
-  discoveries: Array<{ songId: number; eamuseId: string }>
-): Promise<void> {
-  if (discoveries.length === 0) return;
-  
-  console.log(`Batch discovering ${discoveries.length} eamuse_id mappings...`);
-  
-  // Group by song_id to avoid duplicate updates
-  const uniqueDiscoveries = new Map<number, string>();
-  for (const d of discoveries) {
-    uniqueDiscoveries.set(d.songId, d.eamuseId);
-  }
-  
-  // Do updates in parallel batches
-  const updates = Array.from(uniqueDiscoveries.entries());
-  const BATCH_SIZE = 20;
-  
-  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-    const batch = updates.slice(i, i + BATCH_SIZE);
-    await Promise.all(
-      batch.map(async ([songId, eamuseId]) => {
-        const { error } = await supabase
-          .from('musicdb')
-          .update({ eamuse_id: eamuseId })
-          .eq('song_id', songId)
-          .is('eamuse_id', null); // Only update if not already set
-        
-        if (error) {
-          console.error(`discoverEamuseId error for ${songId}:`, error);
-        }
-      })
-    );
-  }
-  
-  console.log(`Discovered ${uniqueDiscoveries.size} eamuse_id mappings`);
-}
-
-// matchByNameAndChart and discoverSanbaiSongId replaced by batch versions above
-
-// ============================================================================
-// Fetch Existing Scores for User - Batched
-// ============================================================================
-
-async function fetchExistingScores(
-  supabase: any,
-  userId: string,
-  musicdbIds: number[]
-): Promise<Map<number, ExistingScore>> {
-  if (musicdbIds.length === 0) return new Map();
-  
-  // Batch the query to avoid URL length limits
-  // Supabase .in() with thousands of IDs creates URLs that are too long
-  const BATCH_SIZE = 100;
-  const uniqueIds = [...new Set(musicdbIds)];
-  const allData: any[] = [];
-  
-  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
-    const batchIds = uniqueIds.slice(i, i + BATCH_SIZE);
-    
-    // Join with musicdb to get song metadata for the changes summary
-    const { data, error } = await supabase
-      .from('user_scores')
-      .select(`
-        id, musicdb_id, score, rank, flare, halo,
-        musicdb:musicdb_id (name, difficulty_name, difficulty_level)
-      `)
-      .eq('user_id', userId)
-      .in('musicdb_id', batchIds);
-    
-    if (error) {
-      console.error(`fetchExistingScores batch ${Math.floor(i / BATCH_SIZE)} error:`, error);
-      continue;
-    }
-    
-    if (data) {
-      allData.push(...data);
-    }
-  }
-  
-  console.log(`fetchExistingScores: queried ${uniqueIds.length} IDs in ${Math.ceil(uniqueIds.length / BATCH_SIZE)} batches, found ${allData.length} existing scores`);
-  
-  const map = new Map<number, ExistingScore>();
-  for (const row of allData) {
-    if (row.musicdb_id) {
-      // Extract song metadata from the join
-      const musicdb = row.musicdb as { name: string | null; difficulty_name: string | null; difficulty_level: number | null } | null;
-      map.set(row.musicdb_id, {
-        id: row.id,
-        musicdb_id: row.musicdb_id,
-        score: row.score,
-        rank: row.rank,
-        flare: row.flare,
-        halo: row.halo,
-        song_name: musicdb?.name ?? null,
-        difficulty_name: musicdb?.difficulty_name ?? null,
-        difficulty_level: musicdb?.difficulty_level ?? null,
-      } as ExistingScore);
-    }
-  }
-  return map;
-}
-
-// ============================================================================
-// PhaseII Processing - OPTIMIZED with batch matching
-// ============================================================================
-
-function extractSongName(item: any): string | null {
-  return item.song?.name || item.songName || item.name || item.title || 
-         item.song?.title || item.musicTitle || null;
-}
-
-function extractChartInfo(item: any): { playstyle: string; difficulty_name: string; difficulty_level: number } | null {
-  if (item.song?.chart) {
-    const match = item.song.chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
-    if (match) {
-      return {
-        playstyle: match[1],
-        difficulty_name: match[2].toUpperCase(),
-        difficulty_level: parseInt(match[3])
-      };
-    }
-  }
-  
-  if (item.chart) {
-    const match = item.chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
-    if (match) {
-      return {
-        playstyle: match[1],
-        difficulty_name: match[2].toUpperCase(),
-        difficulty_level: parseInt(match[3])
-      };
-    }
-  }
-  
-  if (item.difficulty && (item.level !== undefined || item.difficultyLevel !== undefined)) {
-    const level = item.level ?? item.difficultyLevel ?? 0;
-    const playstyle = item.playStyle || item.playstyle || item.style || 'SP';
-    return {
-      playstyle: playstyle.toUpperCase(),
-      difficulty_name: String(item.difficulty).toUpperCase(),
-      difficulty_level: parseInt(level)
-    };
-  }
-  
-  return null;
-}
-
-function extractScore(item: any): number | null {
-  const raw = item.points ?? item.score ?? item.highScore ?? item.exScore ?? null;
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw === 'number') return raw;
-  return parseInt(String(raw).replace(/,/g, '')) || null;
-}
-
-function extractHalo(item: any): string | null {
-  const raw = item.data?.halo || item.halo || item.lamp || item.clearLamp || 
-              item.fullComboType || item.fcType || null;
-  if (!raw) return null;
-  
-  const normalized = String(raw).toUpperCase();
-  const map: Record<string, string> = {
-    'MARVELOUS FULL COMBO': 'mfc',
-    'MFC': 'mfc',
-    'PERFECT FULL COMBO': 'pfc',
-    'PFC': 'pfc',
-    'GREAT FULL COMBO': 'gfc',
-    'GFC': 'gfc',
-    'GOOD FULL COMBO': 'fc',
-    'FULL COMBO': 'fc',
-    'FC': 'fc',
-    'LIFE4': 'life4',
-    'LIFE 4': 'life4',
-    'CLEAR': 'clear',
-    'FAILED': 'fail',
-    'FAIL': 'fail',
-  };
-  return map[normalized] || 'clear';
-}
-
-function extractFlare(item: any): number | null {
-  const raw = item.data?.flare ?? item.flare ?? item.flareRank ?? item.flareSkill ?? null;
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw === 'number') return raw;
-  
-  const romanMap: Record<string, number> = {
-    'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
-    'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
-    'EX': 10
-  };
-  const upper = String(raw).toUpperCase().trim();
-  return romanMap[upper] ?? (parseInt(raw) || null);
-}
-
-function extractRank(item: any): string | null {
-  return item.data?.rank || item.rank || item.grade || item.letterGrade || null;
-}
-
-// ============================================================================
-// PhaseII Regex-Based Field Extraction (bypasses JSON.parse entirely)
+// This module handles PhaseII JSON parsing. It has NO dependencies on Sanbai logic.
+// All functions in this section are prefixed with 'phaseii_' for clarity.
 // ============================================================================
 
 interface PhaseIIEntry {
@@ -808,64 +159,35 @@ interface PhaseIIEntry {
   timestamp: string | null;
 }
 
-// Extract username from PhaseII export (typically in the file header or global data)
-function extractPhaseIIUsername(content: string): string | null {
-  // Look for "name":"USERNAME" pattern in the header/global section
-  const nameMatch = content.match(/"name"\s*:\s*"([^"]+)"/);
-  if (nameMatch) {
-    // Avoid matching song names by checking if it's in a global context
-    // PhaseII exports typically have the player name near the start
-    const position = nameMatch.index || 0;
-    if (position < 500) { // If found in first 500 chars, likely player name
-      return nameMatch[1];
-    }
-  }
+// Remove control characters that break JSON parsing
+function phaseii_sanitizeContent(content: string): string {
+  let sanitized = content.replace(/^\uFEFF/, ''); // Remove BOM
   
-  // Also try "playerName" or "userName"
-  const playerNameMatch = content.match(/"(?:playerName|userName|user)"\s*:\s*"([^"]+)"/i);
-  if (playerNameMatch) {
-    return playerNameMatch[1];
+  // Remove ASCII control characters except tab/newline/carriage return
+  const cleanedChars: string[] = [];
+  for (let i = 0; i < sanitized.length; i++) {
+    const code = sanitized.charCodeAt(i);
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) continue;
+    if (code === 127) continue;
+    cleanedChars.push(sanitized[i]);
   }
+  sanitized = cleanedChars.join('');
   
-  return null;
+  console.log(`PhaseII: Removed ${content.length - sanitized.length} control characters`);
+  return sanitized;
 }
 
-function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skippedCount: number } {
-  const entries: PhaseIIEntry[] = [];
-  let skippedCount = 0;
-  
-  // Split into entry blocks - each score entry is a JSON object with song, data, etc.
-  // We look for patterns like {"song":{...},"data":{...},...}
-  // Use a regex to find each top-level entry in the array
-  
-  // First, find where the array starts - could be root array or nested in data/scores
-  let arrayContent = content;
-  
-  // Try to find the main data array
-  const dataArrayMatch = content.match(/"data"\s*:\s*\[/);
-  const scoresArrayMatch = content.match(/"scores"\s*:\s*\[/);
-  const rootArrayMatch = content.match(/^\s*\[/);
-  
-  if (dataArrayMatch) {
-    const startIdx = dataArrayMatch.index! + dataArrayMatch[0].length - 1;
-    arrayContent = content.substring(startIdx);
-  } else if (scoresArrayMatch) {
-    const startIdx = scoresArrayMatch.index! + scoresArrayMatch[0].length - 1;
-    arrayContent = content.substring(startIdx);
-  } else if (rootArrayMatch) {
-    arrayContent = content;
-  }
-  
-  // Split by looking for entry boundaries: },{ pattern
-  // This is more robust than trying to parse full JSON
+// Extract entry blocks from JSON content using bracket matching
+function phaseii_extractBlocks(content: string): string[] {
+  const sanitized = phaseii_sanitizeContent(content);
   const entryBlocks: string[] = [];
   let depth = 0;
   let currentBlock = '';
   let inString = false;
   let escaped = false;
   
-  for (let i = 0; i < arrayContent.length; i++) {
-    const char = arrayContent[i];
+  for (let i = 0; i < sanitized.length; i++) {
+    const char = sanitized[i];
     
     if (escaped) {
       escaped = false;
@@ -888,7 +210,6 @@ function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skip
     if (!inString) {
       if (char === '{') {
         if (depth === 0 && currentBlock.trim()) {
-          // Starting a new entry
           currentBlock = '';
         }
         depth++;
@@ -901,11 +222,9 @@ function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skip
           currentBlock = '';
         }
       } else if (char === '[' && depth === 0) {
-        // Start of array, skip
-        continue;
+        continue; // Skip array start
       } else if (char === ']' && depth === 0) {
-        // End of array
-        break;
+        break; // End of array
       } else {
         if (depth > 0) {
           currentBlock += char;
@@ -916,157 +235,95 @@ function extractPhaseIIEntries(content: string): { entries: PhaseIIEntry[]; skip
     }
   }
   
-  console.log(`Found ${entryBlocks.length} entry blocks to process`);
-  
-  // Log first block for debugging
-  if (entryBlocks.length > 0) {
-    console.log(`Sample entry block (first 500 chars): ${entryBlocks[0].substring(0, 500)}`);
-  }
-  
-  // Process each block with regex extraction
-  let successCount = 0;
-  let missingSongId = 0;
-  let missingChart = 0;
-  
-  for (const block of entryBlocks) {
-    try {
-      const entry = extractFieldsFromBlock(block);
-      if (entry.songId !== null && entry.chart !== null) {
-        entries.push(entry);
-        successCount++;
-      } else {
-        // Missing required fields - track which field is missing
-        skippedCount++;
-        if (entry.songId === null) missingSongId++;
-        if (entry.chart === null) missingChart++;
-        if (skippedCount <= 3) {
-          console.log(`Skipped entry: songId=${entry.songId}, chart=${entry.chart}, block preview: ${block.substring(0, 200)}`);
-        }
-      }
-    } catch (err) {
-      skippedCount++;
-      console.log(`Skipped corrupted entry: ${err}`);
-    }
-  }
-  
-  console.log(`Extraction results: ${successCount} success, ${skippedCount} skipped (${missingSongId} missing songId, ${missingChart} missing chart)`);
-  
-  return { entries, skippedCount };
+  console.log(`PhaseII: Extracted ${entryBlocks.length} entry blocks`);
+  return entryBlocks;
 }
 
-function extractFieldsFromBlock(block: string): PhaseIIEntry {
-  // Extract song.id - look for "song":{...} and find the "id" field within it
-  // Strategy: Find the song object bounds first, then extract id from within
+// Find the bounds of a nested JSON object and extract content within
+function phaseii_extractNestedObject(block: string, key: string): string | null {
+  const startPattern = new RegExp(`"${key}"\\s*:\\s*\\{`);
+  const match = block.match(startPattern);
+  
+  if (!match || match.index === undefined) return null;
+  
+  const startIdx = match.index + match[0].length;
+  let depth = 1;
+  let endIdx = startIdx;
+  let inString = false;
+  let escaped = false;
+  
+  for (let i = startIdx; i < block.length && depth > 0; i++) {
+    const char = block[i];
+    
+    if (escaped) { escaped = false; continue; }
+    if (char === '\\' && inString) { escaped = true; continue; }
+    if (char === '"' && !escaped) { inString = !inString; continue; }
+    
+    if (!inString) {
+      if (char === '{') depth++;
+      else if (char === '}') depth--;
+    }
+    endIdx = i;
+  }
+  
+  return block.substring(startIdx, endIdx);
+}
+
+// Extract fields from a single entry block
+function phaseii_extractFields(block: string): PhaseIIEntry {
+  // Extract song.id from nested song object
   let songId: number | null = null;
-  
-  // Find where "song": { starts
-  const songStartMatch = block.match(/"song"\s*:\s*\{/);
-  if (songStartMatch && songStartMatch.index !== undefined) {
-    // Find the matching closing brace for the song object
-    const startIdx = songStartMatch.index + songStartMatch[0].length;
-    let depth = 1;
-    let endIdx = startIdx;
-    let inString = false;
-    let escaped = false;
-    
-    for (let i = startIdx; i < block.length && depth > 0; i++) {
-      const char = block[i];
-      
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      
-      if (char === '\\' && inString) {
-        escaped = true;
-        continue;
-      }
-      
-      if (char === '"' && !escaped) {
-        inString = !inString;
-        continue;
-      }
-      
-      if (!inString) {
-        if (char === '{') depth++;
-        else if (char === '}') depth--;
-      }
-      
-      endIdx = i;
-    }
-    
-    // Now we have the song object content
-    const songContent = block.substring(startIdx, endIdx);
-    
-    // Extract id from within the song object
+  const songContent = phaseii_extractNestedObject(block, 'song');
+  if (songContent) {
     const idMatch = songContent.match(/"id"\s*:\s*(\d+)/);
-    if (idMatch) {
-      songId = parseInt(idMatch[1]);
-    }
+    if (idMatch) songId = parseInt(idMatch[1]);
   }
-  
-  // Fallback: try direct pattern if nested extraction failed
+  // Fallback: direct pattern
   if (songId === null) {
-    // Try finding id directly after song (for simpler structures)
-    const directIdMatch = block.match(/"song"\s*:\s*\{\s*"id"\s*:\s*(\d+)/);
-    if (directIdMatch) {
-      songId = parseInt(directIdMatch[1]);
-    }
+    const directMatch = block.match(/"song"\s*:\s*\{\s*"id"\s*:\s*(\d+)/);
+    if (directMatch) songId = parseInt(directMatch[1]);
   }
   
-  // Extract song.chart - "chart":"SP EXPERT - 15"
+  // Extract chart
   let chart: string | null = null;
   const chartMatch = block.match(/"chart"\s*:\s*"([^"]+)"/);
-  if (chartMatch) {
-    chart = chartMatch[1];
-  }
+  if (chartMatch) chart = chartMatch[1];
   
-  // Extract points - "points":"999,880" or "points":999880
+  // Extract points (quoted or unquoted)
   let points: string | null = null;
-  // Try quoted format first: "points":"999,880"
-  const quotedPointsMatch = block.match(/"points"\s*:\s*"([^"]+)"/);
-  if (quotedPointsMatch) {
-    points = quotedPointsMatch[1];
+  const quotedPoints = block.match(/"points"\s*:\s*"([^"]+)"/);
+  if (quotedPoints) {
+    points = quotedPoints[1];
   } else {
-    // Fallback to unquoted number: "points":999880
-    const unquotedPointsMatch = block.match(/"points"\s*:\s*(\d+)/);
-    if (unquotedPointsMatch) {
-      points = unquotedPointsMatch[1];
-    }
+    const unquotedPoints = block.match(/"points"\s*:\s*(\d+)/);
+    if (unquotedPoints) points = unquotedPoints[1];
   }
   
-  // Extract data.halo - look for "data":{..."halo":"PERFECT FULL COMBO"...}
+  // Extract halo
   let halo: string | null = null;
   const haloMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
-  if (haloMatch) {
-    halo = haloMatch[1];
-  }
+  if (haloMatch) halo = haloMatch[1];
   
-  // Extract data.rank - "rank":"AAA"
+  // Extract rank
   let rank: string | null = null;
   const rankMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
-  if (rankMatch) {
-    rank = rankMatch[1];
-  }
+  if (rankMatch) rank = rankMatch[1];
   
-  // Extract data.flare - "flare":10
+  // Extract flare
   let flare: number | null = null;
   const flareMatch = block.match(/"flare"\s*:\s*(\d+)/);
-  if (flareMatch) {
-    flare = parseInt(flareMatch[1]);
-  }
+  if (flareMatch) flare = parseInt(flareMatch[1]);
   
-  // Extract timestamp - "timestamp":"2025-11-19 21:34:50"
+  // Extract timestamp
   let timestamp: string | null = null;
   const timestampMatch = block.match(/"timestamp"\s*:\s*"([^"]+)"/);
-  if (timestampMatch) {
-    timestamp = timestampMatch[1];
-  }
+  if (timestampMatch) timestamp = timestampMatch[1];
   
   return { songId, chart, points, halo, rank, flare, timestamp };
 }
 
-function parseChartString(chart: string): { playstyle: string; difficulty_name: string; difficulty_level: number } | null {
+// Parse chart string like "SP EXPERT - 15"
+function phaseii_parseChart(chart: string): { playstyle: string; difficulty_name: string; difficulty_level: number } | null {
   const match = chart.match(/^(SP|DP)\s+(\w+)\s*-\s*(\d+)$/);
   if (!match) return null;
   return {
@@ -1076,93 +333,130 @@ function parseChartString(chart: string): { playstyle: string; difficulty_name: 
   };
 }
 
-function normalizeExtractedHalo(halo: string | null): string | null {
+// Normalize halo string to standard format
+function phaseii_normalizeHalo(halo: string | null): string | null {
   if (!halo) return null;
   const normalized = halo.toUpperCase();
   const map: Record<string, string> = {
-    'MARVELOUS FULL COMBO': 'mfc',
-    'MFC': 'mfc',
-    'PERFECT FULL COMBO': 'pfc',
-    'PFC': 'pfc',
-    'GREAT FULL COMBO': 'gfc',
-    'GFC': 'gfc',
-    'GOOD FULL COMBO': 'fc',
-    'FULL COMBO': 'fc',
-    'FC': 'fc',
-    'LIFE4': 'life4',
-    'LIFE 4': 'life4',
-    'CLEAR': 'clear',
-    'FAILED': 'fail',
-    'FAIL': 'fail',
+    'MARVELOUS FULL COMBO': 'mfc', 'MFC': 'mfc',
+    'PERFECT FULL COMBO': 'pfc', 'PFC': 'pfc',
+    'GREAT FULL COMBO': 'gfc', 'GFC': 'gfc',
+    'GOOD FULL COMBO': 'fc', 'FULL COMBO': 'fc', 'FC': 'fc',
+    'LIFE4': 'life4', 'LIFE 4': 'life4',
+    'CLEAR': 'clear', 'FAILED': 'fail', 'FAIL': 'fail',
   };
   return map[normalized] || 'clear';
 }
 
-function parseExtractedScore(points: string | null): number | null {
+// Parse score points
+function phaseii_parseScore(points: string | null): number | null {
   if (!points) return null;
   return parseInt(points.replace(/,/g, '')) || null;
 }
 
-async function processPhaseII(
+// Batch match by song_id
+async function phaseii_batchMatch(
   supabase: any,
-  content: string
-): Promise<ParseResult> {
+  entries: Array<{ songId: number; playstyle: string; difficultyName: string; difficultyLevel: number }>
+): Promise<Map<string, MusicdbMatch>> {
+  if (entries.length === 0) return new Map();
+  
+  const songIds = [...new Set(entries.map(e => e.songId))];
+  console.log(`PhaseII: Batch matching ${songIds.length} unique song IDs`);
+  
+  const BATCH_SIZE = 50;
+  const allData: any[] = [];
+  
+  for (let i = 0; i < songIds.length; i += BATCH_SIZE) {
+    const batchIds = songIds.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase
+      .from('musicdb')
+      .select('id, song_id, chart_id, playstyle, difficulty_name, difficulty_level')
+      .in('song_id', batchIds);
+    
+    if (error) {
+      console.error(`PhaseII batch ${i / BATCH_SIZE} error:`, error);
+      continue;
+    }
+    if (data) allData.push(...data);
+  }
+  
+  console.log(`PhaseII: Found ${allData.length} chart matches`);
+  
+  const matchMap = new Map<string, MusicdbMatch>();
+  for (const row of allData) {
+    const key = `${row.song_id}|${row.playstyle}|${row.difficulty_name}|${row.difficulty_level}`;
+    matchMap.set(key, { id: row.id, song_id: row.song_id, chart_id: row.chart_id });
+  }
+  
+  return matchMap;
+}
+
+// Main PhaseII processor
+async function processPhaseII(supabase: any, content: string): Promise<ParseResult> {
+  console.log('=== Starting PhaseII Processing ===');
+  
   const scores: ScoreRecord[] = [];
   const unmatchedSongs: UnmatchedSong[] = [];
   
-  // Use regex-based extraction instead of JSON.parse
-  console.log('Using regex-based field extraction for PhaseII...');
-  const { entries, skippedCount } = extractPhaseIIEntries(content);
+  // Step 1: Extract entry blocks
+  const blocks = phaseii_extractBlocks(content);
   
-  console.log(`Extracted ${entries.length} valid entries, ${skippedCount} skipped due to corruption`);
-  
-  if (skippedCount > 0) {
-    unmatchedSongs.push({ 
-      name: `${skippedCount} entries`, 
-      difficulty: null, 
-      reason: 'corrupt_entry' 
-    });
-  }
-  
-  if (entries.length === 0) {
+  if (blocks.length === 0) {
+    console.log('PhaseII: No entry blocks found');
     return { scores, sourceType: 'phaseii', unmatchedSongs };
   }
   
-  // Sample logging
-  if (entries.length > 0) {
-    console.log('Sample extracted entry:', JSON.stringify(entries[0]));
-  }
+  // Log sample for debugging
+  console.log(`PhaseII: Sample block (first 300 chars): ${blocks[0].substring(0, 300)}`);
   
-  // Collect entries for batch matching
-  const entriesToMatch: Array<{
-    entry: PhaseIIEntry;
-    chartInfo: { playstyle: string; difficulty_name: string; difficulty_level: number };
-  }> = [];
+  // Step 2: Parse fields from blocks
+  const parsedEntries: Array<{ entry: PhaseIIEntry; chartInfo: { playstyle: string; difficulty_name: string; difficulty_level: number } }> = [];
+  let skippedMissingSongId = 0;
+  let skippedMissingChart = 0;
+  let skippedInvalidChart = 0;
   
-  for (const entry of entries) {
-    if (!entry.chart) {
-      unmatchedSongs.push({ name: null, difficulty: null, reason: 'missing_chart_info' });
+  for (const block of blocks) {
+    const entry = phaseii_extractFields(block);
+    
+    if (entry.songId === null) {
+      skippedMissingSongId++;
       continue;
     }
     
-    const chartInfo = parseChartString(entry.chart);
+    if (!entry.chart) {
+      skippedMissingChart++;
+      continue;
+    }
+    
+    const chartInfo = phaseii_parseChart(entry.chart);
     if (!chartInfo) {
+      skippedInvalidChart++;
       unmatchedSongs.push({ name: null, difficulty: entry.chart, reason: 'invalid_chart_format' });
       continue;
     }
     
-    if (entry.songId === null) {
-      unmatchedSongs.push({ name: null, difficulty: entry.chart, reason: 'missing_song_id' });
-      continue;
-    }
-    
-    entriesToMatch.push({ entry, chartInfo });
+    parsedEntries.push({ entry, chartInfo });
   }
   
-  // BATCH MATCH: Fetch all matches in one query
-  const matchMap = await batchMatchBySongId(
+  console.log(`PhaseII: Parsed ${parsedEntries.length} entries (skipped: ${skippedMissingSongId} missing songId, ${skippedMissingChart} missing chart, ${skippedInvalidChart} invalid chart)`);
+  
+  if (skippedMissingSongId > 0 || skippedMissingChart > 0) {
+    unmatchedSongs.push({
+      name: `${skippedMissingSongId + skippedMissingChart} entries`,
+      difficulty: null,
+      reason: 'missing_required_fields'
+    });
+  }
+  
+  if (parsedEntries.length === 0) {
+    return { scores, sourceType: 'phaseii', unmatchedSongs };
+  }
+  
+  // Step 3: Batch match against musicdb
+  const matchMap = await phaseii_batchMatch(
     supabase,
-    entriesToMatch.map(e => ({
+    parsedEntries.map(e => ({
       songId: e.entry.songId!,
       playstyle: e.chartInfo.playstyle,
       difficultyName: e.chartInfo.difficulty_name,
@@ -1170,23 +464,22 @@ async function processPhaseII(
     }))
   );
   
-  // Process entries - ID-based matching
-  let idMatchCount = 0;
-  
-  for (const { entry, chartInfo } of entriesToMatch) {
+  // Step 4: Build score records
+  let matchedCount = 0;
+  for (const { entry, chartInfo } of parsedEntries) {
     const key = `${entry.songId}|${chartInfo.playstyle}|${chartInfo.difficulty_name}|${chartInfo.difficulty_level}`;
-    const match = matchMap.get(key) ?? null;
+    const match = matchMap.get(key);
     
     if (!match) {
-      unmatchedSongs.push({ 
-        name: null, 
+      unmatchedSongs.push({
+        name: null,
         difficulty: `${chartInfo.playstyle} ${chartInfo.difficulty_name} ${chartInfo.difficulty_level}`,
-        reason: 'no_match_by_id' 
+        reason: 'no_match_by_id'
       });
       continue;
     }
     
-    idMatchCount++;
+    matchedCount++;
     scores.push({
       musicdb_id: match.id,
       chart_id: match.chart_id,
@@ -1194,56 +487,139 @@ async function processPhaseII(
       playstyle: chartInfo.playstyle,
       difficulty_name: chartInfo.difficulty_name,
       difficulty_level: chartInfo.difficulty_level,
-      score: parseExtractedScore(entry.points),
+      score: phaseii_parseScore(entry.points),
       timestamp: entry.timestamp,
       username: null,
       rank: entry.rank,
       flare: entry.flare,
-      halo: normalizeExtractedHalo(entry.halo),
+      halo: phaseii_normalizeHalo(entry.halo),
       source_type: 'phaseii',
     });
   }
   
-  console.log(`PhaseII matching: ${idMatchCount} matched by ID`);
-  console.log(`PhaseII: ${scores.length} matched, ${unmatchedSongs.length} unmatched`);
+  console.log(`PhaseII: ${matchedCount} matched, ${unmatchedSongs.length} unmatched`);
+  console.log('=== PhaseII Processing Complete ===');
+  
   return { scores, sourceType: 'phaseii', unmatchedSongs };
 }
 
 // ============================================================================
-// Sanbai Processing
+// SANBAI PARSER MODULE - Completely isolated
+// ============================================================================
+// This module handles Sanbai CSV/TSV parsing. It has NO dependencies on PhaseII logic.
+// All functions in this section are prefixed with 'sanbai_' for clarity.
 // ============================================================================
 
-async function processSanbai(
+// Parse difficulty code like "bSP", "ESP", "CDP"
+function sanbai_parseDifficulty(code: string): { playstyle: string; difficulty_name: string } | null {
+  const playstyle = code.endsWith('DP') ? 'DP' : 'SP';
+  const diffChar = code[0];
+  const diffMap: Record<string, string> = {
+    'b': 'BEGINNER', 'B': 'BASIC', 'D': 'DIFFICULT', 'E': 'EXPERT', 'C': 'CHALLENGE'
+  };
+  const difficulty_name = diffMap[diffChar];
+  if (!difficulty_name) return null;
+  return { playstyle, difficulty_name };
+}
+
+// Normalize lamp value
+function sanbai_normalizeLamp(lamp: string | null): string | null {
+  if (!lamp) return null;
+  const normalized = lamp.toLowerCase().trim();
+  if (['mfc', 'pfc', 'gfc', 'fc', 'clear', 'fail', 'life4'].includes(normalized)) {
+    return normalized;
+  }
+  if (normalized.includes('life')) return 'life4';
+  return 'clear';
+}
+
+// Parse flare roman numeral
+function sanbai_parseFlare(flare: string | null): number | null {
+  if (!flare) return null;
+  const romanMap: Record<string, number> = {
+    'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+    'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10, 'EX': 10
+  };
+  const upper = flare.toUpperCase().trim();
+  return romanMap[upper] ?? null;
+}
+
+// Batch match by eamuse_id
+async function sanbai_batchMatch(
   supabase: any,
-  content: string
-): Promise<ParseResult> {
+  eamuseIds: string[]
+): Promise<Map<string, MusicdbMatch & { eamuse_id: string }>> {
+  if (eamuseIds.length === 0) return new Map();
+  
+  const uniqueIds = [...new Set(eamuseIds)];
+  console.log(`Sanbai: Batch matching ${uniqueIds.length} unique eamuse IDs`);
+  
+  const BATCH_SIZE = 100;
+  const allData: any[] = [];
+  
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    const batchIds = uniqueIds.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase
+      .from('musicdb')
+      .select('id, song_id, chart_id, eamuse_id, playstyle, difficulty_name')
+      .in('eamuse_id', batchIds);
+    
+    if (error) {
+      console.error(`Sanbai batch ${i / BATCH_SIZE} error:`, error);
+      continue;
+    }
+    if (data) allData.push(...data);
+  }
+  
+  console.log(`Sanbai: Found ${allData.length} chart matches`);
+  
+  const matchMap = new Map<string, MusicdbMatch & { eamuse_id: string }>();
+  for (const row of allData) {
+    const key = `${row.eamuse_id}|${row.playstyle}|${row.difficulty_name}`;
+    matchMap.set(key, {
+      id: row.id,
+      song_id: row.song_id,
+      chart_id: row.chart_id,
+      eamuse_id: row.eamuse_id
+    });
+  }
+  
+  return matchMap;
+}
+
+// Main Sanbai processor
+async function processSanbai(supabase: any, content: string): Promise<ParseResult> {
+  console.log('=== Starting Sanbai Processing ===');
+  
   const scores: ScoreRecord[] = [];
   const unmatchedSongs: UnmatchedSong[] = [];
   
   const lines = content.trim().split('\n');
   if (lines.length < 2) {
+    console.log('Sanbai: No data rows found');
     return { scores, sourceType: 'sanbai', unmatchedSongs: [{ name: null, difficulty: null, reason: 'no_data_rows' }] };
   }
   
-  // Detect separator: if first line contains tabs, use tab; otherwise use comma
+  // Detect separator
   const firstLine = lines[0];
   const separator = firstLine.includes('\t') ? '\t' : ',';
-  console.log(`Sanbai using separator: ${separator === '\t' ? 'TAB' : 'COMMA'}`);
+  console.log(`Sanbai: Using ${separator === '\t' ? 'TAB' : 'COMMA'} separator`);
   
-  const headers = lines[0].split(separator).map(h => h.trim());
+  // Parse headers
+  const headers = firstLine.split(separator).map(h => h.trim());
   const colIndex: Record<string, number> = {};
   headers.forEach((h, i) => { colIndex[h] = i; });
   
+  // Validate required columns
   const requiredCols = ['Song ID', 'Song Name', 'Difficulty', 'Rating', 'Score'];
   for (const col of requiredCols) {
     if (colIndex[col] === undefined) {
+      console.log(`Sanbai: Missing required column: ${col}`);
       return { scores, sourceType: 'sanbai', unmatchedSongs: [{ name: null, difficulty: null, reason: `missing_column_${col}` }] };
     }
   }
   
-  console.log(`Processing ${lines.length - 1} Sanbai rows`);
-  
-  // PHASE 1: Parse all rows and collect data for batch matching
+  // Parse data rows
   interface ParsedRow {
     eamuseId: string;
     songName: string;
@@ -1263,7 +639,7 @@ async function processSanbai(
     if (!line) continue;
     
     const cols = line.split(separator);
-    const sanbaiSongId = cols[colIndex['Song ID']]?.trim();
+    const eamuseId = cols[colIndex['Song ID']]?.trim();
     const songName = cols[colIndex['Song Name']]?.trim();
     const difficultyCode = cols[colIndex['Difficulty']]?.trim();
     const rating = parseInt(cols[colIndex['Rating']]?.trim()) || 0;
@@ -1272,50 +648,40 @@ async function processSanbai(
     const lamp = cols[colIndex['Lamp']]?.trim() || null;
     const flare = cols[colIndex['Flare']]?.trim() || null;
     
-    if (!sanbaiSongId || !difficultyCode) {
+    if (!eamuseId || !difficultyCode) {
       unmatchedSongs.push({ name: songName, difficulty: difficultyCode, reason: 'missing_id_or_difficulty' });
       continue;
     }
     
-    const diffInfo = parseSanbaiDifficulty(difficultyCode);
+    const diffInfo = sanbai_parseDifficulty(difficultyCode);
     if (!diffInfo) {
       unmatchedSongs.push({ name: songName, difficulty: difficultyCode, reason: 'invalid_difficulty_code' });
       continue;
     }
     
-    parsedRows.push({ eamuseId: sanbaiSongId, songName, diffInfo, rating, scoreVal, grade, lamp, flare });
-    allEamuseIds.push(sanbaiSongId);
+    parsedRows.push({ eamuseId, songName, diffInfo, rating, scoreVal, grade, lamp, flare });
+    allEamuseIds.push(eamuseId);
   }
   
-  console.log(`Parsed ${parsedRows.length} valid rows, ${unmatchedSongs.length} invalid`);
+  console.log(`Sanbai: Parsed ${parsedRows.length} valid rows`);
   
-  // PHASE 2: Batch fetch all charts with known eamuse_ids
-  const eamuseMatchMap = await batchMatchByEamuseId(supabase, allEamuseIds);
-  console.log(`Eamuse ID match map has ${eamuseMatchMap.size} entries`);
+  // Batch match
+  const matchMap = await sanbai_batchMatch(supabase, allEamuseIds);
   
-  // PHASE 3: Match by eamuse_id ONLY - no fallback to names
-  const matchedRows: Array<{ row: ParsedRow; match: MusicdbMatch }> = [];
-  
+  // Build score records
   for (const row of parsedRows) {
     const key = `${row.eamuseId}|${row.diffInfo.playstyle}|${row.diffInfo.difficulty_name}`;
-    const match = eamuseMatchMap.get(key);
+    const match = matchMap.get(key);
     
-    if (match) {
-      matchedRows.push({ row, match });
-    } else {
-      // No eamuse_id match - add to unmatched (no fallback to name matching)
-      unmatchedSongs.push({ 
-        name: row.songName, 
-        difficulty: `${row.diffInfo.playstyle} ${row.diffInfo.difficulty_name} ${row.rating}`, 
-        reason: 'eamuse_id_not_found' 
+    if (!match) {
+      unmatchedSongs.push({
+        name: row.songName,
+        difficulty: `${row.diffInfo.playstyle} ${row.diffInfo.difficulty_name} ${row.rating}`,
+        reason: 'eamuse_id_not_found'
       });
+      continue;
     }
-  }
-  
-  console.log(`Eamuse ID matches: ${matchedRows.length}, unmatched: ${unmatchedSongs.length}`);
-  
-  // PHASE 6: Build score records
-  for (const { row, match } of matchedRows) {
+    
     scores.push({
       musicdb_id: match.id,
       chart_id: match.chart_id,
@@ -1327,19 +693,69 @@ async function processSanbai(
       timestamp: null,
       username: null,
       rank: row.grade,
-      flare: parseSanbaiFlare(row.flare),
-      halo: normalizeSanbaiLamp(row.lamp),
+      flare: sanbai_parseFlare(row.flare),
+      halo: sanbai_normalizeLamp(row.lamp),
       source_type: 'sanbai',
     });
   }
   
   console.log(`Sanbai: ${scores.length} matched, ${unmatchedSongs.length} unmatched`);
+  console.log('=== Sanbai Processing Complete ===');
+  
   return { scores, sourceType: 'sanbai', unmatchedSongs };
 }
 
 // ============================================================================
-// Smart Upsert - BATCHED for performance
+// DATABASE OPERATIONS - Shared, but isolated from parsing logic
 // ============================================================================
+
+async function fetchExistingScores(
+  supabase: any,
+  userId: string,
+  musicdbIds: number[]
+): Promise<Map<number, ExistingScore>> {
+  if (musicdbIds.length === 0) return new Map();
+  
+  const BATCH_SIZE = 100;
+  const uniqueIds = [...new Set(musicdbIds)];
+  const allData: any[] = [];
+  
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    const batchIds = uniqueIds.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase
+      .from('user_scores')
+      .select(`id, musicdb_id, score, rank, flare, halo, musicdb:musicdb_id (name, difficulty_name, difficulty_level)`)
+      .eq('user_id', userId)
+      .in('musicdb_id', batchIds);
+    
+    if (error) {
+      console.error(`fetchExistingScores batch error:`, error);
+      continue;
+    }
+    if (data) allData.push(...data);
+  }
+  
+  console.log(`Found ${allData.length} existing scores`);
+  
+  const map = new Map<number, ExistingScore>();
+  for (const row of allData) {
+    if (row.musicdb_id) {
+      const musicdb = row.musicdb as { name: string | null; difficulty_name: string | null; difficulty_level: number | null } | null;
+      map.set(row.musicdb_id, {
+        id: row.id,
+        musicdb_id: row.musicdb_id,
+        score: row.score,
+        rank: row.rank,
+        flare: row.flare,
+        halo: row.halo,
+        song_name: musicdb?.name ?? null,
+        difficulty_name: musicdb?.difficulty_name ?? null,
+        difficulty_level: musicdb?.difficulty_level ?? null,
+      });
+    }
+  }
+  return map;
+}
 
 interface UpsertResult {
   inserted: number;
@@ -1360,8 +776,7 @@ async function smartUpsertScores(
   let skipped = 0;
   const changes: ScoreChange[] = [];
   
-  // CRITICAL: Deduplicate scores by musicdb_id, keeping the best values
-  // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" errors
+  // Deduplicate by musicdb_id, keeping best values
   const deduplicatedScores = new Map<number, ScoreRecord>();
   
   for (const score of scores) {
@@ -1370,26 +785,25 @@ async function smartUpsertScores(
       continue;
     }
     
-    const existingInBatch = deduplicatedScores.get(score.musicdb_id);
-    if (!existingInBatch) {
+    const existing = deduplicatedScores.get(score.musicdb_id);
+    if (!existing) {
       deduplicatedScores.set(score.musicdb_id, score);
     } else {
-      // Merge: keep the best values from both records
+      // Merge: keep best values
       deduplicatedScores.set(score.musicdb_id, {
-        ...existingInBatch,
-        score: getBetterScore(existingInBatch.score, score.score),
-        halo: getBetterHalo(existingInBatch.halo, score.halo),
-        flare: getBetterFlare(existingInBatch.flare, score.flare),
-        rank: getBetterRank(existingInBatch.rank, score.rank),
-        // Keep the most recent timestamp
-        timestamp: score.timestamp || existingInBatch.timestamp,
+        ...existing,
+        score: getBetterScore(existing.score, score.score),
+        flare: getBetterFlare(existing.flare, score.flare),
+        rank: getBetterRank(existing.rank, score.rank),
+        halo: getBetterHalo(existing.halo, score.halo),
+        timestamp: score.timestamp || existing.timestamp,
       });
     }
   }
   
-  console.log(`Deduplicated ${scores.length} score entries to ${deduplicatedScores.size} unique charts`);
+  console.log(`Deduplicated ${scores.length} scores to ${deduplicatedScores.size}`);
   
-  // Separate new records from updates
+  // Separate into inserts and updates
   const toInsert: any[] = [];
   const toUpdate: Array<{ id: string; data: any; change: ScoreChange }> = [];
   
@@ -1397,6 +811,7 @@ async function smartUpsertScores(
     const existing = existingScores.get(score.musicdb_id!);
     
     if (!existing) {
+      // New score
       toInsert.push({
         user_id: userId,
         upload_id: uploadId,
@@ -1415,42 +830,42 @@ async function smartUpsertScores(
         source_type: score.source_type,
       });
     } else {
-      const bestScore = getBetterScore(existing.score, score.score);
-      const bestHalo = getBetterHalo(existing.halo, score.halo);
-      const bestFlare = getBetterFlare(existing.flare, score.flare);
-      const bestRank = getBetterRank(existing.rank, score.rank);
+      // Check for improvements
+      const newScore = getBetterScore(existing.score, score.score);
+      const newFlare = getBetterFlare(existing.flare, score.flare);
+      const newRank = getBetterRank(existing.rank, score.rank);
+      const newHalo = getBetterHalo(existing.halo, score.halo);
       
-      const scoreImproved = bestScore !== existing.score;
-      const haloImproved = bestHalo !== existing.halo;
-      const flareImproved = bestFlare !== existing.flare;
-      const rankImproved = bestRank !== existing.rank;
+      const hasImprovement =
+        newScore !== existing.score ||
+        newFlare !== existing.flare ||
+        newRank !== existing.rank ||
+        newHalo !== existing.halo;
       
-      if (scoreImproved || haloImproved || flareImproved || rankImproved) {
-        // Track the change for the summary
-        const change: ScoreChange = {
-          song_name: existing.song_name ?? score.difficulty_name ?? 'Unknown',
-          difficulty_name: existing.difficulty_name ?? score.difficulty_name ?? 'EXPERT',
-          difficulty_level: existing.difficulty_level ?? score.difficulty_level ?? 0,
-          old_score: existing.score,
-          new_score: bestScore,
-          old_flare: existing.flare,
-          new_flare: flareImproved ? bestFlare : existing.flare,
-          old_rank: existing.rank,
-          new_rank: rankImproved ? bestRank : existing.rank,
-          old_halo: existing.halo,
-          new_halo: haloImproved ? bestHalo : existing.halo,
-        };
-        
+      if (hasImprovement) {
         toUpdate.push({
           id: existing.id,
           data: {
-            score: bestScore,
-            halo: bestHalo,
-            flare: bestFlare,
-            rank: bestRank,
+            score: newScore,
+            flare: newFlare,
+            rank: newRank,
+            halo: newHalo,
             upload_id: uploadId,
+            timestamp: score.timestamp || undefined,
           },
-          change,
+          change: {
+            song_name: existing.song_name || 'Unknown',
+            difficulty_name: existing.difficulty_name || score.difficulty_name,
+            difficulty_level: existing.difficulty_level || score.difficulty_level,
+            old_score: existing.score,
+            new_score: newScore,
+            old_flare: existing.flare,
+            new_flare: newFlare,
+            old_rank: existing.rank,
+            new_rank: newRank,
+            old_halo: existing.halo,
+            new_halo: newHalo,
+          },
         });
       } else {
         skipped++;
@@ -1458,14 +873,13 @@ async function smartUpsertScores(
     }
   }
   
-  // BATCH INSERT new scores
+  console.log(`To insert: ${toInsert.length}, to update: ${toUpdate.length}, skipped: ${skipped}`);
+  
+  // Batch insert
   if (toInsert.length > 0) {
     const { error: insertError } = await supabase
       .from('user_scores')
-      .upsert(toInsert, {
-        onConflict: 'user_id,musicdb_id',
-        ignoreDuplicates: false,
-      });
+      .insert(toInsert);
     
     if (insertError) {
       console.error('Batch insert error:', insertError);
@@ -1475,7 +889,7 @@ async function smartUpsertScores(
     }
   }
   
-  // BATCH UPDATE existing scores (need to do individually due to different data per row)
+  // Update existing scores
   for (const update of toUpdate) {
     const { error: updateError } = await supabase
       .from('user_scores')
@@ -1491,55 +905,14 @@ async function smartUpsertScores(
   }
   
   if (updated > 0) {
-    console.log(`Updated ${updated} existing scores with improvements`);
+    console.log(`Updated ${updated} existing scores`);
   }
   
   return { inserted, updated, skipped, changes };
 }
 
 // ============================================================================
-// Upsert DDR Username to User Profiles
-// ============================================================================
-
-async function upsertDdrUsername(
-  supabase: any,
-  userId: string,
-  ddrUsername: string | null
-): Promise<void> {
-  if (!ddrUsername) return;
-  
-  try {
-    // Only set ddr_username if not already set
-    const { data: existing } = await supabase
-      .from('user_profiles')
-      .select('ddr_username')
-      .eq('user_id', userId)
-      .maybeSingle();
-    
-    if (existing?.ddr_username) {
-      console.log(`DDR username already set for user ${userId}: ${existing.ddr_username}`);
-      return;
-    }
-    
-    const { error } = await supabase
-      .from('user_profiles')
-      .upsert(
-        { user_id: userId, ddr_username: ddrUsername },
-        { onConflict: 'user_id' }
-      );
-    
-    if (error) {
-      console.error('Error upserting ddr_username:', error);
-    } else {
-      console.log(`Set ddr_username for user ${userId}: ${ddrUsername}`);
-    }
-  } catch (err) {
-    console.error('Error upserting ddr_username:', err);
-  }
-}
-
-// ============================================================================
-// Background Processing Function
+// BACKGROUND PROCESSOR
 // ============================================================================
 
 async function processUploadInBackground(
@@ -1550,20 +923,15 @@ async function processUploadInBackground(
   content: string,
   sourceType: 'phaseii' | 'sanbai' | 'unknown'
 ): Promise<void> {
-  console.log(`Background processing started for upload ${uploadId}`);
+  console.log(`\n========================================`);
+  console.log(`Background processing started: ${uploadId}`);
+  console.log(`Source type: ${sourceType}`);
+  console.log(`========================================\n`);
   
-  // Create a new service role client for background processing
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
   try {
-    // Extract username from content if PhaseII
-    let extractedUsername: string | null = null;
-    if (sourceType === 'phaseii') {
-      extractedUsername = extractPhaseIIUsername(content);
-      console.log(`Extracted username from PhaseII: ${extractedUsername}`);
-    }
-    
-    // Process based on source type
+    // Route to appropriate parser
     let parseResult: ParseResult;
     
     if (sourceType === 'phaseii') {
@@ -1580,8 +948,8 @@ async function processUploadInBackground(
         .eq('id', uploadId);
       return;
     }
-
-    // If no scores matched, mark as failed
+    
+    // Handle empty results
     if (parseResult.scores.length === 0) {
       await supabase
         .from('uploads')
@@ -1599,16 +967,15 @@ async function processUploadInBackground(
         .eq('id', uploadId);
       return;
     }
-
-    // Fetch existing scores for smart upsert
+    
+    // Fetch existing scores
     const musicdbIds = parseResult.scores
       .map(s => s.musicdb_id)
       .filter((id): id is number => id !== null);
     
     const existingScores = await fetchExistingScores(supabase, userId, musicdbIds);
-    console.log(`Found ${existingScores.size} existing scores for comparison`);
-
-    // Smart upsert - merge best values
+    
+    // Smart upsert
     const upsertResult = await smartUpsertScores(
       supabase,
       userId,
@@ -1617,12 +984,7 @@ async function processUploadInBackground(
       existingScores
     );
     
-    // Upsert DDR username to user_profiles if extracted
-    if (extractedUsername) {
-      await upsertDdrUsername(supabase, userId, extractedUsername);
-    }
-
-    // Update upload record with summary
+    // Update upload record
     const totalRows = parseResult.scores.length + parseResult.unmatchedSongs.length;
     await supabase
       .from('uploads')
@@ -1637,12 +999,15 @@ async function processUploadInBackground(
           unchanged: upsertResult.skipped,
           source_type: parseResult.sourceType,
           unmatched_songs: parseResult.unmatchedSongs.slice(0, 50),
-          changes: upsertResult.changes.slice(0, 100), // Limit to 100 changes for storage
+          changes: upsertResult.changes.slice(0, 100),
         },
       })
       .eq('id', uploadId);
     
-    console.log(`Background processing completed for upload ${uploadId}`);
+    console.log(`\n========================================`);
+    console.log(`Background processing COMPLETE: ${uploadId}`);
+    console.log(`========================================\n`);
+    
   } catch (err) {
     console.error('Background processing error:', err);
     await supabase
@@ -1656,17 +1021,15 @@ async function processUploadInBackground(
 }
 
 // ============================================================================
-// Main Handler - Returns immediately, processes in background
+// MAIN HANDLER
 // ============================================================================
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Get auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
@@ -1675,7 +1038,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create Supabase client with user's auth
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -1684,7 +1046,6 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -1693,7 +1054,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Parse request body
     const body = await req.json();
     const { file_name, file_mime_type, file_size_bytes, raw_storage_path, content } = body;
 
@@ -1704,11 +1064,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Detect source type
     const sourceType = detectSourceType(content);
     console.log(`Detected source type: ${sourceType} for file: ${file_name}`);
 
-    // Create upload record with 'processing' status
     const { data: upload, error: uploadError } = await supabase
       .from('uploads')
       .insert({
@@ -1717,7 +1075,7 @@ Deno.serve(async (req) => {
         file_mime_type,
         file_size_bytes,
         raw_storage_path,
-        parse_status: 'processing', // Changed from 'pending' to 'processing'
+        parse_status: 'processing',
         source_type: sourceType,
       })
       .select('id')
@@ -1733,7 +1091,6 @@ Deno.serve(async (req) => {
 
     const uploadId = upload.id;
 
-    // Start background processing using EdgeRuntime.waitUntil
     // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
     EdgeRuntime.waitUntil(
       processUploadInBackground(
@@ -1746,13 +1103,12 @@ Deno.serve(async (req) => {
       )
     );
 
-    // Return immediately with upload ID - client will poll for status
     return new Response(JSON.stringify({
       upload_id: uploadId,
       status: 'processing',
       message: 'Upload received. Processing in background.',
     }), {
-      status: 202, // Accepted - processing started
+      status: 202,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
