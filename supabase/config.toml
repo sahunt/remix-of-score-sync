@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.update-eamuse-ids]
 verify_jwt = false
+
+[functions.fix-musicdb-rows]
+verify_jwt = false
