@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
-import statsBg from '@/assets/stats-bg.png';
+import newStatsBg from '@/assets/newStats.png';
 
 interface StatItem {
   label: string;
@@ -11,10 +11,11 @@ interface StatItem {
 
 interface StatsSummaryProps {
   stats: StatItem[];
+  averageScore?: number | null;
   className?: string;
 }
 
-export function StatsSummary({ stats, className }: StatsSummaryProps) {
+export function StatsSummary({ stats, averageScore, className }: StatsSummaryProps) {
   return (
     <div
       className={cn(
@@ -22,7 +23,7 @@ export function StatsSummary({ stats, className }: StatsSummaryProps) {
         className
       )}
       style={{
-        backgroundImage: `url(${statsBg})`,
+        backgroundImage: `url(${newStatsBg})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
@@ -57,6 +58,24 @@ export function StatsSummary({ stats, className }: StatsSummaryProps) {
           </div>
         ))}
       </div>
+
+      {/* Divider and Average Score */}
+      {averageScore != null && averageScore > 0 && (
+        <>
+          {/* Horizontal divider */}
+          <div className="mx-auto w-2/3 h-[1px] bg-white/50" />
+          
+          {/* Average score display */}
+          <div className="flex items-center justify-center px-4 py-3">
+            <span 
+              className="text-white font-bold"
+              style={{ fontSize: '12px', lineHeight: '20px' }}
+            >
+              Avg. {averageScore.toLocaleString()}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
