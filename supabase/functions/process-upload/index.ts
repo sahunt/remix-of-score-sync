@@ -628,19 +628,35 @@ async function fetchExistingScores(
 ): Promise<Map<number, ExistingScore>> {
   if (musicdbIds.length === 0) return new Map();
   
-  const { data, error } = await supabase
-    .from('user_scores')
-    .select('id, musicdb_id, score, rank, flare, halo')
-    .eq('user_id', userId)
-    .in('musicdb_id', musicdbIds);
+  // Batch the query to avoid URL length limits
+  // Supabase .in() with thousands of IDs creates URLs that are too long
+  const BATCH_SIZE = 100;
+  const uniqueIds = [...new Set(musicdbIds)];
+  const allData: any[] = [];
   
-  if (error) {
-    console.error('fetchExistingScores error:', error);
-    return new Map();
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    const batchIds = uniqueIds.slice(i, i + BATCH_SIZE);
+    
+    const { data, error } = await supabase
+      .from('user_scores')
+      .select('id, musicdb_id, score, rank, flare, halo')
+      .eq('user_id', userId)
+      .in('musicdb_id', batchIds);
+    
+    if (error) {
+      console.error(`fetchExistingScores batch ${Math.floor(i / BATCH_SIZE)} error:`, error);
+      continue;
+    }
+    
+    if (data) {
+      allData.push(...data);
+    }
   }
   
+  console.log(`fetchExistingScores: queried ${uniqueIds.length} IDs in ${Math.ceil(uniqueIds.length / BATCH_SIZE)} batches, found ${allData.length} existing scores`);
+  
   const map = new Map<number, ExistingScore>();
-  for (const row of data || []) {
+  for (const row of allData) {
     if (row.musicdb_id) {
       map.set(row.musicdb_id, row as ExistingScore);
     }
