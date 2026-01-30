@@ -60,28 +60,34 @@ Deno.serve(async (req) => {
 
     console.log(`update-eamuse-ids: Received CSV content of length ${content.length}`);
 
-    // Parse CSV - format: song_id,EncodedID
+    // Parse CSV - format: song_id,eamuse_id (or song_id,EncodedID)
     const lines = content.trim().split('\n');
     const header = lines[0].toLowerCase();
     
-    if (!header.includes('song_id') || !header.includes('encodedid')) {
+    // Accept either 'eamuse_id' or 'encodedid' as the column name
+    if (!header.includes('song_id') || (!header.includes('eamuse_id') && !header.includes('encodedid'))) {
       return new Response(
-        JSON.stringify({ error: 'Invalid CSV format. Expected headers: song_id,EncodedID' }),
+        JSON.stringify({ error: 'Invalid CSV format. Expected headers: song_id,eamuse_id (or song_id,EncodedID)' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    // Find the index of the eamuse_id column
+    const headerParts = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const songIdIndex = headerParts.findIndex(h => h === 'song_id');
+    const eamuseIdIndex = headerParts.findIndex(h => h === 'eamuse_id' || h === 'encodedid');
 
-    // Parse mappings
+    // Parse mappings using dynamic column indices
     const mappings: { song_id: number; eamuse_id: string }[] = [];
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
 
       const parts = line.split(',');
-      if (parts.length < 2) continue;
+      if (parts.length <= Math.max(songIdIndex, eamuseIdIndex)) continue;
 
-      const song_id = parseInt(parts[0].trim(), 10);
-      const eamuse_id = parts[1].trim();
+      const song_id = parseInt(parts[songIdIndex].trim(), 10);
+      const eamuse_id = parts[eamuseIdIndex].trim();
 
       if (isNaN(song_id) || !eamuse_id) {
         console.warn(`update-eamuse-ids: Skipping invalid line ${i + 1}: ${line}`);
