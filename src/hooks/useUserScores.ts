@@ -45,6 +45,7 @@ export function useUserScores(options?: {
         // 1. Goal progress calculations (matching played vs unplayed)
         // 2. Song card rendering (jacket art lookup via eamuse_id)
         // 3. Unique React keys (song_id)
+        // 4. Filtering out deleted songs (deleted field)
         let query = supabase
           .from('user_scores')
           .select(`
@@ -58,7 +59,7 @@ export function useUserScores(options?: {
             flare,
             halo,
             musicdb_id,
-            musicdb(name, artist, eamuse_id, song_id)
+            musicdb(name, artist, eamuse_id, song_id, deleted)
           `)
           .eq('user_id', user.id)
           .eq('playstyle', 'SP');
@@ -96,8 +97,12 @@ export function useUserScores(options?: {
         if (error) throw error;
         
         if (data && data.length > 0) {
-          // Filter out scores linked to deleted songs (musicdb is null or deleted)
-          const validScores = (data as ScoreWithSong[]).filter(score => score.musicdb !== null);
+          // Filter out scores linked to deleted songs
+          // Scores are stored for all songs (including deleted), but only show non-deleted in UI
+          const validScores = (data as any[]).filter(score => {
+            // Keep score if musicdb exists and is not deleted
+            return score.musicdb !== null && score.musicdb.deleted !== true;
+          }) as ScoreWithSong[];
           allScores = [...allScores, ...validScores];
           from += PAGE_SIZE;
           hasMore = data.length === PAGE_SIZE;
