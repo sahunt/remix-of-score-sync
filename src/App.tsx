@@ -16,6 +16,7 @@ import Upload from "./pages/Upload";
 import GoalDetail from "./pages/GoalDetail";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import AdminUpdateMappings from "./pages/AdminUpdateMappings";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
                   <Route path="/goal/:goalId" element={<GoalDetail />} />
                   <Route path="/profile" element={<Profile />} />
                 </Route>
+                <Route path="/admin/update-mappings" element={<AdminUpdateMappings />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </TwelveMSModeProvider>
