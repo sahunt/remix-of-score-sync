@@ -1,5 +1,5 @@
 import { useRef, memo } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { SongCard } from './SongCard';
 
 interface DisplaySong {
@@ -48,26 +48,22 @@ const SongRow = memo(function SongRow({
 
 /**
  * Virtualized song list that only renders visible items.
- * This dramatically improves performance when displaying hundreds of songs.
- * Uses @tanstack/react-virtual for efficient windowing.
+ * Uses window-based virtualization so the page scrolls naturally.
  */
 export function VirtualizedSongList({ songs, onSongClick }: VirtualizedSongListProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   
-  const virtualizer = useVirtualizer({
+  const virtualizer = useWindowVirtualizer({
     count: songs.length,
-    getScrollElement: () => parentRef.current,
     estimateSize: () => 70, // SongCard height (~66px) + gap (4px)
     overscan: 8, // Render extra items for smoother scrolling
+    scrollMargin: listRef.current?.offsetTop ?? 0,
   });
 
   const items = virtualizer.getVirtualItems();
 
   return (
-    <div 
-      ref={parentRef} 
-      className="h-[calc(100vh-480px)] min-h-[300px] overflow-auto scrollbar-thin"
-    >
+    <div ref={listRef}>
       <div
         style={{
           height: `${virtualizer.getTotalSize()}px`,
@@ -85,8 +81,7 @@ export function VirtualizedSongList({ songs, onSongClick }: VirtualizedSongListP
                 top: 0,
                 left: 0,
                 width: '100%',
-                height: `${virtualItem.size}px`,
-                transform: `translateY(${virtualItem.start}px)`,
+                transform: `translateY(${virtualItem.start - (listRef.current?.offsetTop ?? 0)}px)`,
               }}
             >
               <div className="pb-2">
