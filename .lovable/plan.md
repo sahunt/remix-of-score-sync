@@ -1,170 +1,88 @@
 
-# Upload Summary - Show What Changed
+# Stats Card Enhancement Plan
 
 ## Overview
-Add a detailed "Changes" section to the upload results UI that shows exactly which songs had improvements, with their old → new values. This provides transparency into what the upload actually changed.
+Update the stats card to use a new background image and add an average score calculation for all played songs based on the current filters.
 
-## User Experience
+## Visual Changes
 
-When an upload completes with updates, users will see:
-1. The existing 6 stat blocks (Total Rows, Mapped, Skipped, New, Updated, Unchanged)
-2. A new "Changes" section showing individual songs that were updated
-3. Each row shows: difficulty chip + song name + score change + improvement chips (Flare/Rank/Grade)
-4. A "See all" button to expand/collapse if there are many changes
+The stats card will be updated to match the reference design:
+- New background image with a more vibrant purple gradient
+- A horizontal white divider line at 50% opacity below the stats row
+- A new "Avg. X,XXX,XXX" display centered below the divider
 
-Only songs with actual improvements are shown. If a song had PFC → PFC with no other changes, it won't appear in this list.
+## Changes Required
+
+### 1. Add New Background Image
+
+Copy the uploaded `newStats.png` to the assets folder and replace the current background.
+
+**File:** `src/assets/newStats.png` (new file)
 
 ---
 
-## Technical Approach
+### 2. Update StatsSummary Component
 
-### 1. Edge Function: Track Detailed Changes
+Modify the component to accept an optional `averageScore` prop and render the new layout.
 
-Modify `supabase/functions/process-upload/index.ts` to capture before/after data for each updated score.
+**File:** `src/components/scores/StatsSummary.tsx`
 
-**Add new interface:**
-```typescript
-interface ScoreChange {
-  song_name: string;
-  difficulty_name: string;
-  difficulty_level: number;
-  old_score: number | null;
-  new_score: number | null;
-  old_flare: number | null;
-  new_flare: number | null;
-  old_rank: string | null;
-  new_rank: string | null;
-  old_halo: string | null;
-  new_halo: string | null;
-}
-```
+**Changes:**
+- Add `averageScore` prop to the interface (optional, can be null/undefined)
+- Keep the existing stats row as-is
+- Add a horizontal divider below the stats row (white line at 50% opacity)
+- Add the "Avg. X,XXX,XXX" text below the divider, centered
+- Import and use the new background image
+- Only show the divider and average if `averageScore` is provided and greater than 0
 
-**Modify `fetchExistingScores`:**
-- Also fetch the song name from musicdb join (or store it in existing query)
-- Need song_name, difficulty_name, difficulty_level for display
+---
 
-**Modify `smartUpsertScores`:**
-- Return an array of `ScoreChange` objects alongside the counts
-- Only include entries where at least one value changed
+### 3. Calculate Average Score in Scores Page
 
-**Update parse_summary storage:**
-- Add `changes: ScoreChange[]` to the summary JSON stored in the uploads table
+Add logic to compute the average score from all played songs matching the current filters (excluding songs with no score).
 
-### 2. Frontend: Update UploadResult Interface
+**File:** `src/pages/Scores.tsx`
 
-In `src/pages/Upload.tsx`, extend the interface:
+**Changes:**
+- Within the `stats` useMemo, calculate the average:
+  - Filter to only songs with a non-null score
+  - Sum all scores and divide by count
+  - Round to whole number
+- Pass the `averageScore` to the `StatsSummary` component
 
-```typescript
-interface ScoreChange {
-  song_name: string;
-  difficulty_name: string;
-  difficulty_level: number;
-  old_score: number | null;
-  new_score: number | null;
-  old_flare: number | null;
-  new_flare: number | null;
-  old_rank: string | null;
-  new_rank: string | null;
-  old_halo: string | null;
-  new_halo: string | null;
-}
+---
 
-interface UploadResult {
-  // ... existing fields
-  changes?: ScoreChange[];
-}
-```
+## Technical Details
 
-### 3. Frontend: Add Changes Summary Component
-
-Create a new section in the success state that displays changes:
-
-- Styled as a dark card container (bg-[#3B3F51] rounded-lg)
-- Header: "Updated Scores" with count
-- Each row contains:
-  - Difficulty chip (14x14, colored by difficulty name)
-  - Song name (10px uppercase Poppins)
-  - Score change: "998,670 → 999,980" format
-  - Improvement chips (only shown if that field improved):
-    - FlareChip for flare improvement
-    - HaloChip for grade improvement (PFC, MFC, etc.)
-    - Rank badge for rank improvement (optional, may skip for simplicity)
-- Collapsible with "See all" button if > 5 changes
-- Don't show chip if old === new (e.g., PFC → PFC shows nothing)
-
-### 4. Visual Reference (from mockup)
+### Average Score Calculation Logic
 
 ```text
-┌──────────────────────────────────────────────────────┐
-│  14  ROMANCING LAYER  998,670 → 999,980  [✨PFC]     │
-│  14  1116  999,670 → 999,980                         │
-│  14  ROMANCING LAYER  998,670 → 999,980  [✨PFC]     │
-│  ...                                                  │
-├──────────────────────────────────────────────────────┤
-│                    See all ∨                         │
-└──────────────────────────────────────────────────────┘
+1. Take the filtered scores (already filtered by level and active filters)
+2. Filter out songs where score is null (no play)
+3. If no played songs remain, average is 0/null
+4. Otherwise: average = sum of all scores / count of played songs
+5. Round to nearest integer
 ```
 
----
+### Divider Styling
 
-## Implementation Steps
+- Width: Approximately 60-70% of the card width, centered
+- Height: 1px
+- Color: White with 50% opacity (`rgba(255, 255, 255, 0.5)`)
+- Margin: ~12px above and below for spacing
 
-### Step 1: Update Edge Function Types
-- Add `ScoreChange` interface
-- Update `UpsertResult` to include `changes` array
+### Average Display Styling
 
-### Step 2: Modify fetchExistingScores
-- Join with musicdb to get song_name, difficulty_name, difficulty_level
-- Return enriched existing score data
-
-### Step 3: Modify smartUpsertScores
-- Track changes for each update
-- Return changes array with before/after values
-
-### Step 4: Update parse_summary storage
-- Include changes in the summary JSON
-
-### Step 5: Update Upload.tsx
-- Add ScoreChange interface
-- Parse changes from result
-- Create collapsible changes list UI
-
-### Step 6: Create Changes Row Component
-- Difficulty chip with color
-- Song name
-- Score transition (old → new) with number formatting
-- Conditional FlareChip (if flare improved)
-- Conditional HaloChip (if halo/grade improved)
+- Text: "Avg. " followed by the formatted number (with comma separators)
+- Font: Same as stats (12px bold, white)
+- Centered horizontally
 
 ---
 
 ## Files to Modify
 
-1. `supabase/functions/process-upload/index.ts`
-   - Add ScoreChange interface
-   - Modify fetchExistingScores to include song metadata
-   - Modify smartUpsertScores to track and return changes
-   - Include changes in parse_summary
-
-2. `src/pages/Upload.tsx`
-   - Add ScoreChange interface
-   - Parse changes from result
-   - Add new Changes section with collapsible list
-
----
-
-## Edge Cases
-
-1. **No changes**: Don't show the changes section
-2. **Many changes**: Collapse to first 5 rows with "See all" expander
-3. **Score-only change**: Show score transition, no chips
-4. **Grade-only change**: Show score (may be same), show new HaloChip
-5. **Flare-only change**: Show score, show new FlareChip
-6. **Multiple improvements**: Show all applicable chips
-
-## Dependencies
-
-Uses existing components:
-- FlareChip from `@/components/ui/FlareChip`
-- HaloChip from `@/components/ui/HaloChip`
-- getDifficultyColorClass pattern from SongCard
+| File | Action |
+|------|--------|
+| `src/assets/newStats.png` | Create (copy from uploaded file) |
+| `src/components/scores/StatsSummary.tsx` | Update to add divider and average display |
+| `src/pages/Scores.tsx` | Add average calculation and pass to component |
