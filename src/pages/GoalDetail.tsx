@@ -186,7 +186,6 @@ export default function GoalDetail() {
             goal={goal}
             completedSongs={progress.completedSongs}
             remainingSongs={allRemainingSongs}
-            suggestedSongs={progress.suggestedSongs}
             isLoading={scoresLoading}
           />
         </div>
