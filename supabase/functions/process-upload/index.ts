@@ -322,19 +322,31 @@ function phaseii_extractBlocks(content: string): string[] {
     }
     
     // If no nested scores found, the data array might contain score objects directly
-    // (old format where scores are at top level)
+    // Mixed format: some entries might be player profiles, others are score records
     console.log('PhaseII: No nested scores found, checking if data contains score objects directly');
     
-    // Check first player object for score-like fields
-    if (playerObjects.length > 0) {
-      const firstObj = playerObjects[0];
-      if (firstObj.includes('"song"') || firstObj.includes('"chart"') || firstObj.includes('"points"')) {
-        console.log('PhaseII: Data array contains score objects directly');
-        return playerObjects;
-      }
+    // Filter objects to only those that look like score entries (have "song" object)
+    const scoreObjects = playerObjects.filter(obj => obj.includes('"song"'));
+    
+    if (scoreObjects.length > 0) {
+      console.log(`PhaseII: Found ${scoreObjects.length} score objects in data array (filtered from ${playerObjects.length} total)`);
+      const sampleScore = scoreObjects[0].substring(0, 400);
+      console.log(`PhaseII: Sample score object: ${sampleScore}`);
+      return scoreObjects;
     }
     
-    // Return player objects and let the parser handle field extraction
+    // Check if any object has chart or points (alternative score format)
+    const altScoreObjects = playerObjects.filter(obj => 
+      obj.includes('"chart"') || obj.includes('"points"')
+    );
+    
+    if (altScoreObjects.length > 0) {
+      console.log(`PhaseII: Found ${altScoreObjects.length} alternative score objects`);
+      return altScoreObjects;
+    }
+    
+    // No score-like objects found
+    console.log('PhaseII: No score objects found in data array');
     return playerObjects;
   }
   
@@ -388,26 +400,36 @@ function phaseii_extractNestedObject(block: string, key: string): string | null 
 }
 
 // Extract fields from a single entry block
+// PhaseII score format:
+// {
+//   "song": { "id": 38656, "chart": "SP EXPERT - 16", ... },
+//   "points": "997,310",
+//   "data": { "halo": "CLEARED", "rank": "AAA", "flare": 10, ... },
+//   "timestamp": "2026-01-20 08:27:37"
+// }
 function phaseii_extractFields(block: string): PhaseIIEntry {
   // Extract song.id from nested song object
   let songId: number | null = null;
+  let chart: string | null = null;
+  
   const songContent = phaseii_extractNestedObject(block, 'song');
   if (songContent) {
+    // Extract id from song object
     const idMatch = songContent.match(/"id"\s*:\s*(\d+)/);
     if (idMatch) songId = parseInt(idMatch[1]);
-  }
-  // Fallback: direct pattern
-  if (songId === null) {
-    const directMatch = block.match(/"song"\s*:\s*\{\s*"id"\s*:\s*(\d+)/);
-    if (directMatch) songId = parseInt(directMatch[1]);
+    
+    // Extract chart from song object (e.g., "SP EXPERT - 16")
+    const chartMatch = songContent.match(/"chart"\s*:\s*"([^"]+)"/);
+    if (chartMatch) chart = chartMatch[1];
   }
   
-  // Extract chart
-  let chart: string | null = null;
-  const chartMatch = block.match(/"chart"\s*:\s*"([^"]+)"/);
-  if (chartMatch) chart = chartMatch[1];
+  // Fallback: check for chart at top level (old format)
+  if (chart === null) {
+    const topLevelChart = block.match(/"chart"\s*:\s*"([^"]+)"/);
+    if (topLevelChart) chart = topLevelChart[1];
+  }
   
-  // Extract points (quoted or unquoted)
+  // Extract points (quoted or unquoted) - at top level
   let points: string | null = null;
   const quotedPoints = block.match(/"points"\s*:\s*"([^"]+)"/);
   if (quotedPoints) {
@@ -417,22 +439,38 @@ function phaseii_extractFields(block: string): PhaseIIEntry {
     if (unquotedPoints) points = unquotedPoints[1];
   }
   
-  // Extract halo
+  // Extract halo, rank, flare from nested "data" object
   let halo: string | null = null;
-  const haloMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
-  if (haloMatch) halo = haloMatch[1];
-  
-  // Extract rank
   let rank: string | null = null;
-  const rankMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
-  if (rankMatch) rank = rankMatch[1];
-  
-  // Extract flare
   let flare: number | null = null;
-  const flareMatch = block.match(/"flare"\s*:\s*(\d+)/);
-  if (flareMatch) flare = parseInt(flareMatch[1]);
   
-  // Extract timestamp
+  const dataContent = phaseii_extractNestedObject(block, 'data');
+  if (dataContent) {
+    const haloMatch = dataContent.match(/"halo"\s*:\s*"([^"]+)"/);
+    if (haloMatch) halo = haloMatch[1];
+    
+    const rankMatch = dataContent.match(/"rank"\s*:\s*"([^"]+)"/);
+    if (rankMatch) rank = rankMatch[1];
+    
+    const flareMatch = dataContent.match(/"flare"\s*:\s*(\d+)/);
+    if (flareMatch) flare = parseInt(flareMatch[1]);
+  }
+  
+  // Fallback: check top level (old format)
+  if (halo === null) {
+    const haloMatch = block.match(/"halo"\s*:\s*"([^"]+)"/);
+    if (haloMatch) halo = haloMatch[1];
+  }
+  if (rank === null) {
+    const rankMatch = block.match(/"rank"\s*:\s*"([^"]+)"/);
+    if (rankMatch) rank = rankMatch[1];
+  }
+  if (flare === null) {
+    const flareMatch = block.match(/"flare"\s*:\s*(\d+)/);
+    if (flareMatch) flare = parseInt(flareMatch[1]);
+  }
+  
+  // Extract timestamp - at top level
   let timestamp: string | null = null;
   const timestampMatch = block.match(/"timestamp"\s*:\s*"([^"]+)"/);
   if (timestampMatch) timestamp = timestampMatch[1];
