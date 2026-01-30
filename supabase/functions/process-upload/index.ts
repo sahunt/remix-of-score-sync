@@ -180,14 +180,55 @@ function phaseii_sanitizeContent(content: string): string {
 // Extract entry blocks from JSON content using bracket matching
 function phaseii_extractBlocks(content: string): string[] {
   const sanitized = phaseii_sanitizeContent(content);
+  
+  // PhaseII exports can have two formats:
+  // 1. Array of score objects: [{ song: {...}, chart: "...", ... }, ...]
+  // 2. Wrapper object with data array: { headers: [...], data: [...] }
+  
+  // First, check if this is a wrapper object with "data" array
+  const dataArrayMatch = sanitized.match(/"data"\s*:\s*\[/);
+  
+  let jsonToProcess = sanitized;
+  if (dataArrayMatch && dataArrayMatch.index !== undefined) {
+    // Extract just the data array portion
+    const startIdx = dataArrayMatch.index + dataArrayMatch[0].length - 1; // Include the '['
+    
+    let depth = 0;
+    let endIdx = startIdx;
+    let inString = false;
+    let escaped = false;
+    
+    for (let i = startIdx; i < sanitized.length; i++) {
+      const char = sanitized[i];
+      
+      if (escaped) { escaped = false; continue; }
+      if (char === '\\' && inString) { escaped = true; continue; }
+      if (char === '"' && !escaped) { inString = !inString; continue; }
+      
+      if (!inString) {
+        if (char === '[') depth++;
+        else if (char === ']') {
+          depth--;
+          if (depth === 0) {
+            endIdx = i + 1;
+            break;
+          }
+        }
+      }
+    }
+    
+    jsonToProcess = sanitized.substring(startIdx, endIdx);
+    console.log(`PhaseII: Found wrapper object, extracted data array (length: ${jsonToProcess.length})`);
+  }
+  
   const entryBlocks: string[] = [];
   let depth = 0;
   let currentBlock = '';
   let inString = false;
   let escaped = false;
   
-  for (let i = 0; i < sanitized.length; i++) {
-    const char = sanitized[i];
+  for (let i = 0; i < jsonToProcess.length; i++) {
+    const char = jsonToProcess[i];
     
     if (escaped) {
       escaped = false;
@@ -236,6 +277,13 @@ function phaseii_extractBlocks(content: string): string[] {
   }
   
   console.log(`PhaseII: Extracted ${entryBlocks.length} entry blocks`);
+  
+  // Log first block sample for debugging
+  if (entryBlocks.length > 0) {
+    const sampleContent = entryBlocks[0].substring(0, 200);
+    console.log(`PhaseII: First block sample: ${sampleContent}`);
+  }
+  
   return entryBlocks;
 }
 
@@ -407,8 +455,7 @@ async function processPhaseII(supabase: any, content: string): Promise<ParseResu
     return { scores, sourceType: 'phaseii', unmatchedSongs };
   }
   
-  // Log sample for debugging
-  console.log(`PhaseII: Sample block (first 300 chars): ${blocks[0].substring(0, 300)}`);
+  // Log sample for debugging (already logged in extractBlocks, but log more details here)
   
   // Step 2: Parse fields from blocks
   const parsedEntries: Array<{ entry: PhaseIIEntry; chartInfo: { playstyle: string; difficulty_name: string; difficulty_level: number } }> = [];
