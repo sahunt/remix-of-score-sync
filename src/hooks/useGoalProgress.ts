@@ -1,4 +1,98 @@
 import { useMemo } from 'react';
+import type { FilterRule } from '@/components/filters/filterTypes';
+
+// Helper function to match a score against a filter rule
+function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
+  const { type, operator, value } = rule;
+
+  // If value is null/empty, skip this rule (treat as "no filter")
+  if (value === null || value === undefined) return true;
+  if (value === '') return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+
+  // Handle numeric multi-select (level, flare)
+  const compareNumericMulti = (actual: number | null, target: number | number[] | [number, number]): boolean => {
+    // Range comparison for "is_between"
+    if (operator === 'is_between' && Array.isArray(target) && target.length === 2) {
+      if (actual === null) return false;
+      const [min, max] = target as [number, number];
+      return actual >= Math.min(min, max) && actual <= Math.max(min, max);
+    }
+    
+    // Multi-select array
+    if (Array.isArray(target)) {
+      if (target.length === 0) return true;
+      const includesNoFlare = target.includes(0);
+      if (actual === null) {
+        const matches = includesNoFlare;
+        return operator === 'is' ? matches : !matches;
+      }
+      const matches = target.includes(actual);
+      return operator === 'is' ? matches : !matches;
+    }
+    
+    if (target === 0) {
+      const matches = actual === null;
+      return operator === 'is' ? matches : !matches;
+    }
+    
+    if (actual === null) return false;
+    
+    switch (operator) {
+      case 'is': return actual === target;
+      case 'is_not': return actual !== target;
+      case 'less_than': return actual < target;
+      case 'greater_than': return actual > target;
+      default: return false;
+    }
+  };
+
+  // Handle string multi-select (difficulty)
+  const compareStringMulti = (actual: string | null, target: string | string[]): boolean => {
+    if (actual === null) return false;
+    const normalizedActual = actual.toLowerCase();
+    
+    if (Array.isArray(target)) {
+      if (target.length === 0) return true;
+      const matches = target.some(t => normalizedActual === t.toLowerCase());
+      return operator === 'is' ? matches : !matches;
+    }
+    
+    if (target === '') return true;
+    const normalizedTarget = target.toLowerCase();
+    switch (operator) {
+      case 'is': return normalizedActual === normalizedTarget;
+      case 'is_not': return normalizedActual !== normalizedTarget;
+      default: return false;
+    }
+  };
+
+  switch (type) {
+    case 'level': return compareNumericMulti(score.difficulty_level, value as number | number[] | [number, number]);
+    case 'difficulty': return compareStringMulti(score.difficulty_name, value as string | string[]);
+    default:
+      return true;
+  }
+}
+
+// Filter scores by goal criteria rules
+function filterScoresByCriteria(
+  scores: ScoreWithSong[],
+  rules: FilterRule[],
+  matchMode: 'all' | 'any'
+): ScoreWithSong[] {
+  if (!rules || rules.length === 0) {
+    return scores;
+  }
+
+  return scores.filter((score) => {
+    if (matchMode === 'all') {
+      return rules.every((rule) => matchesRule(score, rule));
+    } else {
+      return rules.some((rule) => matchesRule(score, rule));
+    }
+  });
+}
 
 // Types for goal progress calculation
 export interface ScoreWithSong {
@@ -217,9 +311,12 @@ export function useGoalProgress(
       };
     }
 
-    // TODO: Apply criteria_rules filtering when implemented
-    // For now, use all scores
-    const matchingScores = scores;
+    // Apply criteria_rules filtering to only count scores that match the goal's criteria
+    const matchingScores = filterScoresByCriteria(
+      scores, 
+      goal.criteria_rules as FilterRule[], 
+      goal.criteria_match_mode
+    );
 
     // Split into completed vs not completed
     const completedSongs = matchingScores.filter(s => 
