@@ -8,6 +8,8 @@ import { useLastUpload } from '@/hooks/useLastUpload';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { ChangesSummary } from '@/components/upload/ChangesSummary';
+import type { ScoreChange } from '@/components/upload/ScoreChangeRow';
 
 type UploadState = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
 
@@ -26,6 +28,7 @@ interface UploadResult {
   unchanged?: number;
   source_type?: string;
   unmatched_songs?: UnmatchedSong[];
+  changes?: ScoreChange[];
 }
 
 export default function UploadPage() {
@@ -68,6 +71,7 @@ export default function UploadPage() {
         unchanged: summary.unchanged,
         source_type: summary.source_type,
         unmatched_songs: summary.unmatched_songs,
+        changes: summary.changes,
       };
       
       setResult(uploadResult);
@@ -334,6 +338,13 @@ export default function UploadPage() {
                   <p className="mb-4 text-xs text-muted-foreground">
                     Source: <span className="font-mono text-foreground">{result.source_type}</span>
                   </p>
+                )}
+
+                {/* Changes summary - show individual score updates */}
+                {result.changes && result.changes.length > 0 && (
+                  <div className="mb-4 w-full">
+                    <ChangesSummary changes={result.changes} />
+                  </div>
                 )}
 
                 {/* Debug: Unmatched songs list */}

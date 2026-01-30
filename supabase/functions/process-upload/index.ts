@@ -50,6 +50,25 @@ interface ExistingScore {
   rank: string | null;
   flare: number | null;
   halo: string | null;
+  // Enriched from musicdb join
+  song_name?: string | null;
+  difficulty_name?: string | null;
+  difficulty_level?: number | null;
+}
+
+// Track individual score changes for the upload summary
+interface ScoreChange {
+  song_name: string;
+  difficulty_name: string;
+  difficulty_level: number;
+  old_score: number | null;
+  new_score: number | null;
+  old_flare: number | null;
+  new_flare: number | null;
+  old_rank: string | null;
+  new_rank: string | null;
+  old_halo: string | null;
+  new_halo: string | null;
 }
 
 // ============================================================================
@@ -637,9 +656,13 @@ async function fetchExistingScores(
   for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
     const batchIds = uniqueIds.slice(i, i + BATCH_SIZE);
     
+    // Join with musicdb to get song metadata for the changes summary
     const { data, error } = await supabase
       .from('user_scores')
-      .select('id, musicdb_id, score, rank, flare, halo')
+      .select(`
+        id, musicdb_id, score, rank, flare, halo,
+        musicdb:musicdb_id (name, difficulty_name, difficulty_level)
+      `)
       .eq('user_id', userId)
       .in('musicdb_id', batchIds);
     
@@ -658,7 +681,19 @@ async function fetchExistingScores(
   const map = new Map<number, ExistingScore>();
   for (const row of allData) {
     if (row.musicdb_id) {
-      map.set(row.musicdb_id, row as ExistingScore);
+      // Extract song metadata from the join
+      const musicdb = row.musicdb as { name: string | null; difficulty_name: string | null; difficulty_level: number | null } | null;
+      map.set(row.musicdb_id, {
+        id: row.id,
+        musicdb_id: row.musicdb_id,
+        score: row.score,
+        rank: row.rank,
+        flare: row.flare,
+        halo: row.halo,
+        song_name: musicdb?.name ?? null,
+        difficulty_name: musicdb?.difficulty_name ?? null,
+        difficulty_level: musicdb?.difficulty_level ?? null,
+      } as ExistingScore);
     }
   }
   return map;
@@ -1242,6 +1277,7 @@ interface UpsertResult {
   inserted: number;
   updated: number;
   skipped: number;
+  changes: ScoreChange[];
 }
 
 async function smartUpsertScores(
@@ -1254,6 +1290,7 @@ async function smartUpsertScores(
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
+  const changes: ScoreChange[] = [];
   
   // CRITICAL: Deduplicate scores by musicdb_id, keeping the best values
   // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" errors
@@ -1286,7 +1323,7 @@ async function smartUpsertScores(
   
   // Separate new records from updates
   const toInsert: any[] = [];
-  const toUpdate: Array<{ id: string; data: any }> = [];
+  const toUpdate: Array<{ id: string; data: any; change: ScoreChange }> = [];
   
   for (const score of deduplicatedScores.values()) {
     const existing = existingScores.get(score.musicdb_id!);
@@ -1321,6 +1358,21 @@ async function smartUpsertScores(
       const rankImproved = bestRank !== existing.rank;
       
       if (scoreImproved || haloImproved || flareImproved || rankImproved) {
+        // Track the change for the summary
+        const change: ScoreChange = {
+          song_name: existing.song_name ?? score.difficulty_name ?? 'Unknown',
+          difficulty_name: existing.difficulty_name ?? score.difficulty_name ?? 'EXPERT',
+          difficulty_level: existing.difficulty_level ?? score.difficulty_level ?? 0,
+          old_score: existing.score,
+          new_score: bestScore,
+          old_flare: existing.flare,
+          new_flare: flareImproved ? bestFlare : existing.flare,
+          old_rank: existing.rank,
+          new_rank: rankImproved ? bestRank : existing.rank,
+          old_halo: existing.halo,
+          new_halo: haloImproved ? bestHalo : existing.halo,
+        };
+        
         toUpdate.push({
           id: existing.id,
           data: {
@@ -1329,7 +1381,8 @@ async function smartUpsertScores(
             flare: bestFlare,
             rank: bestRank,
             upload_id: uploadId,
-          }
+          },
+          change,
         });
       } else {
         skipped++;
@@ -1365,6 +1418,7 @@ async function smartUpsertScores(
       console.error('Update error:', updateError);
     } else {
       updated++;
+      changes.push(update.change);
     }
   }
   
@@ -1372,7 +1426,7 @@ async function smartUpsertScores(
     console.log(`Updated ${updated} existing scores with improvements`);
   }
   
-  return { inserted, updated, skipped };
+  return { inserted, updated, skipped, changes };
 }
 
 // ============================================================================
@@ -1515,6 +1569,7 @@ async function processUploadInBackground(
           unchanged: upsertResult.skipped,
           source_type: parseResult.sourceType,
           unmatched_songs: parseResult.unmatchedSongs.slice(0, 50),
+          changes: upsertResult.changes.slice(0, 100), // Limit to 100 changes for storage
         },
       })
       .eq('id', uploadId);
