@@ -29,6 +29,8 @@ export function useUserScores(options?: {
 
   return useQuery({
     queryKey: ['user-scores', user?.id, queryKeySuffix, levelRule, difficultyRule],
+    staleTime: 5 * 60 * 1000, // 5 minutes - leverage caching
+    gcTime: 10 * 60 * 1000,
     queryFn: async (): Promise<ScoreWithSong[]> => {
       if (!user?.id) return [];
       

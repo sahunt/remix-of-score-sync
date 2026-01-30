@@ -8,7 +8,7 @@ import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
 import { FiltersSection, type ActiveFilter } from '@/components/scores/FiltersSection';
 import { StatsSummary } from '@/components/scores/StatsSummary';
 import { SearchSortBar } from '@/components/scores/SearchSortBar';
-import { SongCard } from '@/components/scores/SongCard';
+import { VirtualizedSongList } from '@/components/scores/VirtualizedSongList';
 import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
@@ -636,23 +636,10 @@ export default function Scores() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2">
-            {displayedScores.map((s) => (
-              <SongCard
-                key={s.id}
-                name={s.name ?? 'Unknown Song'}
-                difficultyLevel={s.difficulty_level}
-                difficultyName={s.difficulty_name}
-                score={s.score}
-                rank={s.rank}
-                flare={s.flare}
-                halo={s.halo}
-                eamuseId={s.eamuse_id}
-                songId={s.song_id}
-                onClick={() => handleSongClick(s)}
-              />
-            ))}
-          </div>
+          <VirtualizedSongList 
+            songs={displayedScores} 
+            onSongClick={handleSongClick} 
+          />
         )}
       </div>
 

@@ -182,9 +182,11 @@ export function SongCard({
             </div>
           ) : (
             <div className="absolute top-0 left-0 w-[38px] h-[38px] rounded-[3px] border-2 border-[#3B3F51] overflow-hidden">
-              <img
+            <img
                 src={currentImgUrl!}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
                 onError={handleImageError}
               />
