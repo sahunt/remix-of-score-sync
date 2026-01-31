@@ -60,11 +60,17 @@ function parseCSV(content: string): EraRow[] {
       era = parts[parts.length - 1].trim();
     }
 
-    // Validate eamuse_id is 32 characters
-    if (!eamuse_id || eamuse_id.length !== 32) {
-      console.warn(`Invalid eamuse_id on line ${i + 1}: ${eamuse_id} (length: ${eamuse_id.length})`);
+    // Strip -d7 suffix if present, then validate eamuse_id is 32 characters
+    let cleanId = eamuse_id;
+    if (cleanId.endsWith('-d7')) {
+      cleanId = cleanId.slice(0, -3);
+    }
+    
+    if (!cleanId || cleanId.length !== 32) {
+      console.warn(`Invalid eamuse_id on line ${i + 1}: ${cleanId} (length: ${cleanId.length})`);
       continue;
     }
+    eamuse_id = cleanId;
 
     // Parse era as integer
     const eraNum = parseInt(era, 10);
