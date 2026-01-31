@@ -176,6 +176,7 @@ export type Database = {
           goal_mode: string
           id: string
           name: string
+          score_floor: number | null
           score_mode: string
           target_type: string
           target_value: string
@@ -190,6 +191,7 @@ export type Database = {
           goal_mode?: string
           id?: string
           name: string
+          score_floor?: number | null
           score_mode?: string
           target_type: string
           target_value: string
@@ -204,6 +206,7 @@ export type Database = {
           goal_mode?: string
           id?: string
           name?: string
+          score_floor?: number | null
           score_mode?: string
           target_type?: string
           target_value?: string

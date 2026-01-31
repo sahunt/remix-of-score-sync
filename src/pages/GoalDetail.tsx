@@ -180,6 +180,7 @@ export default function GoalDetail() {
               ? progress.total 
               : (musicDbTotal > 0 ? musicDbTotal : progress.total)}
             scoreMode={goal.score_mode as 'target' | 'average' | undefined}
+            scoreFloor={goal.score_floor}
           />
         </div>
 

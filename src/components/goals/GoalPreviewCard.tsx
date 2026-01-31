@@ -9,6 +9,8 @@ interface GoalPreviewCardProps {
   goalCount?: number;
   matchingTotal?: number;
   currentProgress?: number;
+  scoreMode?: 'target' | 'average';
+  scoreFloor?: number | null;
 }
 
 // Get progress bar color based on target
@@ -35,13 +37,28 @@ export function GoalPreviewCard({
   goalCount = 10,
   matchingTotal = 0,
   currentProgress = 0,
+  scoreMode,
+  scoreFloor,
 }: GoalPreviewCardProps) {
   const progressBarClass = getProgressBarClass(targetType, targetValue);
+  const isAverageMode = targetType === 'score' && scoreMode === 'average';
   
   // Calculate display values
-  const total = goalMode === 'all' ? matchingTotal : goalCount;
-  const current = Math.min(currentProgress, total);
-  const progressPercent = total > 0 ? (current / total) * 100 : 0;
+  // For average mode: current = current avg, total = target avg
+  const total = isAverageMode 
+    ? (targetValue ? parseInt(targetValue, 10) : 0)
+    : (goalMode === 'all' ? matchingTotal : goalCount);
+  const current = isAverageMode ? currentProgress : Math.min(currentProgress, total);
+  
+  // Calculate progress percent - for average mode with floor, use adjusted range
+  let progressPercent = 0;
+  if (isAverageMode && scoreFloor && scoreFloor > 0) {
+    const adjustedCurrent = Math.max(current - scoreFloor, 0);
+    const adjustedTotal = Math.max(total - scoreFloor, 1);
+    progressPercent = Math.min((adjustedCurrent / adjustedTotal) * 100, 100);
+  } else {
+    progressPercent = total > 0 ? (current / total) * 100 : 0;
+  }
 
   // Generate preview name if not set
   const displayName = name || (targetValue ? `${targetValue.toUpperCase()} goal` : 'Set your goal...');
@@ -58,7 +75,7 @@ export function GoalPreviewCard({
       
       {/* Badge - use GoalBadge for all types when we have valid data */}
       {targetType && targetValue ? (
-        <GoalBadge targetType={targetType} targetValue={targetValue} />
+        <GoalBadge targetType={targetType} targetValue={targetValue} scoreMode={scoreMode} />
       ) : (
         <div className="inline-flex items-center px-2 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
           Select target...
@@ -75,7 +92,12 @@ export function GoalPreviewCard({
       
       {/* Progress text */}
       <p className="text-xs text-muted-foreground uppercase tracking-wide">
-        {isIncomplete ? '-- / --' : `${current}/${total}`} completed
+        {isIncomplete 
+          ? '-- / --' 
+          : isAverageMode 
+            ? `Avg. ${current.toLocaleString()} / ${total.toLocaleString()}`
+            : `${current}/${total} completed`
+        }
       </p>
       
       {/* Progress bar */}

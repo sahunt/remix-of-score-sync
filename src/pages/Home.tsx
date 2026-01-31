@@ -64,6 +64,7 @@ function GoalCardWithProgress({
       current={progress.current}
       total={total}
       scoreMode={goal.score_mode}
+      scoreFloor={goal.score_floor}
     />
   );
 }

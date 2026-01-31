@@ -201,6 +201,16 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const currentProgress = useMemo(() => {
     if (!targetType || !targetValue) return 0;
     
+    // For average mode, return the current average score
+    if (targetType === 'score' && scoreMode === 'average') {
+      const playedScores = filteredScores
+        .filter(s => s.score !== null)
+        .map(s => s.score!);
+      if (playedScores.length === 0) return 0;
+      const sum = playedScores.reduce((acc, s) => acc + s, 0);
+      return Math.round(sum / playedScores.length / 10) * 10; // Round to nearest 10
+    }
+    
     return filteredScores.filter(score => {
       switch (targetType) {
         case 'lamp': {
@@ -227,7 +237,19 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
           return false;
       }
     }).length;
-  }, [filteredScores, targetType, targetValue]);
+  }, [filteredScores, targetType, targetValue, scoreMode]);
+
+  // Calculate score floor for average mode (lowest score among matching played songs)
+  const calculatedScoreFloor = useMemo(() => {
+    if (targetType !== 'score' || scoreMode !== 'average') return null;
+    
+    const playedScores = filteredScores
+      .filter(s => s.score !== null)
+      .map(s => s.score!);
+    
+    if (playedScores.length === 0) return null;
+    return Math.min(...playedScores);
+  }, [filteredScores, targetType, scoreMode]);
 
   // Generate auto-name based on selections
   const generateName = () => {
@@ -314,6 +336,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
         goal_mode: goalMode,
         goal_count: goalMode === 'count' ? goalCount : null,
         score_mode: targetType === 'score' ? scoreMode : 'target',
+        score_floor: calculatedScoreFloor,
       });
 
       toast({
@@ -423,6 +446,8 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
             goalCount={goalCount}
             matchingTotal={musicDbTotal}
             currentProgress={currentProgress}
+            scoreMode={targetType === 'score' ? scoreMode : undefined}
+            scoreFloor={calculatedScoreFloor}
           />
 
           {/* Goal name input - matching filter name input style */}

@@ -8,6 +8,7 @@ interface GoalBadgeProps {
   targetType: GoalTargetType;
   targetValue: string;
   className?: string;
+  scoreMode?: 'target' | 'average';
 }
 
 // Convert numeric flare value to FlareType
@@ -30,7 +31,7 @@ function getFlareType(value: string): FlareType {
   return flareMap[numValue] || 'i';
 }
 
-export function GoalBadge({ targetType, targetValue, className }: GoalBadgeProps) {
+export function GoalBadge({ targetType, targetValue, className, scoreMode }: GoalBadgeProps) {
   // Display FlareChip for flare goals
   if (targetType === 'flare') {
     return (
@@ -65,12 +66,14 @@ export function GoalBadge({ targetType, targetValue, className }: GoalBadgeProps
   }
 
   if (targetType === 'score') {
+    const formattedScore = parseInt(targetValue, 10).toLocaleString();
+    const suffix = scoreMode === 'average' ? ' avg.' : '+';
     return (
       <div className={cn(
         "inline-flex items-center px-2 py-1 rounded-md bg-accent/20 text-accent-foreground font-bold text-sm",
         className
       )}>
-        {parseInt(targetValue, 10).toLocaleString()}+
+        {formattedScore}{suffix}
       </div>
     );
   }
