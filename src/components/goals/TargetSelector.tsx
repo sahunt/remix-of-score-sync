@@ -4,11 +4,14 @@ import { Slider } from '@/components/ui/slider';
 import { FlareChip } from '@/components/ui/FlareChip';
 import { FLARE_OPTIONS } from '@/components/filters/filterTypes';
 import { use12MSMode } from '@/hooks/use12MSMode';
+import { ScoreModeToggle } from './ScoreModeToggle';
 
 interface TargetSelectorProps {
   targetType: 'lamp' | 'grade' | 'flare' | 'score' | null;
   targetValue: string | null;
   onTargetChange: (type: 'lamp' | 'grade' | 'flare' | 'score', value: string) => void;
+  scoreMode?: 'target' | 'average';
+  onScoreModeChange?: (mode: 'target' | 'average') => void;
 }
 
 // Lamp options with colored dots matching DDR halo system
@@ -46,7 +49,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: 'score', label: 'Score' },
 ];
 
-export function TargetSelector({ targetType, targetValue, onTargetChange }: TargetSelectorProps) {
+export function TargetSelector({ targetType, targetValue, onTargetChange, scoreMode = 'target', onScoreModeChange }: TargetSelectorProps) {
   const { transformHaloLabel } = use12MSMode();
   // Default to 'lamp' so the options panel is visible by default
   const [selectedCategory, setSelectedCategory] = useState<Category>(targetType ?? 'lamp');
@@ -188,9 +191,17 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
             </div>
           )}
 
-          {/* Score Options - Slider UI */}
+          {/* Score Options - Slider UI with Mode Toggle */}
           {selectedCategory === 'score' && (
             <div className="space-y-4">
+              {/* Score Mode Toggle */}
+              {onScoreModeChange && (
+                <ScoreModeToggle
+                  value={scoreMode}
+                  onChange={onScoreModeChange}
+                />
+              )}
+              
               <input
                 type="text"
                 inputMode="numeric"
@@ -209,6 +220,14 @@ export function TargetSelector({ targetType, targetValue, onTargetChange }: Targ
                 step={STEP}
                 className="w-full"
               />
+              
+              {/* Mode description */}
+              <p className="text-xs text-muted-foreground">
+                {scoreMode === 'target' 
+                  ? 'Each song must reach this score or higher'
+                  : 'Track the average score across all matching songs'
+                }
+              </p>
             </div>
           )}
         </div>
