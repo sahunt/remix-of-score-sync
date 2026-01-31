@@ -86,57 +86,74 @@ Deno.serve(async (req) => {
       errors: [],
     };
 
-    // Process in batches of 100
-    const BATCH_SIZE = 100;
-    const batches: RatingRow[][] = [];
-    for (let i = 0; i < ratings.length; i += BATCH_SIZE) {
-      batches.push(ratings.slice(i, i + BATCH_SIZE));
+    // First, get all existing SP charts with their eamuse_id + difficulty_name
+    console.log("Fetching existing SP charts...");
+    const { data: existingCharts, error: fetchError } = await supabase
+      .from("musicdb")
+      .select("id, eamuse_id, difficulty_name")
+      .eq("playstyle", "SP")
+      .not("eamuse_id", "is", null);
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch charts: ${fetchError.message}`);
     }
 
-    console.log(`Processing ${batches.length} batches of up to ${BATCH_SIZE} ratings each`);
+    console.log(`Found ${existingCharts?.length || 0} SP charts with eamuse_id`);
+
+    // Build a lookup map: "eamuse_id|difficulty_name" -> chart id
+    const chartMap = new Map<string, number>();
+    for (const chart of existingCharts || []) {
+      if (chart.eamuse_id && chart.difficulty_name) {
+        const key = `${chart.eamuse_id}|${chart.difficulty_name}`;
+        chartMap.set(key, chart.id);
+      }
+    }
+
+    console.log(`Built lookup map with ${chartMap.size} entries`);
+
+    // Match ratings to chart IDs
+    const updates: { id: number; rating: number }[] = [];
+    for (const rating of ratings) {
+      const key = `${rating.eamuse_id}|${rating.difficulty}`;
+      const chartId = chartMap.get(key);
+      
+      if (chartId) {
+        updates.push({ id: chartId, rating: rating.rating });
+      } else {
+        result.not_found.push(`${rating.eamuse_id}/${rating.difficulty}`);
+      }
+    }
+
+    console.log(`Matched ${updates.length} ratings to charts`);
+
+    // Process updates in larger batches using upsert
+    const BATCH_SIZE = 500;
+    const batches: { id: number; rating: number }[][] = [];
+    for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+      batches.push(updates.slice(i, i + BATCH_SIZE));
+    }
+
+    console.log(`Processing ${batches.length} batches of up to ${BATCH_SIZE} updates each`);
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex];
-      console.log(`Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} ratings)`);
+      console.log(`Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} updates)`);
 
-      // Process each rating in the batch
-      for (const rating of batch) {
-        try {
-          // Update the matching row in musicdb
-          const { data, error } = await supabase
-            .from("musicdb")
-            .update({ sanbai_rating: rating.rating })
-            .eq("eamuse_id", rating.eamuse_id)
-            .eq("difficulty_name", rating.difficulty)
-            .eq("playstyle", "SP")
-            .select("id");
+      // Update each record in the batch
+      for (const update of batch) {
+        const { error } = await supabase
+          .from("musicdb")
+          .update({ sanbai_rating: update.rating })
+          .eq("id", update.id);
 
-          if (error) {
-            result.errors.push(
-              `Error updating ${rating.eamuse_id}/${rating.difficulty}: ${error.message}`
-            );
-            continue;
-          }
-
-          if (!data || data.length === 0) {
-            result.not_found.push(`${rating.eamuse_id}/${rating.difficulty}`);
-          } else {
-            result.charts_updated += data.length;
-          }
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          result.errors.push(
-            `Exception for ${rating.eamuse_id}/${rating.difficulty}: ${errorMessage}`
-          );
+        if (error) {
+          result.errors.push(`Error updating id ${update.id}: ${error.message}`);
+        } else {
+          result.charts_updated++;
         }
       }
 
-      // Log progress every 10 batches
-      if ((batchIndex + 1) % 10 === 0) {
-        console.log(
-          `Progress: ${batchIndex + 1}/${batches.length} batches, ${result.charts_updated} updated, ${result.not_found.length} not found`
-        );
-      }
+      console.log(`Batch ${batchIndex + 1} complete, total updated: ${result.charts_updated}`);
     }
 
     console.log(`Import complete:
