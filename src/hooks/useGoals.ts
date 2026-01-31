@@ -14,6 +14,7 @@ interface GoalRow {
   goal_mode: string;
   goal_count: number | null;
   score_mode: string;
+  score_floor: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +30,7 @@ function mapRowToGoal(row: GoalRow): Goal {
     goal_mode: row.goal_mode as Goal['goal_mode'],
     goal_count: row.goal_count,
     score_mode: (row.score_mode as Goal['score_mode']) ?? 'target',
+    score_floor: row.score_floor,
   };
 }
 
@@ -69,6 +71,7 @@ export function useGoals() {
           goal_mode: goal.goal_mode,
           goal_count: goal.goal_count,
           score_mode: goal.score_mode ?? 'target',
+          score_floor: goal.score_floor ?? null,
         })
         .select()
         .single();

@@ -12,6 +12,7 @@ interface GoalCardProps {
   clickable?: boolean;
   className?: string;
   scoreMode?: 'target' | 'average';
+  scoreFloor?: number | null;
 }
 
 // Get progress bar color based on target type and value
@@ -57,12 +58,21 @@ export function GoalCard({
   clickable = true,
   className,
   scoreMode,
+  scoreFloor,
 }: GoalCardProps) {
   const navigate = useNavigate();
   const isAverageMode = targetType === 'score' && scoreMode === 'average';
   
-  // For average mode, progress is based on current avg vs target avg
-  const progressPercent = total > 0 ? Math.min((current / total) * 100, 100) : 0;
+  // For average mode with a floor, calculate progress using the floor as the base
+  // This makes progress visualization more meaningful (e.g., 950k-990k range instead of 0-990k)
+  let progressPercent = 0;
+  if (isAverageMode && scoreFloor && scoreFloor > 0) {
+    const adjustedCurrent = Math.max(current - scoreFloor, 0);
+    const adjustedTotal = Math.max(total - scoreFloor, 1);
+    progressPercent = Math.min((adjustedCurrent / adjustedTotal) * 100, 100);
+  } else {
+    progressPercent = total > 0 ? Math.min((current / total) * 100, 100) : 0;
+  }
   const progressColor = getProgressColor(targetType, targetValue);
 
   const handleClick = () => {
@@ -88,7 +98,7 @@ export function GoalCard({
       }}
     >
       {/* Badge - shows appropriate chip based on target type */}
-      <GoalBadge targetType={targetType} targetValue={targetValue} />
+      <GoalBadge targetType={targetType} targetValue={targetValue} scoreMode={scoreMode} />
       
       {/* Title */}
       <h3 className="font-semibold text-foreground text-lg">{title}</h3>
