@@ -1,112 +1,95 @@
 
-# Import Romanized Titles to musicdb
+
+# Add name_romanized and artist to Song Search
 
 ## Overview
 
-Populate the `name_romanized` field in musicdb using the CSV that maps `eamuse_id` to `romanized_title`. The CSV contains ~1,390 entries, each updating ALL chart rows in musicdb that share the same `eamuse_id` (multiple difficulties per song = ~7-8 rows per song on average).
+Extend the search functionality on the Scores page to also match against `name_romanized` from musicdb, in addition to the existing `name` and `artist` fields. This allows users to find songs by typing romanized versions of Japanese titles (e.g., typing "identity" to find a song where only the romanized title contains that text).
 
-## Key Insight
+## Current Behavior
 
-Unlike chart-level updates, this is a **song-level field** - one `eamuse_id` in the CSV should update ALL musicdb rows with that `eamuse_id`. This means ~1,390 CSV rows will update ~10,600+ database rows.
+The search filter at lines 429-435 in `Scores.tsx` currently matches:
+- `name` - the primary song title
+- `artist` - the song artist
 
-## Strategy: Database RPC Function
+## Changes Required
 
-Individual UPDATE calls would hit rate limits and timeout. Instead, create a PostgreSQL function that processes the entire update in a **single transaction**:
+### 1. Update Database Queries to Include name_romanized
 
-```text
-CSV (1,390 rows)
-    ↓
-Edge Function (parses CSV, sends JSONB array)
-    ↓
-RPC Function (bulk_update_romanized_titles)
-    ↓
-Single UPDATE statement with FROM clause
-    ↓
-All ~10,600 rows updated in one go
+**User Scores Query (lines 252-257)**
+Add `name_romanized` to the musicdb join:
 ```
-
----
-
-## Database Changes
-
-### New RPC Function: `bulk_update_romanized_titles`
-
-```sql
-CREATE OR REPLACE FUNCTION bulk_update_romanized_titles(
-  updates JSONB
+musicdb (
+  name,
+  artist,
+  eamuse_id,
+  song_id,
+  name_romanized  <-- ADD
 )
-RETURNS TABLE(updated_count INTEGER) 
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = 'public'
-AS $$
-BEGIN
-  UPDATE musicdb m
-  SET name_romanized = (u->>'romanized_title')
-  FROM jsonb_array_elements(updates) AS u
-  WHERE m.eamuse_id = (u->>'eamuse_id');
-  
-  GET DIAGNOSTICS updated_count = ROW_COUNT;
-  RETURN QUERY SELECT updated_count;
-END;
-$$;
 ```
 
-**Why this works:**
-- Processes all updates in a single transaction
-- No rate limit issues (one database call)
-- No timeout issues (PostgreSQL handles the batch efficiently)
-- Matches the proven pattern from the Sanbai ratings bulk import
+**MusicDb Charts Query (line 325)**
+Add `name_romanized` to the select:
+```
+'id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle, name_romanized'
+```
 
----
+### 2. Update Type Interfaces
 
-## Implementation Components
+| Interface | File | Change |
+|-----------|------|--------|
+| `ScoreWithSong` (local) | Scores.tsx:18-34 | Add `name_romanized: string \| null` to musicdb object |
+| `MusicDbChart` | Scores.tsx:36-45 | Add `name_romanized: string \| null` |
+| `DisplaySong` | Scores.tsx:47-60 | Add `name_romanized: string \| null` |
 
-### 1. Edge Function: `import-romanized-titles`
+### 3. Update Mapping Logic
 
-Receives CSV content, parses it, and calls the RPC function:
+**Played songs mapping (lines 346-359)**
+Add: `name_romanized: s.musicdb?.name_romanized ?? null`
 
-| Step | Action |
-|------|--------|
-| 1 | Parse CSV into array of `{eamuse_id, romanized_title}` |
-| 2 | Validate 32-character eamuse_ids |
-| 3 | Convert to JSONB array |
-| 4 | Call `bulk_update_romanized_titles` RPC |
-| 5 | Return count of updated rows |
+**No-play songs mapping (lines 407-422)**
+Add: `name_romanized: chart.name_romanized`
 
-### 2. Admin Page: `/admin/import-romanized`
+### 4. Update Search Filter (lines 429-435)
 
-Simple UI matching the existing import pages:
-- Fetches CSV from public folder
-- Sends to edge function
-- Displays results (total in CSV, rows updated)
+Current:
+```typescript
+result = result.filter(s => {
+  const name = s.name?.toLowerCase() ?? '';
+  const artist = s.artist?.toLowerCase() ?? '';
+  return name.includes(query) || artist.includes(query);
+});
+```
 
-### 3. Data File
+Updated:
+```typescript
+result = result.filter(s => {
+  const name = s.name?.toLowerCase() ?? '';
+  const artist = s.artist?.toLowerCase() ?? '';
+  const nameRomanized = s.name_romanized?.toLowerCase() ?? '';
+  return name.includes(query) || artist.includes(query) || nameRomanized.includes(query);
+});
+```
 
-Copy CSV to `public/romanized_titles.csv` for access by admin tool.
+## Files to Modify
 
----
+| File | Changes |
+|------|---------|
+| `src/pages/Scores.tsx` | Update interfaces, queries, mappings, and search filter |
 
-## Files to Create/Modify
+## What Stays the Same
 
-| File | Action |
-|------|--------|
-| `public/romanized_titles.csv` | Copy uploaded CSV |
-| Migration SQL | Create `bulk_update_romanized_titles` RPC function |
-| `supabase/functions/import-romanized-titles/index.ts` | New edge function |
-| `src/pages/AdminImportRomanized.tsx` | New admin page |
-| `src/App.tsx` | Add route for admin page |
+- UI components (no visual changes)
+- Filter chips and saved filters behavior
+- Typeahead/live filtering behavior
+- Sort options and direction
+- Card rendering and display
 
----
+## Example Use Case
 
-## Expected Results
+A song with:
+- `name`: "アイデンティティ"
+- `name_romanized`: "Identity"
 
-| Metric | Expected Value |
-|--------|----------------|
-| CSV Rows | ~1,390 |
-| DB Rows Updated | ~10,600+ |
-| Match Rate | ~100% (all eamuse_ids should exist in musicdb) |
+User types "identity" and the song now appears in results.
 
-## Success Criteria
-
-The import MUST complete in a single run without timeouts or partial updates, as the RPC function processes everything in one atomic transaction.
