@@ -328,7 +328,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_stats: {
+        Args: {
+          p_difficulty_level?: number
+          p_playstyle?: string
+          p_user_id: string
+        }
+        Returns: {
+          aaa_count: number
+          avg_score: number
+          clear_count: number
+          fail_count: number
+          fc_count: number
+          gfc_count: number
+          life4_count: number
+          mfc_count: number
+          pfc_count: number
+          total_count: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
