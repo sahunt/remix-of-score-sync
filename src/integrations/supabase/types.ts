@@ -101,6 +101,36 @@ export type Database = {
         }
         Relationships: []
       }
+      song_bias: {
+        Row: {
+          bias_ms: number
+          confidence: number | null
+          created_at: string
+          eamuse_id: string | null
+          id: string
+          song_id: number
+          updated_at: string
+        }
+        Insert: {
+          bias_ms: number
+          confidence?: number | null
+          created_at?: string
+          eamuse_id?: string | null
+          id?: string
+          song_id: number
+          updated_at?: string
+        }
+        Update: {
+          bias_ms?: number
+          confidence?: number | null
+          created_at?: string
+          eamuse_id?: string | null
+          id?: string
+          song_id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       uploads: {
         Row: {
           created_at: string
@@ -224,6 +254,7 @@ export type Database = {
           ddr_username: string | null
           display_name: string | null
           id: string
+          reference_song_id: number | null
           twelve_ms_mode: boolean
           updated_at: string
           user_id: string
@@ -233,6 +264,7 @@ export type Database = {
           ddr_username?: string | null
           display_name?: string | null
           id?: string
+          reference_song_id?: number | null
           twelve_ms_mode?: boolean
           updated_at?: string
           user_id: string
@@ -242,6 +274,7 @@ export type Database = {
           ddr_username?: string | null
           display_name?: string | null
           id?: string
+          reference_song_id?: number | null
           twelve_ms_mode?: boolean
           updated_at?: string
           user_id?: string
@@ -325,6 +358,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_song_offsets: {
+        Row: {
+          created_at: string
+          custom_bias_ms: number
+          id: string
+          song_id: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_bias_ms: number
+          id?: string
+          song_id: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_bias_ms?: number
+          id?: string
+          song_id?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
