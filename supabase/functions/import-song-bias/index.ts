@@ -22,36 +22,20 @@ function parseCSV(content: string): BiasRow[] {
   const lines = content.trim().split("\n");
   const biases: BiasRow[] = [];
 
-  // Skip header row
+  // Skip header row (song_id,bias)
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Handle CSV with potential quoted fields (for song names with commas)
-    const parts: string[] = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (const char of line) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        parts.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    parts.push(current.trim()); // Push last part
-
-    if (parts.length < 3) {
+    const parts = line.split(",");
+    if (parts.length < 2) {
       console.warn(`Skipping malformed line ${i + 1}: ${line}`);
       continue;
     }
 
-    // CSV format: song_id (eamuse_id), name (ignored), bias
+    // CSV format: song_id (eamuse_id), bias
     const eamuse_id = parts[0].trim();
-    const bias_ms = parseFloat(parts[2].trim());
+    const bias_ms = parseFloat(parts[1].trim());
 
     if (!eamuse_id || eamuse_id.length !== 32) {
       console.warn(`Invalid eamuse_id on line ${i + 1}: ${eamuse_id}`);
@@ -59,7 +43,7 @@ function parseCSV(content: string): BiasRow[] {
     }
 
     if (isNaN(bias_ms)) {
-      console.warn(`Invalid bias on line ${i + 1}: ${parts[2]}`);
+      console.warn(`Invalid bias on line ${i + 1}: ${parts[1]}`);
       continue;
     }
 
