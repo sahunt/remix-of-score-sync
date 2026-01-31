@@ -1,170 +1,148 @@
 
-# Fix Song Detail Modal - Show All 5 Difficulties Instantly
 
-## Problem
+# Add Era Column to MusicDB
 
-The modal currently shows only difficulties that have been played (from `globalScores`) plus unplayed difficulties at the currently selected level (from `musicDbCharts`). Missing difficulties at other levels cause flickering when the modal later fetches them.
+## Overview
 
-**Example:**
-- User viewing level 17
-- Clicks a song where they've played EXPERT (17) and CHALLENGE (19)
-- Modal shows: EXPERT ✓, CHALLENGE ✓
-- Missing: BASIC (level 5), DIFFICULT (level 10), BEGINNER (level 3)
-
-## Solution: Pre-Cache All Song Charts
-
-Create a song-to-charts lookup that contains ALL SP difficulties for ALL songs. This data comes from `musicdb` and doesn't change often, so we can fetch it once and cache it.
+Add an `era` column to the `musicdb` table and populate it using the uploaded CSV file containing 1,269 song-to-era mappings. The era values are small integers (0, 1, 2) that classify songs by game era.
 
 ---
 
-## Implementation
+## Data Analysis
 
-### 1. Add a Song Charts Cache Hook
+**CSV Structure:**
+- Header: `song_name,eamuse_id,era`
+- 1,269 data rows
+- Era values: 0, 1, or 2 (SMALLINT is appropriate)
+- `eamuse_id` is the 32-character identifier used to match musicdb rows
 
-Create a new hook that fetches and caches all SP charts grouped by song_id:
+**Database Impact:**
+- Each `eamuse_id` in musicdb appears in multiple rows (one per difficulty chart)
+- ~1,269 unique songs will update ~10,000+ rows total (same as romanized titles pattern)
 
-```typescript
-// src/hooks/useSongChartsCache.ts
-export function useSongChartsCache() {
-  return useQuery({
-    queryKey: ['all-song-charts'],
-    queryFn: async () => {
-      // Fetch ALL SP charts from musicdb (grouped by song)
-      const { data, error } = await supabase
-        .from('musicdb')
-        .select('id, song_id, difficulty_name, difficulty_level')
-        .eq('playstyle', 'SP')
-        .eq('deleted', false)
-        .not('difficulty_level', 'is', null);
-      
-      if (error) throw error;
-      
-      // Build a Map: song_id -> chart[]
-      const chartsBySong = new Map<number, ChartInfo[]>();
-      for (const chart of data ?? []) {
-        if (!chartsBySong.has(chart.song_id)) {
-          chartsBySong.set(chart.song_id, []);
-        }
-        chartsBySong.get(chart.song_id)!.push({
-          id: chart.id,
-          difficulty_name: chart.difficulty_name,
-          difficulty_level: chart.difficulty_level,
-        });
-      }
-      return chartsBySong;
-    },
-    staleTime: 30 * 60 * 1000, // 30 min cache
-    gcTime: 60 * 60 * 1000,    // 1 hour
-  });
-}
-```
+---
 
-### 2. Use the Cache in Scores.tsx
+## Implementation Strategy
 
-```typescript
-// In Scores component
-const { data: songChartsCache } = useSongChartsCache();
+Following the established **bulk update pattern** (used for romanized titles), we will:
 
-// Update prepareChartsForModal to use the complete cache
-const handleSongClick = useCallback((song: DisplaySong) => {
-  if (!song.song_id) return;
-  
-  // Get ALL charts for this song from the cache
-  const allChartsForSong = songChartsCache?.get(song.song_id) ?? [];
-  
-  // Build score lookup from global scores
-  const scoreMap = new Map(
-    globalScores
-      .filter(s => s.musicdb?.song_id === song.song_id)
-      .map(s => [s.difficulty_name?.toUpperCase(), s])
-  );
-  
-  // Merge: all charts + user scores
-  const preloadedCharts = allChartsForSong
-    .map(chart => ({
-      id: chart.id,
-      difficulty_name: chart.difficulty_name?.toUpperCase() ?? 'UNKNOWN',
-      difficulty_level: chart.difficulty_level ?? 0,
-      score: scoreMap.get(chart.difficulty_name?.toUpperCase())?.score ?? null,
-      rank: scoreMap.get(chart.difficulty_name?.toUpperCase())?.rank ?? null,
-      flare: scoreMap.get(chart.difficulty_name?.toUpperCase())?.flare ?? null,
-      halo: scoreMap.get(chart.difficulty_name?.toUpperCase())?.halo ?? null,
-      source_type: null,
-    }))
-    .sort((a, b) => DIFFICULTY_ORDER.indexOf(a.difficulty_name) - DIFFICULTY_ORDER.indexOf(b.difficulty_name));
-  
-  setSelectedSong({
-    songId: song.song_id,
-    songName: song.name ?? 'Unknown Song',
-    artist: song.artist,
-    eamuseId: song.eamuse_id,
-    preloadedCharts, // Now contains ALL 5 difficulties
-  });
-  setIsDetailModalOpen(true);
-}, [globalScores, songChartsCache]);
-```
+1. **Add the column** via migration (nullable SMALLINT)
+2. **Create an RPC function** that updates all rows atomically in a single transaction
+3. **Create an edge function** that parses CSV and calls the RPC
+4. **Create an admin UI page** to trigger the import
 
-### 3. Modal Uses Preloaded Data Only
-
-The modal already has the correct logic to use preloaded data directly:
-
-```typescript
-// Already in SongDetailModal.tsx
-if (hasPreloadedData) {
-  setCharts(preloadedCharts);
-  setLoading(false);
-  return; // DONE - all 5 difficulties already provided
-}
-```
+This approach avoids timeouts and rate-limiting by processing all updates in a single database transaction.
 
 ---
 
 ## Files to Create/Modify
 
-| File | Action | Change |
-|------|--------|--------|
-| `src/hooks/useSongChartsCache.ts` | CREATE | New hook that caches all song charts |
-| `src/pages/Scores.tsx` | MODIFY | Import and use the cache, update `prepareChartsForModal` |
+| File | Action | Description |
+|------|--------|-------------|
+| `supabase/migrations/...` | CREATE | Add `era` column to musicdb |
+| `supabase/migrations/...` | CREATE | Create `bulk_update_era` RPC function |
+| `supabase/functions/import-era/index.ts` | CREATE | Edge function to parse CSV and call RPC |
+| `supabase/config.toml` | MODIFY | Add `import-era` function config |
+| `public/ddr_all_songs_era.csv` | COPY | Copy uploaded CSV to public folder |
+| `src/pages/AdminImportEra.tsx` | CREATE | Admin UI page for triggering import |
+| `src/App.tsx` | MODIFY | Add route for admin import era page |
+| `src/integrations/supabase/types.ts` | AUTO-UPDATE | Types will auto-update after migration |
+
+---
+
+## Technical Details
+
+### 1. Database Migration - Add Era Column
+
+```sql
+ALTER TABLE musicdb ADD COLUMN era SMALLINT;
+```
+
+### 2. Database Migration - Bulk Update RPC Function
+
+```sql
+CREATE OR REPLACE FUNCTION bulk_update_era(updates JSONB)
+RETURNS TABLE(updated_count INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = 'public'
+AS $$
+BEGIN
+  UPDATE musicdb m
+  SET era = (u->>'era')::SMALLINT
+  FROM jsonb_array_elements(updates) AS u
+  WHERE m.eamuse_id = (u->>'eamuse_id');
+  
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN QUERY SELECT updated_count;
+END;
+$$;
+```
+
+This function:
+- Accepts a JSONB array of `{eamuse_id, era}` objects
+- Updates ALL rows matching each eamuse_id in a single atomic transaction
+- Returns the total count of rows updated (should be ~10,000+)
+
+### 3. Edge Function - Parse CSV and Call RPC
+
+The edge function will:
+1. Receive CSV content from the client
+2. Parse each line to extract `eamuse_id` and `era` (ignoring `song_name`)
+3. Handle quoted fields in CSV
+4. Call the `bulk_update_era` RPC with all mappings
+5. Return the update count
+
+Key CSV parsing logic:
+- Skip header row
+- Handle quoted song_name field (the first column has commas inside quotes)
+- Extract the 32-character eamuse_id (second column)
+- Parse era as integer (third column)
+
+### 4. Admin UI Page
+
+A simple page matching the existing admin import pattern:
+- "Start Import" button
+- Progress indicator during import
+- Success/error display with row count
 
 ---
 
 ## Data Flow
 
 ```text
-User clicks song card
+User clicks "Start Import" on /admin/import-era
         ↓
-┌───────────────────────────────────────────────────┐
-│ songChartsCache.get(song_id)                      │
-│   → Returns ALL 5 SP difficulties for this song   │
-└───────────────────────────────────────────────────┘
+Frontend fetches /ddr_all_songs_era.csv from public folder
         ↓
-┌───────────────────────────────────────────────────┐
-│ globalScores.filter(song_id)                      │
-│   → Returns user's scores for played difficulties │
-└───────────────────────────────────────────────────┘
+Frontend sends CSV content to import-era edge function
         ↓
-┌───────────────────────────────────────────────────┐
-│ Merge: All charts + User scores                   │
-│   → 5 rows with score data or null (No play)      │
-└───────────────────────────────────────────────────┘
+Edge function parses 1,269 rows → [{eamuse_id, era}, ...]
         ↓
-Modal opens with complete data (no fetch, no flicker)
+Edge function calls bulk_update_era RPC with all mappings
+        ↓
+RPC updates all matching rows atomically (~10,000 rows)
+        ↓
+Returns updated_count to UI
 ```
+
+---
+
+## Why This Approach Avoids Errors
+
+| Problem | Solution |
+|---------|----------|
+| Cloudflare/Supabase timeout (30-60s) | Single RPC call processes all updates in one transaction |
+| Rate limiting (429 errors) | No batched HTTP requests - just one database call |
+| Partial updates | Atomic transaction - all or nothing |
+| URL length limits | RPC accepts JSONB body, not URL params |
 
 ---
 
 ## Expected Outcome
 
-- **All 5 difficulties visible instantly** - BEGINNER through CHALLENGE
-- **No loading spinner** - data is already available from cache
-- **No flicker** - no background fetches that trigger re-renders
-- **Played difficulties show scores** - from global scores cache
-- **Unplayed difficulties show "No play"** - from song charts cache
+- `era` column added to musicdb table
+- All ~10,000+ rows updated with era values (0, 1, or 2)
+- Admin UI shows success with exact row count
+- No timeout or rate limit errors
 
----
-
-## Technical Notes
-
-- The `musicdb` table has ~10,000 charts, but the query only fetches 4 small fields (id, song_id, difficulty_name, difficulty_level)
-- With 30-minute cache, this single fetch serves all modal opens without repeated queries
-- The hook is placed at the Scores page level, so it loads when the page loads (not when clicking)
