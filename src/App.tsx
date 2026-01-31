@@ -18,6 +18,7 @@ import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import AdminUpdateMappings from "./pages/AdminUpdateMappings";
 import AdminImportRatings from "./pages/AdminImportRatings";
+import AdminImportBias from "./pages/AdminImportBias";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,6 +59,7 @@ const App = () => (
                 </Route>
                 <Route path="/admin/update-mappings" element={<AdminUpdateMappings />} />
                 <Route path="/admin/import-ratings" element={<AdminImportRatings />} />
+                <Route path="/admin/import-bias" element={<AdminImportBias />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </TwelveMSModeProvider>
