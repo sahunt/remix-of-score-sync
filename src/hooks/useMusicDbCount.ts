@@ -74,7 +74,8 @@ export function useMusicDbCount(
       return { total, charts: [] }; // Charts array not needed for counting
     },
     enabled,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes since musicdb rarely changes
+    staleTime: Infinity,              // Never stale - musicdb only changes via admin updates
+    gcTime: 24 * 60 * 60 * 1000,      // Keep for 24 hours
   });
 }
 

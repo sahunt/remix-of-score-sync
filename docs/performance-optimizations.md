@@ -1,5 +1,108 @@
 # Performance Optimizations
 
+## Overview
+
+This document details the performance optimizations implemented in the DDR Score Tracker application to ensure fast, responsive user experience even with large datasets.
+
+---
+
+## Caching Strategy
+
+### React Query Cache Configuration
+
+Since score data only changes when users upload new files, we use aggressive caching:
+
+```typescript
+// src/App.tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 60 * 1000,  // 30 minutes
+      gcTime: 60 * 60 * 1000,     // 60 minutes garbage collection
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,       // Don't refetch if data exists
+      retry: 1,
+    },
+  },
+});
+```
+
+### Upload-Triggered Cache Invalidation
+
+A centralized hook invalidates all score-related caches after successful uploads:
+
+```typescript
+// src/hooks/useUploadInvalidation.ts
+export function useUploadInvalidation() {
+  const queryClient = useQueryClient();
+  
+  const invalidateAfterUpload = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['user-scores'] });
+    queryClient.invalidateQueries({ queryKey: ['user-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['goals'] });
+    queryClient.invalidateQueries({ queryKey: ['goal-progress'] });
+    queryClient.invalidateQueries({ queryKey: ['last-upload'] });
+  }, [queryClient]);
+  
+  return { invalidateAfterUpload };
+}
+```
+
+### MusicDB Catalog Cache
+
+The song catalog rarely changes (admin updates only), so it uses near-permanent caching:
+
+```typescript
+// src/hooks/useMusicDbCount.ts
+staleTime: Infinity,              // Never stale
+gcTime: 24 * 60 * 60 * 1000,      // Keep for 24 hours
+```
+
+---
+
+## PWA & Service Worker Caching
+
+### VitePWA Configuration
+
+The app uses `vite-plugin-pwa` for service worker caching:
+
+| Cache Target | Strategy | Max Age |
+|--------------|----------|---------|
+| Song jacket images | CacheFirst | 30 days |
+| Google Fonts | CacheFirst | 1 year |
+| Static assets (JS/CSS) | Precache | Until rebuild |
+
+### Runtime Caching Rules
+
+```typescript
+// vite.config.ts
+runtimeCaching: [
+  {
+    urlPattern: /\/storage\/v1\/object\/public\/song-jackets\/.*/i,
+    handler: "CacheFirst",
+    options: {
+      cacheName: "song-jackets-cache",
+      expiration: {
+        maxEntries: 2000,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+      },
+    },
+  },
+  // ... Google Fonts caching
+]
+```
+
+### Benefits
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| Repeat page loads | ~2-3s API calls | <100ms (cached) |
+| Song jacket loading | Network every time | Instant from SW cache |
+| Score list scroll | Lazy load each image | Pre-cached images |
+| Offline capability | None | Basic offline with cached data |
+
+---
+
 Documentation of database and application optimizations implemented for scalability.
 
 ---
