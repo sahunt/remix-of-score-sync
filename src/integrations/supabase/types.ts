@@ -25,6 +25,7 @@ export type Database = {
           difficulty_level: number | null
           difficulty_name: string | null
           eamuse_id: string | null
+          era: number | null
           eventno: number | null
           flare: number | null
           halo: string | null
@@ -53,6 +54,7 @@ export type Database = {
           difficulty_level?: number | null
           difficulty_name?: string | null
           eamuse_id?: string | null
+          era?: number | null
           eventno?: number | null
           flare?: number | null
           halo?: string | null
@@ -81,6 +83,7 @@ export type Database = {
           difficulty_level?: number | null
           difficulty_name?: string | null
           eamuse_id?: string | null
+          era?: number | null
           eventno?: number | null
           flare?: number | null
           halo?: string | null
@@ -391,6 +394,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bulk_update_era: {
+        Args: { updates: Json }
+        Returns: {
+          updated_count: number
+        }[]
+      }
       bulk_update_romanized_titles: {
         Args: { updates: Json }
         Returns: {
