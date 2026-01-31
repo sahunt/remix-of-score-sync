@@ -147,17 +147,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build upsert data
-    const upsertData: {
-      song_id: number;
-      eamuse_id: string;
-      bias_ms: number;
-    }[] = [];
+    // Build upsert data, deduping by song_id (keep last occurrence)
+    const upsertMap = new Map<
+      number,
+      { song_id: number; eamuse_id: string; bias_ms: number }
+    >();
 
     for (const bias of biases) {
       const song_id = songIdMap.get(bias.eamuse_id);
       if (song_id) {
-        upsertData.push({
+        // Overwrites duplicates, keeping the last value
+        upsertMap.set(song_id, {
           song_id,
           eamuse_id: bias.eamuse_id,
           bias_ms: bias.bias_ms,
@@ -166,6 +166,8 @@ Deno.serve(async (req) => {
         result.not_found.push(bias.eamuse_id);
       }
     }
+
+    const upsertData = Array.from(upsertMap.values());
 
     console.log(
       `Matched ${upsertData.length} songs, ${result.not_found.length} not found`
