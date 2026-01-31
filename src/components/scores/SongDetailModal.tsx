@@ -107,7 +107,8 @@ export function SongDetailModal({
     setUseFallback(false);
   }, [songId, eamuseId]);
 
-  // Use preloaded data immediately, then MERGE missing unplayed difficulties (no flicker)
+  // Use preloaded data ONLY - no background fetch to prevent flicker
+  // The global scores cache provides all played difficulties instantly
   useEffect(() => {
     if (!isOpen || !songId) {
       setCharts([]);
@@ -115,29 +116,22 @@ export function SongDetailModal({
       return;
     }
 
-    // If we have preloaded data, show it immediately (no loading spinner)
+    // If we have preloaded data, use it directly - NO background fetch
     const hasPreloadedData = preloadedCharts && preloadedCharts.length > 0;
     if (hasPreloadedData) {
       setCharts(preloadedCharts);
       setLoading(false);
+      return; // DONE - no fetch needed
     }
 
-    // Check if preloaded data is complete (has all 5 SP difficulties)
-    const isComplete = hasPreloadedData && preloadedCharts.length >= 5;
-    
-    // Skip fetch if data is complete or no user
-    if (isComplete || !user) {
-      if (!hasPreloadedData) {
-        setCharts([]);
-        setLoading(false);
-      }
+    // Only fetch if we have NO preloaded data (rare edge case)
+    if (!user) {
+      setCharts([]);
+      setLoading(false);
       return;
     }
 
-    // Fetch missing difficulties in background (NO spinner since we have preloaded data)
-    if (!hasPreloadedData) {
-      setLoading(true);
-    }
+    setLoading(true);
 
     const fetchData = async () => {
       try {
@@ -153,7 +147,7 @@ export function SongDetailModal({
 
         if (chartError) throw chartError;
         if (!chartData || chartData.length === 0) {
-          if (!hasPreloadedData) setCharts([]);
+          setCharts([]);
           return;
         }
 
@@ -172,43 +166,31 @@ export function SongDetailModal({
           (scoreData || []).map(s => [s.musicdb_id, s])
         );
 
-        // MERGE: Preserve preloaded data, only add NEW unplayed difficulties
-        // This prevents flicker by keeping existing rows stable
-        const existingDifficulties = new Set(
-          (preloadedCharts ?? []).map(c => c.difficulty_name.toUpperCase())
-        );
-
-        const mergedCharts: ChartWithScore[] = [...(preloadedCharts ?? [])];
-        
-        // Add only charts that aren't already in preloaded data
-        for (const chart of chartData) {
-          const diffName = chart.difficulty_name?.toUpperCase() ?? 'UNKNOWN';
-          if (!existingDifficulties.has(diffName)) {
+        // Build complete chart list
+        const mergedCharts: ChartWithScore[] = chartData
+          .map(chart => {
             const userScore = scoreMap.get(chart.id);
-            mergedCharts.push({
+            return {
               id: chart.id,
-              difficulty_name: diffName,
+              difficulty_name: chart.difficulty_name ?? 'UNKNOWN',
               difficulty_level: chart.difficulty_level ?? 0,
               score: userScore?.score ?? null,
               rank: userScore?.rank ?? null,
               flare: userScore?.flare ?? null,
               halo: userScore?.halo ?? null,
               source_type: userScore?.source_type ?? null,
-            });
-          }
-        }
-        
-        // Sort by difficulty order (Challenge first, Beginner last)
-        mergedCharts.sort((a, b) => {
-          const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());
-          const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name.toUpperCase());
-          return aIndex - bIndex;
-        });
+            };
+          })
+          .sort((a, b) => {
+            const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());
+            const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name.toUpperCase());
+            return aIndex - bIndex;
+          });
 
         setCharts(mergedCharts);
       } catch (err) {
         console.error('Error fetching song details:', err);
-        if (!hasPreloadedData) setCharts([]);
+        setCharts([]);
       } finally {
         setLoading(false);
       }
