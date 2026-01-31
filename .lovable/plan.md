@@ -1,143 +1,201 @@
 
-# Add Sanbai Rating Column to MusicDB
 
-## Summary
-Add a new `sanbai_rating` column to the `musicdb` table and create an edge function to import difficulty ratings from a CSV file containing 5,671 chart ratings. Ratings are mapped using `eamuse_id` + `difficulty_name` for SP charts only.
+# Offset/Bias Feature - Database Schema
 
----
+## Feature Overview
 
-## Data Analysis
+This feature allows users to adjust timing offsets for DDR songs based on audio sync data:
 
-| Item | Value |
-|------|-------|
-| CSV rows | 5,671 data rows |
-| SP charts in musicdb | 5,834 total |
-| SP charts with eamuse_id | 5,812 |
-| Expected match rate | ~97% |
+1. Store a **master bias value per SONG** (from your static list)
+2. Allow users to **override bias per SONG** (optional, personal preference)
+3. Allow users to set a **reference song** in their profile to adjust all calculated offsets
 
-### CSV Format
-```
-eamuse_id,difficulty,rating
-Q8bIDb60oPo890oi0l0O9PQd9lOb8o1Q.jpg,Difficult,14.40
-```
+## How the Math Works
 
-### Mapping Logic
-- Strip `.jpg` from eamuse_id
-- Convert difficulty to UPPERCASE (Difficult → DIFFICULT)
-- Match: `eamuse_id` + `difficulty_name` + `playstyle = 'SP'`
-- Update `sanbai_rating` on matched row
-
----
-
-## Phase 1: Database Migration
-
-### Add Column
-```sql
-ALTER TABLE public.musicdb 
-ADD COLUMN sanbai_rating DECIMAL(5,2);
-
-COMMENT ON COLUMN public.musicdb.sanbai_rating IS 
-  'Difficulty rating from Sanbai website, ranges from 1.00 to 19.70';
-```
-
----
-
-## Phase 2: Edge Function
-
-### Create `import-sanbai-ratings` Function
-
-Process ALL 5,671 rows with batch updates to ensure no skipping:
+Based on the finaloffset.telp.gg website:
 
 ```text
-┌──────────────────────────────────────────────────┐
-│           import-sanbai-ratings                   │
-├──────────────────────────────────────────────────┤
-│  1. Parse CSV (all 5671 lines)                   │
-│  2. Strip .jpg from eamuse_id                    │
-│  3. Normalize difficulty → UPPERCASE              │
-│  4. Batch lookup existing charts (SP only)       │
-│  5. Update sanbai_rating for matched rows        │
-│  6. Report matched/unmatched counts              │
-└──────────────────────────────────────────────────┘
-```
+Final Offset = Target Song Bias - Reference Song Bias
 
-### Key Implementation Details
-
-1. **No Skipping**: Process every line, report unmatched
-2. **Batch Processing**: 100 rows per batch to stay within limits
-3. **Accurate Matching**: Use composite key (eamuse_id, difficulty_name, playstyle)
-4. **Detailed Reporting**: Track updated, not found, and errors
-
-### Edge Function Structure
-```typescript
-// Parse all CSV lines
-const ratings = parseCSV(content);
-console.log(`Parsed ${ratings.length} ratings from CSV`);
-
-// Process in batches of 100
-for (const batch of batches) {
-  // For each rating in batch:
-  // - Strip .jpg from eamuse_id
-  // - Convert difficulty to uppercase
-  // - Update musicdb WHERE eamuse_id AND difficulty_name AND playstyle = 'SP'
-  
-  // Track: updated, not_found, errors
-}
-
-return {
-  total_in_csv: ratings.length,
-  charts_updated: count,
-  not_found: [...],
-  errors: [...]
-};
+Example:
+- Reference song "3y3s" has bias: -0.9ms
+- Target song "NGO" has bias: +12.4ms
+- Final offset: 12.4 - (-0.9) = 13.3ms early
 ```
 
 ---
 
-## Phase 3: Admin Page
+## Database Changes
 
-### Create Import Page at `/admin/import-ratings`
+### 1. New Table: `song_bias` (Master Bias Values)
 
-Simple interface to:
-1. Copy CSV to public folder
-2. Trigger edge function
-3. Display results (updated count, unmatched list)
+Stores the static bias values per song from your imported list.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `song_id` | bigint | Unique song identifier |
+| `eamuse_id` | text | E-Amusement ID for external matching |
+| `bias_ms` | numeric(6,2) | Bias value in milliseconds |
+| `confidence` | smallint | Optional: confidence percentage (0-100) |
+| `created_at` | timestamptz | Record creation time |
+| `updated_at` | timestamptz | Last update time |
+
+### 2. New Table: `user_song_offsets` (User Overrides)
+
+Stores user-specific offset overrides per song.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | User identifier |
+| `song_id` | bigint | The song being overridden |
+| `custom_bias_ms` | numeric(6,2) | User's custom bias value in ms |
+| `created_at` | timestamptz | Record creation time |
+| `updated_at` | timestamptz | Last update time |
+
+### 3. Modify Table: `user_profiles`
+
+| New Column | Type | Description |
+|------------|------|-------------|
+| `reference_song_id` | bigint | The song the user considers "on sync" (nullable) |
 
 ---
 
-## Files to Create/Modify
+## Schema Diagram
 
-| File | Action |
-|------|--------|
-| Database | Add `sanbai_rating` column |
-| `supabase/functions/import-sanbai-ratings/index.ts` | New edge function |
-| `supabase/config.toml` | Add function config |
-| `src/pages/AdminImportRatings.tsx` | New admin page |
-| `src/App.tsx` | Add route |
-| `public/sanbai_difficulty_ratings.csv` | Copy CSV file |
+```text
+┌─────────────────────────────────┐
+│          musicdb                │
+│  (existing - chart-level)       │
+├─────────────────────────────────┤
+│  id (PK)                        │
+│  song_id ─────────────┐         │
+│  eamuse_id            │         │
+│  name                 │         │
+│  ...                  │         │
+└───────────────────────│─────────┘
+                        │
+    ┌───────────────────┼───────────────────┐
+    │                   │                   │
+    ▼                   ▼                   ▼
+┌───────────────┐  ┌───────────────┐  ┌─────────────────────┐
+│  song_bias    │  │ user_profiles │  │ user_song_offsets   │
+│  (NEW)        │  │ (MODIFIED)    │  │ (NEW)               │
+├───────────────┤  ├───────────────┤  ├─────────────────────┤
+│ song_id (UK)  │  │ user_id       │  │ user_id             │
+│ eamuse_id     │  │ display_name  │  │ song_id             │
+│ bias_ms       │  │ reference_    │  │ custom_bias_ms      │
+│ confidence    │  │   song_id     │  │                     │
+└───────────────┘  └───────────────┘  └─────────────────────┘
+```
 
 ---
 
-## Validation
+## SQL Migration
 
-After import, verify:
 ```sql
--- Should show ~5,600+ rows with ratings
-SELECT COUNT(*) FROM musicdb 
-WHERE sanbai_rating IS NOT NULL AND playstyle = 'SP';
+-- 1. Create song_bias table for master bias values
+CREATE TABLE public.song_bias (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  song_id BIGINT NOT NULL UNIQUE,
+  eamuse_id TEXT,
+  bias_ms NUMERIC(6,2) NOT NULL,
+  confidence SMALLINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- Check distribution
-SELECT difficulty_name, COUNT(*), AVG(sanbai_rating) 
-FROM musicdb 
-WHERE sanbai_rating IS NOT NULL AND playstyle = 'SP'
-GROUP BY difficulty_name;
+-- Create index on eamuse_id for faster lookups during import
+CREATE INDEX idx_song_bias_eamuse_id ON public.song_bias(eamuse_id);
+
+-- Enable RLS but allow all authenticated users to read
+ALTER TABLE public.song_bias ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can read song_bias"
+  ON public.song_bias
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- 2. Create user_song_offsets table for user overrides
+CREATE TABLE public.user_song_offsets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  song_id BIGINT NOT NULL,
+  custom_bias_ms NUMERIC(6,2) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, song_id)
+);
+
+-- Enable RLS
+ALTER TABLE public.user_song_offsets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own offsets"
+  ON public.user_song_offsets
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own offsets"
+  ON public.user_song_offsets
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own offsets"
+  ON public.user_song_offsets
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own offsets"
+  ON public.user_song_offsets
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- 3. Add reference_song_id to user_profiles
+ALTER TABLE public.user_profiles
+  ADD COLUMN reference_song_id BIGINT;
+
+-- 4. Create triggers for updated_at on new tables
+CREATE TRIGGER update_song_bias_updated_at
+  BEFORE UPDATE ON public.song_bias
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_song_offsets_updated_at
+  BEFORE UPDATE ON public.user_song_offsets
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 ```
 
 ---
 
-## Technical Notes
+## Data Import Strategy
 
-1. **Column Type**: `DECIMAL(5,2)` supports values from 0.00 to 999.99 (ratings are 1.00-19.70)
-2. **No New Rows**: Only UPDATE existing charts, never INSERT
-3. **SP Only**: Explicitly filter `playstyle = 'SP'` in all updates
-4. **Complete Processing**: All 5,671 CSV rows processed and reported
+For the master `song_bias` table, you'll provide a CSV with:
+- `eamuse_id` (for matching to musicdb)
+- `bias_ms` value
+- Optional: `confidence` percentage
+
+An edge function will:
+1. Parse the CSV
+2. Look up `song_id` from musicdb using `eamuse_id`
+3. UPSERT into `song_bias` table with both `song_id` and `eamuse_id`
+
+---
+
+## Summary of Changes
+
+| Change Type | Object | Description |
+|-------------|--------|-------------|
+| CREATE | `song_bias` table | Master bias values per song (includes eamuse_id) |
+| CREATE | `user_song_offsets` table | User override biases per song |
+| ALTER | `user_profiles` table | Add `reference_song_id` column |
+| CREATE | 1 index | Index on `song_bias.eamuse_id` for fast imports |
+| CREATE | 2 triggers | Auto-update `updated_at` timestamps |
+| CREATE | 5 RLS policies | Secure access to new tables |
+
