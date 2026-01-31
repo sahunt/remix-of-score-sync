@@ -1,119 +1,165 @@
 
-# Fix Goal Detail Tabs and Sorting
+# Add Score Mode Toggle (Target vs Average) to Goals
 
 ## Summary
-Fix the Goal Detail page to always show "Remaining" as the first tab (not "Suggestions"), and sort songs by their actual value from highest to lowest based on the goal's target type.
+Add a toggle to the score section of the goal creation/edit UI that switches between two modes:
+- **Target**: Works as today - songs must reach that score or higher
+- **Average**: Goal tracks average score across all matching songs
+
+The toggle will use the same visual style and animation as the existing `MatchModeToggle` component.
 
 ---
 
-## Changes
+## Database Changes
 
-### 1. Unify Tab Labels (`src/components/goals/GoalSongTabs.tsx`)
+Add a new column `score_mode` to the `user_goals` table to store whether a score goal uses "target" or "average" mode.
 
-**Current behavior:** Tab label changes based on goal mode ("Suggestions" for count mode, "Remaining" for all mode)
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `score_mode` | text | `'target'` | Either `'target'` or `'average'` |
 
-**New behavior:** Always show "Remaining" tab label
-
-```diff
-- const isCountMode = goal.goal_mode === 'count';
-- const firstTabLabel = isCountMode ? 'Suggestions' : 'Remaining';
-- const firstTabCount = isCountMode ? suggestedSongs.length : remainingSongs.length;
-+ const firstTabLabel = 'Remaining';
-+ const firstTabCount = remainingSongs.length;
+SQL Migration:
+```sql
+ALTER TABLE public.user_goals 
+ADD COLUMN score_mode text NOT NULL DEFAULT 'target';
 ```
-
-Also simplify the tab content to always render `RemainingSongsList`:
-
-```diff
-{activeTab === 'remaining' ? (
--  isCountMode ? (
--    <SuggestionsList ... />
--  ) : (
--    <RemainingSongsList ... />
--  )
-+  <RemainingSongsList 
-+    songs={remainingSongs} 
-+    goal={goal}
-+    isLoading={isLoading} 
-+  />
-) : (
-  <CompletedSongsList ... />
-)}
-```
-
-Remove the unused `SuggestionsList` import.
 
 ---
 
-### 2. Update Sorting Logic (`src/hooks/useGoalProgress.ts`)
+## UI Changes
 
-**Current behavior:** Sorts by "proximity score" (percentage toward goal)
+### 1. Create `ScoreModeToggle` Component
 
-**New behavior:** Sort by actual value, highest to lowest, based on target type:
-- **Score goals:** Sort by `score` descending
-- **Flare goals:** Sort by `flare` descending  
-- **Lamp goals:** Sort by lamp hierarchy (MFC > PFC > GFC > FC > etc.)
-- **Grade goals:** Sort by grade hierarchy (AAA > AA+ > AA > etc.)
+New file: `src/components/goals/ScoreModeToggle.tsx`
 
-Replace the proximity-based sorting with value-based sorting:
+A reusable toggle matching the `MatchModeToggle` styling:
+- Background: `bg-[#262937]` with `rounded-[10px]` and `p-1.5`
+- Sliding indicator: `bg-primary` with smooth 300ms transition
+- Two buttons: "Target" and "Average"
 
+```text
+┌─────────────────────────────────────┐
+│  [ Target ]    [ Average ]          │  ← Sliding indicator behind selected
+└─────────────────────────────────────┘
+```
+
+### 2. Update `TargetSelector` Score Panel
+
+Modify `src/components/goals/TargetSelector.tsx`:
+
+When `selectedCategory === 'score'`, add the `ScoreModeToggle` above the existing score input/slider:
+
+```text
+┌───────────────────────────────────────────┐
+│  [ Target ]         [ Average ]           │  ← New toggle
+├───────────────────────────────────────────┤
+│              950,000                      │  ← Existing input
+│  ━━━━━━━━━━━━━━━━━━━━━●━━━━━━━━━          │  ← Existing slider
+└───────────────────────────────────────────┘
+```
+
+Props change:
+- Add `scoreMode?: 'target' | 'average'` prop
+- Add `onScoreModeChange?: (mode: 'target' | 'average') => void` prop
+
+### 3. Update `CreateGoalSheet`
+
+Modify `src/components/goals/CreateGoalSheet.tsx`:
+
+- Add state: `const [scoreMode, setScoreMode] = useState<'target' | 'average'>('target');`
+- Pass `scoreMode` and `onScoreModeChange` to `TargetSelector`
+- Reset `scoreMode` to `'target'` when target type changes away from score
+- Include `score_mode` in the `createGoal.mutateAsync()` call
+
+---
+
+## Logic Changes
+
+### 1. Update `Goal` Type
+
+Modify `src/hooks/useGoalProgress.ts`:
+
+Add `score_mode` field to the `Goal` interface:
 ```typescript
-// Sort incomplete songs by their actual value (highest first)
-const sortedIncomplete = [...incompleteSongs].sort((a, b) => {
-  switch (goal.target_type) {
-    case 'score': {
-      // Highest score first, nulls last
-      const scoreA = a.score ?? -1;
-      const scoreB = b.score ?? -1;
-      return scoreB - scoreA;
-    }
-    case 'flare': {
-      // Highest flare first, nulls last
-      const flareA = a.flare ?? -1;
-      const flareB = b.flare ?? -1;
-      return flareB - flareA;
-    }
-    case 'lamp': {
-      // Best lamp first (lower index = better)
-      const indexA = a.halo ? LAMP_ORDER.indexOf(a.halo.toLowerCase() as any) : LAMP_ORDER.length;
-      const indexB = b.halo ? LAMP_ORDER.indexOf(b.halo.toLowerCase() as any) : LAMP_ORDER.length;
-      return indexA - indexB;
-    }
-    case 'grade': {
-      // Best grade first (lower index = better)
-      const indexA = a.rank ? GRADE_ORDER.indexOf(a.rank.toUpperCase() as any) : GRADE_ORDER.length;
-      const indexB = b.rank ? GRADE_ORDER.indexOf(b.rank.toUpperCase() as any) : GRADE_ORDER.length;
-      return indexA - indexB;
-    }
-    default:
-      return 0;
-  }
-});
+export interface Goal {
+  id: string;
+  name: string;
+  target_type: 'lamp' | 'grade' | 'flare' | 'score';
+  target_value: string;
+  criteria_rules: any[];
+  criteria_match_mode: 'all' | 'any';
+  goal_mode: 'all' | 'count';
+  goal_count?: number | null;
+  score_mode?: 'target' | 'average';  // NEW
+}
 ```
 
-Also update `remainingSongs` to be populated for all goal modes:
+### 2. Update `meetsTarget` Function
 
-```diff
-- const remainingSongs = goal.goal_mode === 'all' ? sortedIncomplete : [];
-- const suggestedSongs = goal.goal_mode === 'count' ? sortedIncomplete.slice(0, 20) : [];
-+ const remainingSongs = sortedIncomplete;
-+ const suggestedSongs = []; // No longer used
+For score goals with `score_mode === 'average'`:
+- Individual songs don't "meet" or "not meet" the target
+- Progress is based on collective average, not individual song scores
+- Return `true` for all played songs (they contribute to average)
+
+### 3. Update `useGoalProgress` Hook
+
+Add average score calculation:
+```typescript
+// For average mode, calculate current average
+const calculateAverageScore = (scores: ScoreWithSong[]): number => {
+  const playedWithScores = scores.filter(s => s.score !== null && !s.isUnplayed);
+  if (playedWithScores.length === 0) return 0;
+  const sum = playedWithScores.reduce((acc, s) => acc + (s.score ?? 0), 0);
+  return Math.round(sum / playedWithScores.length / 10) * 10;
+};
 ```
+
+For average mode goals:
+- `current` = current average score
+- `total` = target average score
+- `completedSongs` = empty (doesn't apply)
+- `remainingSongs` = all matching songs sorted by score descending
+
+### 4. Update `useGoals` Hook
+
+Modify `src/hooks/useGoals.ts`:
+
+- Add `score_mode` to `GoalRow` interface
+- Add `score_mode` to `mapRowToGoal` function
+- Include `score_mode` in create and update mutations
 
 ---
 
-## Result
+## Progress Display for Average Mode
 
-After these changes:
-- The Goal Detail page will always show "Remaining" and "Completed" tabs
-- Remaining songs will be sorted by their actual achievement value (highest score/flare/lamp/grade first)
-- Songs closest to completing the goal will naturally appear at the top since they have the highest current values
+On the Goal Detail page and Goal Card:
+- Instead of "23/47 completed", show "Avg. 985,000 / 990,000 target"
+- Progress bar fills based on `currentAvg / targetAvg` ratio
+- Songs list shows all matching songs sorted by score (highest first)
 
 ---
 
-## Files Modified
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/goals/GoalSongTabs.tsx` | Hardcode "Remaining" label, remove conditional rendering |
-| `src/hooks/useGoalProgress.ts` | Replace proximity sorting with value-based sorting |
+| `src/components/goals/ScoreModeToggle.tsx` | NEW - Toggle component |
+| `src/components/goals/TargetSelector.tsx` | Add toggle when score category selected |
+| `src/components/goals/CreateGoalSheet.tsx` | Add scoreMode state, pass to TargetSelector |
+| `src/hooks/useGoalProgress.ts` | Update Goal type, add average calculation |
+| `src/hooks/useGoals.ts` | Add score_mode to CRUD operations |
+| Database migration | Add `score_mode` column |
+
+---
+
+## Technical Details
+
+**Average Score Calculation (matching Scores page):**
+```typescript
+const playedWithScores = matchingScores.filter(s => s.score !== null);
+const avgScore = playedWithScores.length > 0
+  ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length / 10) * 10
+  : 0;
+```
+
+This rounds to the nearest 10 to align with DDR's scoring system.
