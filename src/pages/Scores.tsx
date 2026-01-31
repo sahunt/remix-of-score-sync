@@ -30,6 +30,7 @@ interface ScoreWithSong {
     artist: string | null;
     eamuse_id: string | null;
     song_id: number | null;
+    name_romanized: string | null;
   } | null;
 }
 
@@ -42,6 +43,7 @@ interface MusicDbChart {
   difficulty_name: string | null;
   difficulty_level: number | null;
   playstyle: string | null;
+  name_romanized: string | null;
 }
 
 interface DisplaySong {
@@ -56,6 +58,7 @@ interface DisplaySong {
   artist: string | null;
   eamuse_id: string | null;
   song_id: number | null;
+  name_romanized: string | null;
   isNoPlay: boolean;
 }
 
@@ -253,7 +256,8 @@ export default function Scores() {
               name,
               artist,
               eamuse_id,
-              song_id
+              song_id,
+              name_romanized
             )
           `)
           .eq('user_id', user.id)
@@ -322,7 +326,7 @@ export default function Scores() {
       try {
         const { data, count, error } = await supabase
           .from('musicdb')
-          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle', { count: 'exact' })
+          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle, name_romanized', { count: 'exact' })
           .not('difficulty_level', 'is', null)
           .eq('playstyle', 'SP')
           .eq('deleted', false)
@@ -355,6 +359,7 @@ export default function Scores() {
       artist: s.musicdb?.artist ?? null,
       eamuse_id: s.musicdb?.eamuse_id ?? null,
       song_id: s.musicdb?.song_id ?? null,
+      name_romanized: s.musicdb?.name_romanized ?? null,
       isNoPlay: false,
     }));
 
@@ -382,6 +387,7 @@ export default function Scores() {
             artist: song.artist,
             eamuse_id: song.eamuse_id,
             song_id: song.song_id,
+            name_romanized: song.name_romanized,
           },
         };
         
@@ -418,6 +424,7 @@ export default function Scores() {
           artist: chart.artist,
           eamuse_id: chart.eamuse_id,
           song_id: chart.song_id,
+          name_romanized: chart.name_romanized,
           isNoPlay: true,
         }));
     }
@@ -431,7 +438,8 @@ export default function Scores() {
       result = result.filter(s => {
         const name = s.name?.toLowerCase() ?? '';
         const artist = s.artist?.toLowerCase() ?? '';
-        return name.includes(query) || artist.includes(query);
+        const nameRomanized = s.name_romanized?.toLowerCase() ?? '';
+        return name.includes(query) || artist.includes(query) || nameRomanized.includes(query);
       });
     }
 
