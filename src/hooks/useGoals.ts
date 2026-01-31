@@ -13,6 +13,7 @@ interface GoalRow {
   criteria_match_mode: string;
   goal_mode: string;
   goal_count: number | null;
+  score_mode: string;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +28,7 @@ function mapRowToGoal(row: GoalRow): Goal {
     criteria_match_mode: row.criteria_match_mode as Goal['criteria_match_mode'],
     goal_mode: row.goal_mode as Goal['goal_mode'],
     goal_count: row.goal_count,
+    score_mode: (row.score_mode as Goal['score_mode']) ?? 'target',
   };
 }
 
@@ -66,6 +68,7 @@ export function useGoals() {
           criteria_match_mode: goal.criteria_match_mode,
           goal_mode: goal.goal_mode,
           goal_count: goal.goal_count,
+          score_mode: goal.score_mode ?? 'target',
         })
         .select()
         .single();
@@ -92,6 +95,7 @@ export function useGoals() {
           criteria_match_mode: updates.criteria_match_mode,
           goal_mode: updates.goal_mode,
           goal_count: updates.goal_count,
+          score_mode: updates.score_mode,
         })
         .eq('id', id)
         .eq('user_id', user.id)

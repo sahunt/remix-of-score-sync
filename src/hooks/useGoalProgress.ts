@@ -146,6 +146,7 @@ export interface Goal {
   criteria_match_mode: 'all' | 'any';
   goal_mode: 'all' | 'count';
   goal_count?: number | null;
+  score_mode?: 'target' | 'average';
 }
 
 // Lamp hierarchy for proximity calculation (best to worst)

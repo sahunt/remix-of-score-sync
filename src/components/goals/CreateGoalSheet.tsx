@@ -145,6 +145,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const [goalCount, setGoalCount] = useState(10);
   const [criteriaRules, setCriteriaRules] = useState<FilterRule[]>([]);
   const [criteriaMatchMode, setCriteriaMatchMode] = useState<'all' | 'any'>('all');
+  const [scoreMode, setScoreMode] = useState<'target' | 'average'>('target');
 
   // Track which step is expanded (only one at a time)
   const [expandedStep, setExpandedStep] = useState<1 | 2 | 3>(1);
@@ -173,6 +174,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
         value: getDefaultValue('level'),
       }]);
       setCriteriaMatchMode('all');
+      setScoreMode('target');
       setExpandedStep(1);
     }
   }, [open]);
@@ -307,6 +309,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
         criteria_match_mode: criteriaMatchMode,
         goal_mode: goalMode,
         goal_count: goalMode === 'count' ? goalCount : null,
+        score_mode: targetType === 'score' ? scoreMode : 'target',
       });
 
       toast({
@@ -333,6 +336,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     setGoalCount(10);
     setCriteriaRules([]);
     setCriteriaMatchMode('all');
+    setScoreMode('target');
     setExpandedStep(1);
   };
 
@@ -445,7 +449,13 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
                   onTargetChange={(type, value) => {
                     setTargetType(type);
                     setTargetValue(value);
+                    // Reset scoreMode when switching away from score
+                    if (type !== 'score') {
+                      setScoreMode('target');
+                    }
                   }}
+                  scoreMode={scoreMode}
+                  onScoreModeChange={setScoreMode}
                 />
               </div>
             )}

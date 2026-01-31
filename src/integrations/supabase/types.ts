@@ -176,6 +176,7 @@ export type Database = {
           goal_mode: string
           id: string
           name: string
+          score_mode: string
           target_type: string
           target_value: string
           updated_at: string
@@ -189,6 +190,7 @@ export type Database = {
           goal_mode?: string
           id?: string
           name: string
+          score_mode?: string
           target_type: string
           target_value: string
           updated_at?: string
@@ -202,6 +204,7 @@ export type Database = {
           goal_mode?: string
           id?: string
           name?: string
+          score_mode?: string
           target_type?: string
           target_value?: string
           updated_at?: string
