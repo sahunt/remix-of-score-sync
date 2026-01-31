@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.import-sanbai-ratings]
 verify_jwt = false
+
+[functions.import-romanized-titles]
+verify_jwt = false
