@@ -10,16 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getJacketUrl, getJacketFallbackUrl } from '@/lib/jacketUrl';
 import { cn } from '@/lib/utils';
 
-interface SongDetailModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  songId: number | null;
-  songName: string;
-  artist: string | null;
-  eamuseId: string | null;
-}
-
-interface ChartWithScore {
+export interface ChartWithScore {
   id: number;
   difficulty_name: string;
   difficulty_level: number;
@@ -28,6 +19,17 @@ interface ChartWithScore {
   flare: number | null;
   halo: string | null;
   source_type: string | null;
+}
+
+interface SongDetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  songId: number | null;
+  songName: string;
+  artist: string | null;
+  eamuseId: string | null;
+  /** Pre-loaded chart data to avoid API calls when opening from Scores page */
+  preloadedCharts?: ChartWithScore[];
 }
 
 // Difficulty order for display (highest to lowest)
@@ -75,6 +77,7 @@ export function SongDetailModal({
   songName,
   artist,
   eamuseId,
+  preloadedCharts,
 }: SongDetailModalProps) {
   const { user } = useAuth();
   const { transformHalo } = use12MSMode();
@@ -104,10 +107,25 @@ export function SongDetailModal({
     setUseFallback(false);
   }, [songId, eamuseId]);
 
-  // Fetch chart data when modal opens
+  // Use preloaded data if available, otherwise fetch
   useEffect(() => {
-    if (!isOpen || !songId || !user) {
+    if (!isOpen || !songId) {
       setCharts([]);
+      setLoading(false);
+      return;
+    }
+
+    // If preloaded data is available, use it immediately (no loading state)
+    if (preloadedCharts && preloadedCharts.length > 0) {
+      setCharts(preloadedCharts);
+      setLoading(false);
+      return;
+    }
+
+    // Fallback: fetch data if no preloaded charts (e.g., deep link to modal)
+    if (!user) {
+      setCharts([]);
+      setLoading(false);
       return;
     }
 
@@ -176,7 +194,7 @@ export function SongDetailModal({
     };
 
     fetchData();
-  }, [isOpen, songId, user]);
+  }, [isOpen, songId, user, preloadedCharts]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>

@@ -62,11 +62,68 @@ interface DisplaySong {
   isNoPlay: boolean;
 }
 
+// Difficulty order for display (highest to lowest) - shared with SongDetailModal
+const DIFFICULTY_ORDER = ['CHALLENGE', 'EXPERT', 'DIFFICULT', 'BASIC', 'BEGINNER'];
+
+// Chart data structure matching SongDetailModal's ChartWithScore
+interface PreloadedChart {
+  id: number;
+  difficulty_name: string;
+  difficulty_level: number;
+  score: number | null;
+  rank: string | null;
+  flare: number | null;
+  halo: string | null;
+  source_type: string | null;
+}
+
 interface SelectedSong {
   songId: number;
   songName: string;
   artist: string | null;
   eamuseId: string | null;
+  preloadedCharts?: PreloadedChart[];
+}
+
+/**
+ * Prepare chart data for the modal from already-loaded state.
+ * This eliminates the need for additional API calls when opening the modal.
+ */
+function prepareChartsForModal(
+  songId: number,
+  scores: ScoreWithSong[],
+  musicDbCharts: MusicDbChart[]
+): PreloadedChart[] {
+  // Get all SP charts for this song from musicdb
+  const chartsForSong = musicDbCharts.filter(c => c.song_id === songId);
+  
+  // Build score map for O(1) lookup by difficulty name
+  const scoreMap = new Map(
+    scores
+      .filter(s => s.musicdb?.song_id === songId)
+      .map(s => [s.difficulty_name?.toUpperCase(), s])
+  );
+  
+  // Merge charts with scores and sort by difficulty order
+  return chartsForSong
+    .map(chart => {
+      const userScore = scoreMap.get(chart.difficulty_name?.toUpperCase());
+      return {
+        id: chart.id,
+        difficulty_name: chart.difficulty_name ?? 'UNKNOWN',
+        difficulty_level: chart.difficulty_level ?? 0,
+        score: userScore?.score ?? null,
+        rank: userScore?.rank ?? null,
+        flare: userScore?.flare ?? null,
+        halo: userScore?.halo ?? null,
+        source_type: null, // Not tracked in current queries
+      };
+    })
+    .sort((a, b) => {
+      const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());
+      const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name.toUpperCase());
+      return aIndex - bIndex;
+    });
 }
 
 // Filter matching logic
@@ -199,14 +256,19 @@ export default function Scores() {
 
   const handleSongClick = useCallback((song: DisplaySong) => {
     if (!song.song_id) return;
+    
+    // Prepare chart data from already-loaded state to avoid modal API calls
+    const preloadedCharts = prepareChartsForModal(song.song_id, scores, musicDbCharts);
+    
     setSelectedSong({
       songId: song.song_id,
       songName: song.name ?? 'Unknown Song',
       artist: song.artist,
       eamuseId: song.eamuse_id,
+      preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, []);
+  }, [scores, musicDbCharts]);
 
   const handleCloseModal = useCallback(() => {
     setIsDetailModalOpen(false);
@@ -683,6 +745,7 @@ export default function Scores() {
         songName={selectedSong?.songName ?? ''}
         artist={selectedSong?.artist ?? null}
         eamuseId={selectedSong?.eamuseId ?? null}
+        preloadedCharts={selectedSong?.preloadedCharts}
       />
     </div>
   );
