@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useScoresFilterState } from '@/hooks/useScoresFilterState';
 import { useUserStats } from '@/hooks/useUserStats';
+import { useScores } from '@/contexts/ScoresContext';
 import { supabase } from '@/integrations/supabase/client';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
@@ -15,6 +16,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
 import rinonFilter from '@/assets/rinon-filter.png';
 import type { SavedFilter, FilterRule } from '@/components/filters/filterTypes';
+import type { ScoreWithSong as GlobalScoreWithSong } from '@/hooks/useGoalProgress';
 interface ScoreWithSong {
   id: string;
   score: number | null;
@@ -86,25 +88,20 @@ interface SelectedSong {
 }
 
 /**
- * Prepare chart data for the modal from already-loaded state.
- * Uses scores data (all levels user has played) combined with musicDbCharts (current level).
- * This provides instant display for played charts, reducing perceived load time.
+ * Prepare chart data for the modal using the GLOBAL scores cache.
+ * This uses ALL user scores (not filtered by level) to instantly show all played difficulties.
+ * musicDbCharts is only used to add unplayed charts at the currently selected level.
  */
 function prepareChartsForModal(
   songId: number,
-  scores: ScoreWithSong[],
+  globalScores: GlobalScoreWithSong[],
   musicDbCharts: MusicDbChart[]
 ): PreloadedChart[] {
-  // Get all user's scores for this song (covers ALL levels user has played)
-  const scoresForSong = scores.filter(s => s.musicdb?.song_id === songId);
+  // Get ALL user's scores for this song from global cache (all levels)
+  const scoresForSong = globalScores.filter(s => s.musicdb?.song_id === songId);
   
   // Get any charts from musicDbCharts (may only be current level, but useful for no-play songs)
   const chartsForSong = musicDbCharts.filter(c => c.song_id === songId);
-  
-  // Build score map by difficulty name for O(1) lookup
-  const scoreMap = new Map(
-    scoresForSong.map(s => [s.difficulty_name?.toUpperCase(), s])
-  );
   
   // Track which difficulties we've added
   const seenDifficulties = new Set<string>();
@@ -116,7 +113,7 @@ function prepareChartsForModal(
     if (!seenDifficulties.has(diffName)) {
       seenDifficulties.add(diffName);
       result.push({
-        id: 0, // Not needed for display
+        id: score.musicdb_id ?? 0,
         difficulty_name: diffName,
         difficulty_level: score.difficulty_level ?? 0,
         score: score.score,
@@ -260,6 +257,7 @@ function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
 export default function Scores() {
   const { user } = useAuth();
   const { transformHaloLabel } = use12MSMode();
+  const { scores: globalScores } = useScores(); // Global cache for modal preloading
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
   const [musicDbCharts, setMusicDbCharts] = useState<MusicDbChart[]>([]);
   const [loading, setLoading] = useState(false); // Start as false - no initial load
@@ -285,8 +283,9 @@ export default function Scores() {
   const handleSongClick = useCallback((song: DisplaySong) => {
     if (!song.song_id) return;
     
-    // Prepare chart data from already-loaded state to avoid modal API calls
-    const preloadedCharts = prepareChartsForModal(song.song_id, scores, musicDbCharts);
+    // Use GLOBAL scores cache (all levels) to instantly show all played difficulties
+    // This eliminates flicker by providing complete data for played charts
+    const preloadedCharts = prepareChartsForModal(song.song_id, globalScores, musicDbCharts);
     
     setSelectedSong({
       songId: song.song_id,
@@ -296,7 +295,7 @@ export default function Scores() {
       preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, [scores, musicDbCharts]);
+  }, [globalScores, musicDbCharts]);
 
   const handleCloseModal = useCallback(() => {
     setIsDetailModalOpen(false);
