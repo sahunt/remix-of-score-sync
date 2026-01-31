@@ -400,8 +400,18 @@ function phaseii_extractBlocks(content: string): string[] {
     const objects = phaseii_extractObjectsFromArray(sanitized);
     
     if (objects.length > 0) {
-      const sampleContent = objects[0].substring(0, 200);
+      const firstObj = objects[0];
+      const sampleContent = firstObj.substring(0, 200);
       console.log(`PhaseII: First block sample: ${sampleContent}`);
+      
+      // Check if this is aggregated song-catalog format
+      // Characteristics: has "charts" array and top-level numeric "id", no "song" object
+      if (firstObj.includes('"charts"') && 
+          firstObj.match(/"id"\s*:\s*\d+/) && 
+          !firstObj.includes('"song"')) {
+        console.log('PhaseII: Detected aggregated song-chart format');
+        return phaseii_extractAggregatedBlocks(objects);
+      }
     }
     
     return objects;
@@ -411,6 +421,110 @@ function phaseii_extractBlocks(content: string): string[] {
   console.log('PhaseII: Trying to find any array in the object');
   const objects = phaseii_extractObjectsFromArray(sanitized);
   return objects;
+}
+
+// Chart index to playstyle/difficulty mapping (official PhaseII table)
+const PHASEII_CHART_MAP: Record<number, { playstyle: string; difficulty: string }> = {
+  0: { playstyle: 'SP', difficulty: 'BEGINNER' },
+  1: { playstyle: 'SP', difficulty: 'BASIC' },
+  2: { playstyle: 'SP', difficulty: 'DIFFICULT' },
+  3: { playstyle: 'SP', difficulty: 'EXPERT' },
+  4: { playstyle: 'SP', difficulty: 'CHALLENGE' },
+  5: { playstyle: 'DP', difficulty: 'BEGINNER' },
+  6: { playstyle: 'DP', difficulty: 'BASIC' },
+  7: { playstyle: 'DP', difficulty: 'DIFFICULT' },
+  8: { playstyle: 'DP', difficulty: 'EXPERT' },
+  9: { playstyle: 'DP', difficulty: 'CHALLENGE' },
+};
+
+// Extract score blocks from aggregated song-catalog format
+// This format has songs as top-level objects with nested charts arrays
+function phaseii_extractAggregatedBlocks(songObjects: string[]): string[] {
+  const scoreBlocks: string[] = [];
+  let processedSongs = 0;
+  let chartsWithRecords = 0;
+  
+  for (const songObj of songObjects) {
+    // Extract song_id (mcode) from top level
+    const songIdMatch = songObj.match(/"id"\s*:\s*(\d+)/);
+    if (!songIdMatch) continue;
+    const songId = songIdMatch[1];
+    processedSongs++;
+    
+    // Extract charts array
+    const chartsArray = phaseii_extractArray(songObj, 'charts');
+    if (!chartsArray) continue;
+    
+    const chartObjects = phaseii_extractObjectsFromArray(chartsArray);
+    
+    for (const chartObj of chartObjects) {
+      // Only process charts with a record (played charts)
+      if (!chartObj.includes('"record"')) continue;
+      
+      // Extract chart index (0-9)
+      const chartMatch = chartObj.match(/"chart"\s*:\s*(\d+)/);
+      if (!chartMatch) continue;
+      const chartIndex = parseInt(chartMatch[1]);
+      
+      // Extract difficulty level from nested data object
+      const chartDataContent = phaseii_extractNestedObject(chartObj, 'data');
+      const diffMatch = chartDataContent?.match(/"difficulty"\s*:\s*(\d+)/);
+      const diffLevel = diffMatch ? diffMatch[1] : '0';
+      
+      // Extract record object
+      const recordContent = phaseii_extractNestedObject(chartObj, 'record');
+      if (!recordContent) continue;
+      
+      chartsWithRecords++;
+      
+      // Build a synthetic block that phaseii_extractFields can parse
+      const syntheticBlock = phaseii_buildSyntheticBlock(songId, chartIndex, diffLevel, recordContent);
+      scoreBlocks.push(syntheticBlock);
+    }
+  }
+  
+  console.log(`PhaseII: Processed ${processedSongs} songs, extracted ${chartsWithRecords} score blocks from aggregated format`);
+  return scoreBlocks;
+}
+
+// Build a synthetic score block from aggregated format data
+// Converts to the format that phaseii_extractFields() expects
+function phaseii_buildSyntheticBlock(
+  songId: string, 
+  chartIndex: number, 
+  diffLevel: string, 
+  recordContent: string
+): string {
+  const chartInfo = PHASEII_CHART_MAP[chartIndex] || { playstyle: 'SP', difficulty: 'UNKNOWN' };
+  const chartString = `${chartInfo.playstyle} ${chartInfo.difficulty} - ${diffLevel}`;
+  
+  // Extract fields from record content
+  const pointsMatch = recordContent.match(/"points"\s*:\s*(\d+)/);
+  const points = pointsMatch ? pointsMatch[1] : '0';
+  
+  // Convert Unix timestamp to ISO string
+  const timestampMatch = recordContent.match(/"timestamp"\s*:\s*(\d+)/);
+  const timestamp = timestampMatch 
+    ? new Date(parseInt(timestampMatch[1]) * 1000).toISOString()
+    : null;
+  
+  // Extract nested data from record.data
+  const recordDataContent = phaseii_extractNestedObject(`{${recordContent}}`, 'data');
+  const haloMatch = recordDataContent?.match(/"halo"\s*:\s*(\d+)/);
+  const rankMatch = recordDataContent?.match(/"rank"\s*:\s*(\d+)/);
+  const flareMatch = recordDataContent?.match(/"flare"\s*:\s*(\d+)/);
+  
+  // Build synthetic block in existing format
+  return JSON.stringify({
+    song: { id: parseInt(songId), chart: chartString },
+    points: points,
+    data: {
+      halo: haloMatch ? haloMatch[1] : null,
+      rank: rankMatch ? rankMatch[1] : null,
+      flare: flareMatch ? parseInt(flareMatch[1]) : null
+    },
+    timestamp: timestamp
+  });
 }
 
 // Find the bounds of a nested JSON object and extract content within
@@ -663,39 +777,34 @@ function phaseii_parseChart(chart: string): { playstyle: string; difficulty_name
 }
 
 // Normalize halo string or numeric code to standard format
-// Numeric codes from PhaseII: 
-//   1000 = fail/no play, 200 = clear, 2000 = FC-ish?, etc.
-//   Based on observed data, higher numbers generally = better halos
+// Official PhaseII halo code mapping from the PhaseII source tables
 function phaseii_normalizeHalo(halo: string | null): string | null {
   if (!halo) return null;
   
   // Check if it's a numeric code
   const numericValue = parseInt(halo);
   if (!isNaN(numericValue) && halo === String(numericValue)) {
-    // Numeric halo code mapping based on observed PhaseII data
-    // These codes appear to follow a pattern where higher = better
+    // Official PhaseII halo code mapping
     const numericMap: Record<number, string> = {
-      1000: 'fail',      // Failed
-      200: 'clear',      // Cleared 
-      2000: 'fc',        // Full Combo (possibly Great FC)
-      3000: 'gfc',       // Great Full Combo
-      4000: 'pfc',       // Perfect Full Combo  
-      5000: 'mfc',       // Marvelous Full Combo
+      100: 'clear',   // (empty)
+      200: 'fc',      // FULL COMBO
+      300: 'gfc',     // GREAT FULL COMBO
+      400: 'pfc',     // PERFECT FULL COMBO
+      500: 'mfc',     // MARVELOUS FULL COMBO
+      600: 'clear',   // (empty)
+      1000: 'fail',   // FAILED
+      2000: 'clear',  // CLEARED
+      4000: 'life4',  // LIFE4 CLEARED
     };
     
     // Check exact matches first
-    if (numericMap[numericValue]) {
+    if (numericMap[numericValue] !== undefined) {
       return numericMap[numericValue];
     }
     
-    // Handle ranges for life4 and other in-between values
-    if (numericValue < 200) return 'fail';
-    if (numericValue < 1000) return 'clear';
-    if (numericValue < 2000) return 'life4';
-    if (numericValue < 3000) return 'fc';
-    if (numericValue < 4000) return 'gfc';
-    if (numericValue < 5000) return 'pfc';
-    return 'mfc';
+    // Fallback for any unexpected codes - return 'clear' as safe default
+    console.log(`PhaseII: Unknown halo code ${numericValue}, defaulting to 'clear'`);
+    return 'clear';
   }
   
   // String-based normalization
@@ -705,7 +814,7 @@ function phaseii_normalizeHalo(halo: string | null): string | null {
     'PERFECT FULL COMBO': 'pfc', 'PFC': 'pfc',
     'GREAT FULL COMBO': 'gfc', 'GFC': 'gfc',
     'GOOD FULL COMBO': 'fc', 'FULL COMBO': 'fc', 'FC': 'fc',
-    'LIFE4': 'life4', 'LIFE 4': 'life4',
+    'LIFE4': 'life4', 'LIFE 4': 'life4', 'LIFE4 CLEARED': 'life4',
     'CLEAR': 'clear', 'CLEARED': 'clear',
     'FAILED': 'fail', 'FAIL': 'fail',
   };
@@ -713,23 +822,30 @@ function phaseii_normalizeHalo(halo: string | null): string | null {
 }
 
 // Normalize rank string or numeric code to standard format
-// Numeric codes from PhaseII:
-//   100=E, 200=D, 300=C, 400=B, 500=A, 600=AA, 700=AAA
-// Also handles + and - variants
+// Official PhaseII rank code mapping from the PhaseII source tables
 function phaseii_normalizeRank(rank: string | null): string | null {
   if (!rank) return null;
   
   // Check if it's a numeric code
   const numericValue = parseInt(rank);
   if (!isNaN(numericValue) && rank === String(numericValue)) {
-    // Numeric rank code mapping based on observed PhaseII data
+    // Official PhaseII rank code mapping with +/- variants
     const numericMap: Record<number, string> = {
       100: 'E',
-      200: 'D', 210: 'D', 220: 'D+',
-      300: 'C-', 310: 'C', 320: 'C+',
-      400: 'B-', 410: 'B', 420: 'B+',
-      500: 'A-', 510: 'A', 520: 'A+',
-      600: 'AA-', 610: 'AA', 620: 'AA+',
+      200: 'D',
+      233: 'D+',
+      266: 'C-',
+      300: 'C',
+      333: 'C+',
+      366: 'B-',
+      400: 'B',
+      433: 'B+',
+      466: 'A-',
+      500: 'A',
+      533: 'A+',
+      566: 'AA-',
+      600: 'AA',
+      650: 'AA+',
       700: 'AAA',
     };
     
@@ -738,12 +854,16 @@ function phaseii_normalizeRank(rank: string | null): string | null {
       return numericMap[numericValue];
     }
     
-    // Handle ranges
+    // Handle ranges for any unexpected values
     if (numericValue < 200) return 'E';
-    if (numericValue < 300) return 'D';
-    if (numericValue < 400) return 'C';
-    if (numericValue < 500) return 'B';
-    if (numericValue < 600) return 'A';
+    if (numericValue < 266) return 'D';
+    if (numericValue < 300) return 'C-';
+    if (numericValue < 366) return 'C';
+    if (numericValue < 400) return 'B-';
+    if (numericValue < 466) return 'B';
+    if (numericValue < 500) return 'A-';
+    if (numericValue < 566) return 'A';
+    if (numericValue < 600) return 'AA-';
     if (numericValue < 700) return 'AA';
     return 'AAA';
   }

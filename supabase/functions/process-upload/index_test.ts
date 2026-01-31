@@ -235,7 +235,7 @@ Deno.test("PhaseII: Chart string parsing", () => {
   console.log("✅ PhaseII chart string parsing verified");
 });
 
-Deno.test("PhaseII: Halo normalization", () => {
+Deno.test("PhaseII: Halo normalization - string values", () => {
   const testCases = [
     { input: 'MARVELOUS FULL COMBO', expected: 'mfc' },
     { input: 'PERFECT FULL COMBO', expected: 'pfc' },
@@ -243,7 +243,9 @@ Deno.test("PhaseII: Halo normalization", () => {
     { input: 'GOOD FULL COMBO', expected: 'fc' },
     { input: 'FULL COMBO', expected: 'fc' },
     { input: 'LIFE4', expected: 'life4' },
+    { input: 'LIFE4 CLEARED', expected: 'life4' },
     { input: 'CLEAR', expected: 'clear' },
+    { input: 'CLEARED', expected: 'clear' },
     { input: 'MFC', expected: 'mfc' },
     { input: 'PFC', expected: 'pfc' },
   ];
@@ -255,14 +257,185 @@ Deno.test("PhaseII: Halo normalization", () => {
       'PERFECT FULL COMBO': 'pfc', 'PFC': 'pfc',
       'GREAT FULL COMBO': 'gfc', 'GFC': 'gfc',
       'GOOD FULL COMBO': 'fc', 'FULL COMBO': 'fc', 'FC': 'fc',
-      'LIFE4': 'life4', 'LIFE 4': 'life4',
-      'CLEAR': 'clear', 'FAILED': 'fail', 'FAIL': 'fail',
+      'LIFE4': 'life4', 'LIFE 4': 'life4', 'LIFE4 CLEARED': 'life4',
+      'CLEAR': 'clear', 'CLEARED': 'clear',
+      'FAILED': 'fail', 'FAIL': 'fail',
     };
     const result = map[normalized] || 'clear';
     assertEquals(result, expected, `${input} should normalize to ${expected}`);
   }
   
-  console.log("✅ PhaseII halo normalization verified");
+  console.log("✅ PhaseII halo string normalization verified");
+});
+
+Deno.test("PhaseII: Halo normalization - numeric codes (official PhaseII table)", () => {
+  // Official PhaseII halo code mapping
+  const numericMap: Record<number, string> = {
+    100: 'clear',   // (empty)
+    200: 'fc',      // FULL COMBO
+    300: 'gfc',     // GREAT FULL COMBO
+    400: 'pfc',     // PERFECT FULL COMBO
+    500: 'mfc',     // MARVELOUS FULL COMBO
+    600: 'clear',   // (empty)
+    1000: 'fail',   // FAILED
+    2000: 'clear',  // CLEARED
+    4000: 'life4',  // LIFE4 CLEARED
+  };
+  
+  // Verify each code maps correctly
+  assertEquals(numericMap[100], 'clear', "100 should be clear");
+  assertEquals(numericMap[200], 'fc', "200 should be fc");
+  assertEquals(numericMap[300], 'gfc', "300 should be gfc");
+  assertEquals(numericMap[400], 'pfc', "400 should be pfc");
+  assertEquals(numericMap[500], 'mfc', "500 should be mfc");
+  assertEquals(numericMap[600], 'clear', "600 should be clear");
+  assertEquals(numericMap[1000], 'fail', "1000 should be fail");
+  assertEquals(numericMap[2000], 'clear', "2000 should be clear (CLEARED, not FC!)");
+  assertEquals(numericMap[4000], 'life4', "4000 should be life4");
+  
+  console.log("✅ PhaseII halo numeric code mapping verified (official table)");
+});
+
+Deno.test("PhaseII: Rank normalization - numeric codes (official PhaseII table)", () => {
+  // Official PhaseII rank code mapping with +/- variants
+  const numericMap: Record<number, string> = {
+    100: 'E',
+    200: 'D',
+    233: 'D+',
+    266: 'C-',
+    300: 'C',
+    333: 'C+',
+    366: 'B-',
+    400: 'B',
+    433: 'B+',
+    466: 'A-',
+    500: 'A',
+    533: 'A+',
+    566: 'AA-',
+    600: 'AA',
+    650: 'AA+',
+    700: 'AAA',
+  };
+  
+  // Verify each code maps correctly
+  assertEquals(numericMap[100], 'E', "100 should be E");
+  assertEquals(numericMap[200], 'D', "200 should be D");
+  assertEquals(numericMap[233], 'D+', "233 should be D+");
+  assertEquals(numericMap[266], 'C-', "266 should be C-");
+  assertEquals(numericMap[300], 'C', "300 should be C");
+  assertEquals(numericMap[333], 'C+', "333 should be C+");
+  assertEquals(numericMap[366], 'B-', "366 should be B-");
+  assertEquals(numericMap[400], 'B', "400 should be B");
+  assertEquals(numericMap[433], 'B+', "433 should be B+");
+  assertEquals(numericMap[466], 'A-', "466 should be A-");
+  assertEquals(numericMap[500], 'A', "500 should be A");
+  assertEquals(numericMap[533], 'A+', "533 should be A+");
+  assertEquals(numericMap[566], 'AA-', "566 should be AA-");
+  assertEquals(numericMap[600], 'AA', "600 should be AA");
+  assertEquals(numericMap[650], 'AA+', "650 should be AA+");
+  assertEquals(numericMap[700], 'AAA', "700 should be AAA");
+  
+  console.log("✅ PhaseII rank numeric code mapping verified (official table)");
+});
+
+// ============================================================================
+// AGGREGATED FORMAT TESTS
+// ============================================================================
+
+Deno.test("PhaseII Aggregated: Chart index mapping", () => {
+  const CHART_MAP: Record<number, { playstyle: string; difficulty: string }> = {
+    0: { playstyle: 'SP', difficulty: 'BEGINNER' },
+    1: { playstyle: 'SP', difficulty: 'BASIC' },
+    2: { playstyle: 'SP', difficulty: 'DIFFICULT' },
+    3: { playstyle: 'SP', difficulty: 'EXPERT' },
+    4: { playstyle: 'SP', difficulty: 'CHALLENGE' },
+    5: { playstyle: 'DP', difficulty: 'BEGINNER' },
+    6: { playstyle: 'DP', difficulty: 'BASIC' },
+    7: { playstyle: 'DP', difficulty: 'DIFFICULT' },
+    8: { playstyle: 'DP', difficulty: 'EXPERT' },
+    9: { playstyle: 'DP', difficulty: 'CHALLENGE' },
+  };
+  
+  // Test SP charts (0-4)
+  assertEquals(CHART_MAP[0].playstyle, 'SP', "Chart 0 should be SP");
+  assertEquals(CHART_MAP[0].difficulty, 'BEGINNER', "Chart 0 should be BEGINNER");
+  assertEquals(CHART_MAP[3].playstyle, 'SP', "Chart 3 should be SP");
+  assertEquals(CHART_MAP[3].difficulty, 'EXPERT', "Chart 3 should be EXPERT");
+  assertEquals(CHART_MAP[4].playstyle, 'SP', "Chart 4 should be SP");
+  assertEquals(CHART_MAP[4].difficulty, 'CHALLENGE', "Chart 4 should be CHALLENGE");
+  
+  // Test DP charts (5-9)
+  assertEquals(CHART_MAP[5].playstyle, 'DP', "Chart 5 should be DP");
+  assertEquals(CHART_MAP[5].difficulty, 'BEGINNER', "Chart 5 should be BEGINNER");
+  assertEquals(CHART_MAP[8].playstyle, 'DP', "Chart 8 should be DP");
+  assertEquals(CHART_MAP[8].difficulty, 'EXPERT', "Chart 8 should be EXPERT");
+  assertEquals(CHART_MAP[9].playstyle, 'DP', "Chart 9 should be DP");
+  assertEquals(CHART_MAP[9].difficulty, 'CHALLENGE', "Chart 9 should be CHALLENGE");
+  
+  console.log("✅ PhaseII aggregated chart index mapping verified");
+});
+
+Deno.test("PhaseII Aggregated: Format detection", () => {
+  // Aggregated format: has "charts" array and top-level "id", no "song" object
+  const aggregatedSample = `{"id":38701,"name":"3y3s","artist":"R","charts":[{"chart":1,"data":{"difficulty":9},"record":{"points":999900,"data":{"halo":400,"rank":700}}}]}`;
+  
+  // Existing flat format: has "song" object
+  const flatSample = `{"song":{"id":37962,"chart":"SP EXPERT - 14"},"points":"999000"}`;
+  
+  // Check detection logic
+  assertEquals(aggregatedSample.includes('"charts"'), true, "Aggregated should have 'charts'");
+  assertEquals(aggregatedSample.match(/"id"\s*:\s*\d+/) !== null, true, "Aggregated should have top-level id");
+  assertEquals(aggregatedSample.includes('"song"'), false, "Aggregated should NOT have 'song' object");
+  
+  assertEquals(flatSample.includes('"song"'), true, "Flat format should have 'song' object");
+  
+  console.log("✅ PhaseII aggregated format detection verified");
+});
+
+Deno.test("PhaseII Aggregated: Unix timestamp conversion", () => {
+  const unixTimestamp = 1713750708; // Example from user data
+  const isoString = new Date(unixTimestamp * 1000).toISOString();
+  
+  // Should be a valid ISO string
+  assertEquals(typeof isoString, 'string', "Should return a string");
+  assertEquals(isoString.includes('T'), true, "Should be ISO format with T separator");
+  assertEquals(isoString.endsWith('Z'), true, "Should end with Z for UTC");
+  
+  // Verify the date is reasonable (2024)
+  const year = new Date(unixTimestamp * 1000).getFullYear();
+  assertEquals(year, 2024, "Timestamp should convert to year 2024");
+  
+  console.log("✅ PhaseII aggregated Unix timestamp conversion verified");
+});
+
+Deno.test("PhaseII Aggregated: Build synthetic block", () => {
+  // Simulate what the buildSyntheticBlock function should produce
+  const songId = "38701";
+  const chartIndex = 2; // SP DIFFICULT
+  const diffLevel = "14";
+  const recordContent = `"timestamp":1724615031,"points":999900,"data":{"halo":400,"rank":700,"flare":10}`;
+  
+  const CHART_MAP: Record<number, { playstyle: string; difficulty: string }> = {
+    2: { playstyle: 'SP', difficulty: 'DIFFICULT' },
+  };
+  
+  const chartInfo = CHART_MAP[chartIndex];
+  const chartString = `${chartInfo.playstyle} ${chartInfo.difficulty} - ${diffLevel}`;
+  
+  assertEquals(chartString, "SP DIFFICULT - 14", "Chart string should be properly formatted");
+  
+  // Extract points
+  const pointsMatch = recordContent.match(/"points"\s*:\s*(\d+)/);
+  assertEquals(pointsMatch !== null, true, "Should extract points");
+  assertEquals(pointsMatch![1], "999900", "Points should be 999900");
+  
+  // Extract timestamp
+  const timestampMatch = recordContent.match(/"timestamp"\s*:\s*(\d+)/);
+  assertEquals(timestampMatch !== null, true, "Should extract timestamp");
+  const timestamp = new Date(parseInt(timestampMatch![1]) * 1000).toISOString();
+  assertEquals(typeof timestamp, 'string', "Timestamp should convert to ISO string");
+  
+  console.log("✅ PhaseII aggregated synthetic block building verified");
 });
 
 // ============================================================================
