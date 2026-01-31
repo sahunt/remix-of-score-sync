@@ -1,141 +1,53 @@
 
-# Add Score Mode Toggle (Target vs Average) to Goals
+
+# Dynamic Score Floor for Average Goals Progress Bar
 
 ## Summary
-Add a toggle to the score section of the goal creation/edit UI that switches between two modes:
-- **Target**: Works as today - songs must reach that score or higher
-- **Average**: Goal tracks average score across all matching songs
+Store the user's lowest matching score at goal creation time as a fixed floor for the progress bar. This makes progress visualization personally meaningful - showing improvement from where they started rather than an arbitrary 0-1,000,000 scale.
 
-The toggle will use the same visual style and animation as the existing `MatchModeToggle` component.
+Additionally, fix the GoalBadge to show "avg." instead of "+" for average score goals.
 
 ---
 
 ## Database Changes
 
-Add a new column `score_mode` to the `user_goals` table to store whether a score goal uses "target" or "average" mode.
+Add a new column `score_floor` to the `user_goals` table:
 
 | Column | Type | Default | Description |
 |--------|------|---------|-------------|
-| `score_mode` | text | `'target'` | Either `'target'` or `'average'` |
+| `score_floor` | integer | `NULL` | The user's lowest score among matching charts at goal creation (only for average mode) |
 
-SQL Migration:
 ```sql
 ALTER TABLE public.user_goals 
-ADD COLUMN score_mode text NOT NULL DEFAULT 'target';
+ADD COLUMN score_floor integer DEFAULT NULL;
 ```
 
 ---
 
-## UI Changes
+## How the Floor Works
 
-### 1. Create `ScoreModeToggle` Component
+### At Goal Creation Time
+When creating an average score goal:
+1. Filter user scores by the goal's criteria rules
+2. Find the minimum score among matching played songs
+3. Store this as `score_floor` (fixed, won't change even if user improves)
 
-New file: `src/components/goals/ScoreModeToggle.tsx`
+Example:
+- User creates "990,000 avg. on 14s" goal
+- Their lowest 14 score is currently 952,340
+- `score_floor` is stored as 952,340
+- Progress bar range: 952,340 → 990,000
 
-A reusable toggle matching the `MatchModeToggle` styling:
-- Background: `bg-[#262937]` with `rounded-[10px]` and `p-1.5`
-- Sliding indicator: `bg-primary` with smooth 300ms transition
-- Two buttons: "Target" and "Average"
-
+### Progress Bar Calculation
 ```text
-┌─────────────────────────────────────┐
-│  [ Target ]    [ Average ]          │  ← Sliding indicator behind selected
-└─────────────────────────────────────┘
+Current avg: 975,000 | Target: 990,000 | Floor: 952,340
+
+Range without floor (0-990,000):
+[████████████████████████████████████████████████░░] 98%  ← Looks almost done
+
+Range with floor (952,340-990,000):
+[██████████████████████████████░░░░░░░░░░░░░░░░░░░░] 60%  ← Shows real progress
 ```
-
-### 2. Update `TargetSelector` Score Panel
-
-Modify `src/components/goals/TargetSelector.tsx`:
-
-When `selectedCategory === 'score'`, add the `ScoreModeToggle` above the existing score input/slider:
-
-```text
-┌───────────────────────────────────────────┐
-│  [ Target ]         [ Average ]           │  ← New toggle
-├───────────────────────────────────────────┤
-│              950,000                      │  ← Existing input
-│  ━━━━━━━━━━━━━━━━━━━━━●━━━━━━━━━          │  ← Existing slider
-└───────────────────────────────────────────┘
-```
-
-Props change:
-- Add `scoreMode?: 'target' | 'average'` prop
-- Add `onScoreModeChange?: (mode: 'target' | 'average') => void` prop
-
-### 3. Update `CreateGoalSheet`
-
-Modify `src/components/goals/CreateGoalSheet.tsx`:
-
-- Add state: `const [scoreMode, setScoreMode] = useState<'target' | 'average'>('target');`
-- Pass `scoreMode` and `onScoreModeChange` to `TargetSelector`
-- Reset `scoreMode` to `'target'` when target type changes away from score
-- Include `score_mode` in the `createGoal.mutateAsync()` call
-
----
-
-## Logic Changes
-
-### 1. Update `Goal` Type
-
-Modify `src/hooks/useGoalProgress.ts`:
-
-Add `score_mode` field to the `Goal` interface:
-```typescript
-export interface Goal {
-  id: string;
-  name: string;
-  target_type: 'lamp' | 'grade' | 'flare' | 'score';
-  target_value: string;
-  criteria_rules: any[];
-  criteria_match_mode: 'all' | 'any';
-  goal_mode: 'all' | 'count';
-  goal_count?: number | null;
-  score_mode?: 'target' | 'average';  // NEW
-}
-```
-
-### 2. Update `meetsTarget` Function
-
-For score goals with `score_mode === 'average'`:
-- Individual songs don't "meet" or "not meet" the target
-- Progress is based on collective average, not individual song scores
-- Return `true` for all played songs (they contribute to average)
-
-### 3. Update `useGoalProgress` Hook
-
-Add average score calculation:
-```typescript
-// For average mode, calculate current average
-const calculateAverageScore = (scores: ScoreWithSong[]): number => {
-  const playedWithScores = scores.filter(s => s.score !== null && !s.isUnplayed);
-  if (playedWithScores.length === 0) return 0;
-  const sum = playedWithScores.reduce((acc, s) => acc + (s.score ?? 0), 0);
-  return Math.round(sum / playedWithScores.length / 10) * 10;
-};
-```
-
-For average mode goals:
-- `current` = current average score
-- `total` = target average score
-- `completedSongs` = empty (doesn't apply)
-- `remainingSongs` = all matching songs sorted by score descending
-
-### 4. Update `useGoals` Hook
-
-Modify `src/hooks/useGoals.ts`:
-
-- Add `score_mode` to `GoalRow` interface
-- Add `score_mode` to `mapRowToGoal` function
-- Include `score_mode` in create and update mutations
-
----
-
-## Progress Display for Average Mode
-
-On the Goal Detail page and Goal Card:
-- Instead of "23/47 completed", show "Avg. 985,000 / 990,000 target"
-- Progress bar fills based on `currentAvg / targetAvg` ratio
-- Songs list shows all matching songs sorted by score (highest first)
 
 ---
 
@@ -143,23 +55,115 @@ On the Goal Detail page and Goal Card:
 
 | File | Change |
 |------|--------|
-| `src/components/goals/ScoreModeToggle.tsx` | NEW - Toggle component |
-| `src/components/goals/TargetSelector.tsx` | Add toggle when score category selected |
-| `src/components/goals/CreateGoalSheet.tsx` | Add scoreMode state, pass to TargetSelector |
-| `src/hooks/useGoalProgress.ts` | Update Goal type, add average calculation |
-| `src/hooks/useGoals.ts` | Add score_mode to CRUD operations |
-| Database migration | Add `score_mode` column |
+| `src/hooks/useGoals.ts` | Add `score_floor` to Goal interface and CRUD |
+| `src/hooks/useGoalProgress.ts` | Add `score_floor` to Goal type |
+| `src/components/goals/CreateGoalSheet.tsx` | Calculate and save `score_floor` on creation |
+| `src/components/home/GoalCard.tsx` | Use floor in progress bar calculation |
+| `src/pages/GoalDetail.tsx` | Pass `score_floor` to GoalCard |
+| `src/components/home/GoalBadge.tsx` | Add `scoreMode` prop, show "avg." instead of "+" |
+| `src/components/goals/GoalPreviewCard.tsx` | Pass `scoreMode` to GoalBadge, calculate preview progress with floor |
+| Database migration | Add `score_floor` column |
 
 ---
 
-## Technical Details
+## Implementation Details
 
-**Average Score Calculation (matching Scores page):**
+### 1. Calculate Floor at Creation
+
+In `CreateGoalSheet.tsx`, when creating an average score goal:
+
 ```typescript
-const playedWithScores = matchingScores.filter(s => s.score !== null);
-const avgScore = playedWithScores.length > 0
-  ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length / 10) * 10
-  : 0;
+// Calculate score floor from matching scores
+const calculateScoreFloor = (): number | null => {
+  if (targetType !== 'score' || scoreMode !== 'average') return null;
+  
+  const playedScores = filteredScores
+    .filter(s => s.score !== null)
+    .map(s => s.score!);
+  
+  if (playedScores.length === 0) return null;
+  return Math.min(...playedScores);
+};
 ```
 
-This rounds to the nearest 10 to align with DDR's scoring system.
+### 2. Update GoalBadge
+
+Add `scoreMode` prop to display correct suffix:
+
+```typescript
+interface GoalBadgeProps {
+  targetType: GoalTargetType;
+  targetValue: string;
+  className?: string;
+  scoreMode?: 'target' | 'average';  // NEW
+}
+
+// In score section:
+if (targetType === 'score') {
+  const formattedScore = parseInt(targetValue, 10).toLocaleString();
+  const suffix = scoreMode === 'average' ? ' avg.' : '+';
+  return (
+    <div className={...}>
+      {formattedScore}{suffix}
+    </div>
+  );
+}
+```
+
+### 3. Progress Bar with Floor
+
+In `GoalCard.tsx` and `GoalDetail.tsx`:
+
+```typescript
+// For average score mode with floor
+const calculateProgress = (current: number, target: number, floor: number | null) => {
+  if (floor && floor > 0) {
+    const adjustedCurrent = Math.max(current - floor, 0);
+    const adjustedTarget = Math.max(target - floor, 1);
+    return Math.min((adjustedCurrent / adjustedTarget) * 100, 100);
+  }
+  // Fallback to standard calculation
+  return target > 0 ? Math.min((current / target) * 100, 100) : 0;
+};
+```
+
+### 4. Propagate scoreMode to GoalBadge
+
+Update these components to pass `scoreMode`:
+- `GoalCard.tsx` → `GoalBadge` (already has scoreMode prop)
+- `GoalPreviewCard.tsx` → `GoalBadge` (add scoreMode prop)
+- `Home.tsx` → `GoalCard` (already passes it)
+- `GoalDetail.tsx` → `GoalCard` (already passes it)
+
+---
+
+## Edge Cases
+
+| Scenario | Behavior |
+|----------|----------|
+| No played songs at creation | `score_floor` is NULL, use 0 as fallback |
+| All songs above target already | Floor still stored, but progress shows 100% |
+| User improves lowest score later | Floor stays fixed (captures starting point) |
+| Target mode goals | `score_floor` stays NULL, not used |
+
+---
+
+## Visual Example
+
+User creating "990,000 avg. on Expert 17s":
+- 8 songs match the criteria
+- Lowest score: 945,000
+- Current average: 968,500
+
+**Before (0-990,000 range):**
+```
+Progress: 98% [████████████████████████████████████████████████░░]
+```
+
+**After (945,000-990,000 range):**
+```
+Progress: 52% [██████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░]
+```
+
+The new visualization makes every 1,000-point improvement feel meaningful!
+
