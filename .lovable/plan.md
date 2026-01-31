@@ -1,68 +1,62 @@
 
-# Performance Improvements for Song Cards
 
-## Overview
+# Fix Song Detail Modal Flicker - Use Global Scores Cache
 
-The flicker occurs primarily in the **SongDetailModal** when clicking a song card. The modal currently makes fresh database calls on every open, despite the data already being available in the parent component's state.
+## Problem Analysis
 
-## Root Cause Analysis
+The current implementation causes a flicker because:
 
-| Issue | Location | Impact |
-|-------|----------|--------|
-| Fresh API calls on every modal open | `SongDetailModal.tsx` lines 114-176 | Loading spinner appears, causes flicker |
-| No caching for modal data | `SongDetailModal.tsx` uses `useState` not React Query | Each open = fresh fetch |
-| Image state reset on song change | `SongDetailModal.tsx` line 102-105 | Placeholder → image flash |
+1. **Partial data first**: `prepareChartsForModal` uses level-filtered data from Scores page state
+2. **Complete data second**: Modal fetches all 5 difficulties, causing a re-render
+3. **Visual flicker**: User sees 1-2 rows → then all 5 rows appear
 
-## Solution: Pass Available Data to Modal
+The Scores page fetches level-filtered data (`scores` state), but the modal needs ALL difficulties for a song.
 
-Since the Scores page already has:
-- All user scores for the current level (`scores` state)
-- All musicdb charts for the level (`musicDbCharts` state)
+## Solution: Use Global Scores Context
 
-We can derive the modal's data from what's already loaded, eliminating the need for additional API calls.
+The `ScoresProvider` already caches ALL user scores across all levels. By using this global cache instead of the level-filtered local state, we can instantly populate the modal with all played difficulties.
 
----
+**Key insight**: The global `useScores()` hook contains every score the user has played. We just need to filter it by `song_id` to get all played difficulties instantly.
 
 ## Implementation
 
-### 1. Extend Modal Props to Accept Pre-Loaded Data
+### 1. Import Global Scores in Scores.tsx
 
-**Current Modal Props:**
 ```typescript
-interface SongDetailModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  songId: number | null;
-  songName: string;
-  artist: string | null;
-  eamuseId: string | null;
+import { useScores } from '@/contexts/ScoresContext';
+```
+
+### 2. Get Global Scores Reference
+
+```typescript
+// Inside Scores component
+const { scores: globalScores } = useScores();
+```
+
+### 3. Update prepareChartsForModal to Use Global Scores
+
+Pass `globalScores` instead of the level-filtered `scores`:
+
+```typescript
+function prepareChartsForModal(
+  songId: number,
+  globalScores: ScoreWithSong[], // Use global scores (all levels)
+  musicDbCharts: MusicDbChart[]
+): PreloadedChart[] {
+  // Get ALL user's scores for this song from global cache
+  const scoresForSong = globalScores.filter(s => s.musicdb?.song_id === songId);
+  // ... rest of logic unchanged
 }
 ```
 
-**New Modal Props:**
-```typescript
-interface SongDetailModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  songId: number | null;
-  songName: string;
-  artist: string | null;
-  eamuseId: string | null;
-  // Pre-loaded data to avoid additional API calls
-  preloadedCharts?: ChartWithScore[];
-}
-```
-
-### 2. Prepare Modal Data in Parent (Scores.tsx)
-
-When a song is clicked, collect all difficulties for that song from the existing data:
+### 4. Update handleSongClick to Use Global Scores
 
 ```typescript
 const handleSongClick = useCallback((song: DisplaySong) => {
   if (!song.song_id) return;
   
-  // Collect all charts for this song from already-loaded data
-  const chartsForSong = prepareChartsForModal(song.song_id, scores, musicDbCharts);
+  // Use globalScores (all levels) instead of local scores (level-filtered)
+  const chartsForSong = prepareChartsForModal(song.song_id, globalScores, musicDbCharts);
   
   setSelectedSong({
     songId: song.song_id,
@@ -72,104 +66,64 @@ const handleSongClick = useCallback((song: DisplaySong) => {
     preloadedCharts: chartsForSong,
   });
   setIsDetailModalOpen(true);
-}, [scores, musicDbCharts]);
+}, [globalScores, musicDbCharts]); // Updated dependency
 ```
 
-### 3. Use Preloaded Data First, Fetch as Fallback
+### 5. Modal Only Fetches Missing Unplayed Data (No Flicker)
 
-In `SongDetailModal`, use preloaded data when available:
+Update modal logic to ONLY fetch if the preloaded data is insufficient, and NOT update existing rows:
 
 ```typescript
+// In SongDetailModal.tsx
 useEffect(() => {
-  if (!isOpen || !songId || !user) {
+  if (!isOpen || !songId) {
     setCharts([]);
-    return;
-  }
-
-  // If preloaded data provided, use it immediately
-  if (preloadedCharts && preloadedCharts.length > 0) {
-    setCharts(preloadedCharts);
     setLoading(false);
     return;
   }
 
-  // Fallback: fetch if no preloaded data (e.g., deep link to modal)
-  // ... existing fetch logic ...
-}, [isOpen, songId, user, preloadedCharts]);
-```
-
----
-
-## Additional Optimizations
-
-### 4. Memoize Chart Data Preparation
-
-Create a utility function to prepare modal data from existing state:
-
-```typescript
-function prepareChartsForModal(
-  songId: number,
-  scores: ScoreWithSong[],
-  musicDbCharts: MusicDbChart[]
-): ChartWithScore[] {
-  // Get all charts for this song
-  const chartsForSong = musicDbCharts.filter(c => c.song_id === songId);
+  const hasPreloadedData = preloadedCharts && preloadedCharts.length > 0;
   
-  // Build score map for O(1) lookup
-  const scoreMap = new Map(
-    scores
-      .filter(s => s.musicdb?.song_id === songId)
-      .map(s => [s.difficulty_name?.toUpperCase(), s])
-  );
+  if (hasPreloadedData) {
+    // Show preloaded data immediately
+    setCharts(preloadedCharts);
+    setLoading(false);
+    
+    // If we already have 5 difficulties, we're complete - no fetch needed
+    if (preloadedCharts.length >= 5) {
+      return;
+    }
+    
+    // Otherwise, fetch missing unplayed difficulties in background
+    // BUT: merge them without replacing existing data to avoid flicker
+  }
   
-  // Merge and sort by difficulty order
-  return chartsForSong
-    .map(chart => ({
-      id: chart.id,
-      difficulty_name: chart.difficulty_name ?? 'UNKNOWN',
-      difficulty_level: chart.difficulty_level ?? 0,
-      score: scoreMap.get(chart.difficulty_name?.toUpperCase())?.score ?? null,
-      rank: scoreMap.get(chart.difficulty_name?.toUpperCase())?.rank ?? null,
-      flare: scoreMap.get(chart.difficulty_name?.toUpperCase())?.flare ?? null,
-      halo: scoreMap.get(chart.difficulty_name?.toUpperCase())?.halo ?? null,
-      source_type: null, // Not in current data, could be added
-    }))
-    .sort((a, b) => DIFFICULTY_ORDER.indexOf(a.difficulty_name) - DIFFICULTY_ORDER.indexOf(b.difficulty_name));
-}
+  // Fetch complete data...
+  // When merging, preserve preloaded scores, only add NEW unplayed difficulties
+}, [isOpen, songId, preloadedCharts, user]);
 ```
 
-### 5. Optional: React Query for Modal with Caching
+The key change in the modal is: when fetching complete data, **merge rather than replace** - only add difficulties that aren't already in the preloaded data.
 
-For cases where modal is opened without parent data (e.g., direct link), wrap the modal's data fetch in React Query:
-
-```typescript
-const { data: fetchedCharts, isLoading } = useQuery({
-  queryKey: ['song-charts', songId, user?.id],
-  queryFn: () => fetchChartDataForSong(songId, user.id),
-  enabled: isOpen && !!songId && !preloadedCharts?.length,
-  staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-});
-```
-
----
-
-## Summary of Changes
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/scores/SongDetailModal.tsx` | Accept optional `preloadedCharts` prop, use when available |
-| `src/pages/Scores.tsx` | Prepare chart data from existing state when clicking a song |
-| `src/pages/Scores.tsx` | Update `SelectedSong` interface to include preloaded charts |
-
----
+| `src/pages/Scores.tsx` | Import `useScores`, use `globalScores` in `prepareChartsForModal` |
+| `src/components/scores/SongDetailModal.tsx` | Merge fetched data with preloaded, don't replace |
 
 ## Expected Outcome
 
-- **No loading spinner** when opening modal (data already available)
-- **Instant modal population** - charts appear immediately
-- **Reduced API calls** - 2 fewer requests per modal open
-- **Fallback preserved** - still works if opened without parent context
+- **Instant display**: All played difficulties appear immediately (from global cache)
+- **No flicker**: Existing rows never change, only new unplayed rows are added
+- **Complete data**: After background fetch, all 5 difficulties are shown
+- **Smooth UX**: If user has played 3 difficulties, those appear instantly; remaining 2 fade in
 
-## Limitations
+## Edge Cases
 
-This solution covers the most common case (clicking from Scores page). If the modal is opened from a different context without preloaded data (e.g., future deep link feature), it will still fetch from the API as a fallback.
+| Case | Behavior |
+|------|----------|
+| User has played all 5 difficulties | Instant complete display, no fetch |
+| User has played 0 difficulties | Brief fetch, then all 5 appear (unavoidable) |
+| User has played 2 difficulties | 2 appear instantly, 3 more added smoothly |
+
