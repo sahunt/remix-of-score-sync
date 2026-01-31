@@ -107,7 +107,7 @@ export function SongDetailModal({
     setUseFallback(false);
   }, [songId, eamuseId]);
 
-  // Use preloaded data immediately, then fetch complete data if needed
+  // Use preloaded data immediately, then MERGE missing unplayed difficulties (no flicker)
   useEffect(() => {
     if (!isOpen || !songId) {
       setCharts([]);
@@ -134,7 +134,7 @@ export function SongDetailModal({
       return;
     }
 
-    // Fetch complete data (show spinner only if no preloaded data)
+    // Fetch missing difficulties in background (NO spinner since we have preloaded data)
     if (!hasPreloadedData) {
       setLoading(true);
     }
@@ -172,26 +172,38 @@ export function SongDetailModal({
           (scoreData || []).map(s => [s.musicdb_id, s])
         );
 
-        // Merge charts with scores and sort by difficulty order
-        const mergedCharts: ChartWithScore[] = chartData
-          .map(chart => {
+        // MERGE: Preserve preloaded data, only add NEW unplayed difficulties
+        // This prevents flicker by keeping existing rows stable
+        const existingDifficulties = new Set(
+          (preloadedCharts ?? []).map(c => c.difficulty_name.toUpperCase())
+        );
+
+        const mergedCharts: ChartWithScore[] = [...(preloadedCharts ?? [])];
+        
+        // Add only charts that aren't already in preloaded data
+        for (const chart of chartData) {
+          const diffName = chart.difficulty_name?.toUpperCase() ?? 'UNKNOWN';
+          if (!existingDifficulties.has(diffName)) {
             const userScore = scoreMap.get(chart.id);
-            return {
+            mergedCharts.push({
               id: chart.id,
-              difficulty_name: chart.difficulty_name ?? 'UNKNOWN',
+              difficulty_name: diffName,
               difficulty_level: chart.difficulty_level ?? 0,
               score: userScore?.score ?? null,
               rank: userScore?.rank ?? null,
               flare: userScore?.flare ?? null,
               halo: userScore?.halo ?? null,
               source_type: userScore?.source_type ?? null,
-            };
-          })
-          .sort((a, b) => {
-            const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());
-            const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name.toUpperCase());
-            return aIndex - bIndex;
-          });
+            });
+          }
+        }
+        
+        // Sort by difficulty order (Challenge first, Beginner last)
+        mergedCharts.sort((a, b) => {
+          const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());
+          const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name.toUpperCase());
+          return aIndex - bIndex;
+        });
 
         setCharts(mergedCharts);
       } catch (err) {
