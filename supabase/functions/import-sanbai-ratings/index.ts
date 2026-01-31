@@ -86,23 +86,45 @@ Deno.serve(async (req) => {
       errors: [],
     };
 
-    // First, get all existing SP charts with their eamuse_id + difficulty_name
+    // Fetch ALL existing SP charts with their eamuse_id + difficulty_name
+    // Use pagination to get past the 1000 row default limit
     console.log("Fetching existing SP charts...");
-    const { data: existingCharts, error: fetchError } = await supabase
-      .from("musicdb")
-      .select("id, eamuse_id, difficulty_name")
-      .eq("playstyle", "SP")
-      .not("eamuse_id", "is", null);
+    
+    const allCharts: { id: number; eamuse_id: string | null; difficulty_name: string | null }[] = [];
+    let page = 0;
+    const PAGE_SIZE = 1000;
+    
+    while (true) {
+      const { data: pageData, error: fetchError } = await supabase
+        .from("musicdb")
+        .select("id, eamuse_id, difficulty_name")
+        .eq("playstyle", "SP")
+        .not("eamuse_id", "is", null)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    if (fetchError) {
-      throw new Error(`Failed to fetch charts: ${fetchError.message}`);
+      if (fetchError) {
+        throw new Error(`Failed to fetch charts page ${page}: ${fetchError.message}`);
+      }
+
+      if (!pageData || pageData.length === 0) {
+        break;
+      }
+
+      allCharts.push(...pageData);
+      console.log(`Fetched page ${page + 1}: ${pageData.length} charts (total: ${allCharts.length})`);
+      
+      if (pageData.length < PAGE_SIZE) {
+        break; // Last page
+      }
+      
+      page++;
     }
 
-    console.log(`Found ${existingCharts?.length || 0} SP charts with eamuse_id`);
+    console.log(`Found ${allCharts.length} SP charts with eamuse_id`);
 
     // Build a lookup map: "eamuse_id|difficulty_name" -> chart id
     const chartMap = new Map<string, number>();
-    for (const chart of existingCharts || []) {
+    for (const chart of allCharts) {
       if (chart.eamuse_id && chart.difficulty_name) {
         const key = `${chart.eamuse_id}|${chart.difficulty_name}`;
         chartMap.set(key, chart.id);
@@ -124,10 +146,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Matched ${updates.length} ratings to charts`);
+    console.log(`Matched ${updates.length} ratings to charts, ${result.not_found.length} not found`);
 
-    // Process updates in larger batches using upsert
-    const BATCH_SIZE = 500;
+    // Process updates in batches using Promise.all like the working function
+    const BATCH_SIZE = 50;
     const batches: { id: number; rating: number }[][] = [];
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
       batches.push(updates.slice(i, i + BATCH_SIZE));
@@ -137,10 +159,9 @@ Deno.serve(async (req) => {
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex];
-      console.log(`Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} updates)`);
-
-      // Update each record in the batch
-      for (const update of batch) {
+      
+      // Update each record in the batch in parallel
+      const updatePromises = batch.map(async (update) => {
         const { error } = await supabase
           .from("musicdb")
           .update({ sanbai_rating: update.rating })
@@ -148,12 +169,17 @@ Deno.serve(async (req) => {
 
         if (error) {
           result.errors.push(`Error updating id ${update.id}: ${error.message}`);
-        } else {
-          result.charts_updated++;
+          return 0;
         }
-      }
+        return 1;
+      });
 
-      console.log(`Batch ${batchIndex + 1} complete, total updated: ${result.charts_updated}`);
+      const counts = await Promise.all(updatePromises);
+      result.charts_updated += counts.reduce((a: number, b: number) => a + b, 0);
+
+      if ((batchIndex + 1) % 20 === 0 || batchIndex === batches.length - 1) {
+        console.log(`Processed batch ${batchIndex + 1}/${batches.length}, total updated: ${result.charts_updated}`);
+      }
     }
 
     console.log(`Import complete:
