@@ -29,7 +29,7 @@ interface CreateGoalSheetProps {
 type TargetType = 'lamp' | 'grade' | 'flare' | 'score';
 
 // Helper to format target display name
-function formatTargetDisplay(targetType: TargetType | null, targetValue: string | null): string {
+function formatTargetDisplay(targetType: TargetType | null, targetValue: string | null, scoreMode?: 'target' | 'average'): string {
   if (!targetValue) return '';
   
   if (targetType === 'lamp') {
@@ -43,6 +43,10 @@ function formatTargetDisplay(targetType: TargetType | null, targetValue: string 
     return flareOption ? `Flare ${flareOption.flareType.toUpperCase()}` : targetValue;
   }
   if (targetType === 'score') {
+    // Average mode: no "+", add "avg." suffix
+    if (scoreMode === 'average') {
+      return parseInt(targetValue).toLocaleString() + ' avg.';
+    }
     return parseInt(targetValue).toLocaleString() + '+';
   }
   return targetValue;
@@ -229,7 +233,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const generateName = () => {
     if (!targetValue) return '';
     
-    let target = formatTargetDisplay(targetType, targetValue);
+    let target = formatTargetDisplay(targetType, targetValue, scoreMode);
     
     // Build criteria description from rules
     let criteriaDesc = '';
