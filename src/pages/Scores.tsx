@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useScoresFilterState } from '@/hooks/useScoresFilterState';
+import { useUserStats } from '@/hooks/useUserStats';
 import { supabase } from '@/integrations/supabase/client';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
@@ -14,7 +15,6 @@ import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
 import rinonFilter from '@/assets/rinon-filter.png';
 import type { SavedFilter, FilterRule } from '@/components/filters/filterTypes';
-
 interface ScoreWithSong {
   id: string;
   score: number | null;
@@ -475,8 +475,13 @@ export default function Scores() {
     return { displayedScores: result, noPlayCount: noPlaySongs.length };
   }, [scores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection, musicDbCharts]);
 
-  // Calculate stats based on fully filtered scores (including active filters)
-  // Uses noPlayCount from displayedScores calculation for consistency
+  // Server-side stats from get_user_stats RPC - only fetch when a single level is selected
+  // This optimizes the common case of viewing a specific level's stats
+  const { data: serverStats, isLoading: statsLoading } = useUserStats(
+    selectedLevel !== null && activeFilters.length === 0 ? selectedLevel : null
+  );
+
+  // Calculate stats - use server-side when available, fall back to client-side for filtered views
   const { stats, averageScore } = useMemo(() => {
     // Return empty stats if no level is selected
     if (!shouldFetchScores) {
@@ -494,8 +499,27 @@ export default function Scores() {
       };
     }
     
-    // Use displayedScores which already has level + active filters applied
-    // But we need to compute stats before search query is applied
+    // Use server-side stats when available (single level, no filters)
+    if (serverStats && selectedLevel !== null && activeFilters.length === 0) {
+      // Calculate "Clear" as total minus MFC, PFC, AAA, and Fail
+      // This matches the existing UI logic where Clear = songs that passed but aren't top achievements
+      const clearCount = serverStats.total_count - serverStats.mfc_count - serverStats.pfc_count - serverStats.aaa_count - serverStats.fail_count;
+      
+      return {
+        stats: [
+          { label: 'Total', value: serverStats.total_count },
+          { label: transformHaloLabel('MFC') || 'MFC', value: serverStats.mfc_count },
+          { label: transformHaloLabel('PFC') || 'PFC', value: serverStats.pfc_count },
+          { label: 'AAA', value: serverStats.aaa_count },
+          { label: 'Clear', value: Math.max(0, clearCount) },
+          { label: 'Fail', value: serverStats.fail_count },
+          { label: '', value: noPlayCount, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
+        ],
+        averageScore: serverStats.avg_score,
+      };
+    }
+    
+    // Fall back to client-side calculation when filters are active
     let filteredForStats = [...scores];
     
     // Apply difficulty filter
@@ -555,7 +579,7 @@ export default function Scores() {
       ],
       averageScore: avgScore,
     };
-  }, [scores, selectedLevel, activeFilters, transformHaloLabel, shouldFetchScores, noPlayCount]);
+  }, [scores, selectedLevel, activeFilters, transformHaloLabel, shouldFetchScores, noPlayCount, serverStats]);
 
 
   const handleRemoveFilter = useCallback((id: string) => {
