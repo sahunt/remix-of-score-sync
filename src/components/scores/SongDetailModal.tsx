@@ -107,7 +107,7 @@ export function SongDetailModal({
     setUseFallback(false);
   }, [songId, eamuseId]);
 
-  // Use preloaded data if available, otherwise fetch
+  // Use preloaded data immediately, then fetch complete data if needed
   useEffect(() => {
     if (!isOpen || !songId) {
       setCharts([]);
@@ -115,22 +115,31 @@ export function SongDetailModal({
       return;
     }
 
-    // If preloaded data is available, use it immediately (no loading state)
-    if (preloadedCharts && preloadedCharts.length > 0) {
+    // If we have preloaded data, show it immediately (no loading spinner)
+    const hasPreloadedData = preloadedCharts && preloadedCharts.length > 0;
+    if (hasPreloadedData) {
       setCharts(preloadedCharts);
       setLoading(false);
+    }
+
+    // Check if preloaded data is complete (has all 5 SP difficulties)
+    const isComplete = hasPreloadedData && preloadedCharts.length >= 5;
+    
+    // Skip fetch if data is complete or no user
+    if (isComplete || !user) {
+      if (!hasPreloadedData) {
+        setCharts([]);
+        setLoading(false);
+      }
       return;
     }
 
-    // Fallback: fetch data if no preloaded charts (e.g., deep link to modal)
-    if (!user) {
-      setCharts([]);
-      setLoading(false);
-      return;
+    // Fetch complete data (show spinner only if no preloaded data)
+    if (!hasPreloadedData) {
+      setLoading(true);
     }
 
     const fetchData = async () => {
-      setLoading(true);
       try {
         // Fetch all SP charts for this song (exclude deleted)
         const { data: chartData, error: chartError } = await supabase
@@ -144,7 +153,7 @@ export function SongDetailModal({
 
         if (chartError) throw chartError;
         if (!chartData || chartData.length === 0) {
-          setCharts([]);
+          if (!hasPreloadedData) setCharts([]);
           return;
         }
 
@@ -187,7 +196,7 @@ export function SongDetailModal({
         setCharts(mergedCharts);
       } catch (err) {
         console.error('Error fetching song details:', err);
-        setCharts([]);
+        if (!hasPreloadedData) setCharts([]);
       } finally {
         setLoading(false);
       }
