@@ -17,6 +17,7 @@ import GoalDetail from "./pages/GoalDetail";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import AdminUpdateMappings from "./pages/AdminUpdateMappings";
+import AdminImportRatings from "./pages/AdminImportRatings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,6 +57,7 @@ const App = () => (
                   <Route path="/profile" element={<Profile />} />
                 </Route>
                 <Route path="/admin/update-mappings" element={<AdminUpdateMappings />} />
+                <Route path="/admin/import-ratings" element={<AdminImportRatings />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </TwelveMSModeProvider>
