@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/hooks/useAuth';
 import { useLastUpload } from '@/hooks/useLastUpload';
+import { useUploadInvalidation } from '@/hooks/useUploadInvalidation';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,7 @@ interface UploadResult {
 export default function UploadPage() {
   const { user } = useAuth();
   const { refetch } = useLastUpload();
+  const { invalidateAfterUpload } = useUploadInvalidation();
   const { toast } = useToast();
   const [state, setState] = useState<UploadState>('idle');
   const [isDragging, setIsDragging] = useState(false);
@@ -89,6 +91,8 @@ export default function UploadPage() {
         description: `Mapped ${uploadResult.mapped_rows} of ${uploadResult.total_rows} rows`,
       });
       
+      // Invalidate all score-related caches after successful upload
+      invalidateAfterUpload();
       await refetch();
     } else if (data.parse_status === 'failed') {
       // Failed
@@ -109,7 +113,7 @@ export default function UploadPage() {
       });
     }
     // If still 'processing' or 'pending', continue polling
-  }, [user, toast, refetch]);
+  }, [user, toast, refetch, invalidateAfterUpload]);
 
   // Start polling when we have an upload ID
   useEffect(() => {
