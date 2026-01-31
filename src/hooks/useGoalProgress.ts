@@ -292,6 +292,14 @@ export function getProximityLabel(
   }
 }
 
+// Calculate average score from played songs (rounded to nearest 10)
+function calculateAverageScore(scores: ScoreWithSong[]): number {
+  const playedWithScores = scores.filter(s => s.score !== null && !s.isUnplayed);
+  if (playedWithScores.length === 0) return 0;
+  const sum = playedWithScores.reduce((acc, s) => acc + (s.score ?? 0), 0);
+  return Math.round(sum / playedWithScores.length / 10) * 10;
+}
+
 // Hook to calculate goal progress from scores
 // reverseTransformHalo is used for 12MS mode goal matching
 export function useGoalProgress(
@@ -320,7 +328,33 @@ export function useGoalProgress(
       goal.criteria_match_mode
     );
 
-    // Split into completed vs not completed
+    // Handle average score mode differently
+    if (goal.target_type === 'score' && goal.score_mode === 'average') {
+      const currentAvg = calculateAverageScore(matchingScores);
+      const targetAvg = parseInt(goal.target_value, 10);
+      
+      // For average mode, all played songs contribute - sort by score descending
+      const allSongsSorted = [...matchingScores].sort((a, b) => {
+        const scoreA = a.score ?? -1;
+        const scoreB = b.score ?? -1;
+        return scoreB - scoreA;
+      });
+      
+      // Completed = songs that are above average target, Remaining = below
+      const completedSongs = allSongsSorted.filter(s => s.score !== null && s.score >= targetAvg);
+      const remainingSongs = allSongsSorted.filter(s => s.score === null || s.score < targetAvg);
+
+      return {
+        current: currentAvg,
+        total: targetAvg,
+        completedSongs,
+        remainingSongs,
+        suggestedSongs: [],
+        isLoading,
+      };
+    }
+
+    // Split into completed vs not completed (target mode)
     const completedSongs = matchingScores.filter(s => 
       meetsTarget(s, goal.target_type, goal.target_value, reverseTransformHalo)
     );

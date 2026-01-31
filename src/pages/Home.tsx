@@ -43,11 +43,17 @@ function GoalCardWithProgress({
 
   const progress = useGoalProgress(goal, scores, [], isLoadingScores, reverseTransformHalo);
 
+  // For average score mode, use the calculated avg values from progress
+  const isAverageMode = goal.target_type === 'score' && goal.score_mode === 'average';
+  
   // For "count" mode, use goal_count as the denominator
   // For "all" mode, use musicdb total (all matching charts)
-  const total = goal.goal_mode === 'count' 
-    ? (goal.goal_count ?? 0) 
-    : (musicDbTotal > 0 ? musicDbTotal : progress.total);
+  // For average score mode, total is the target average from progress
+  const total = isAverageMode
+    ? progress.total
+    : goal.goal_mode === 'count' 
+      ? (goal.goal_count ?? 0) 
+      : (musicDbTotal > 0 ? musicDbTotal : progress.total);
 
   return (
     <GoalCard
@@ -57,6 +63,7 @@ function GoalCardWithProgress({
       targetValue={goal.target_value}
       current={progress.current}
       total={total}
+      scoreMode={goal.score_mode}
     />
   );
 }

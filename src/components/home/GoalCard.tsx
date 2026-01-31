@@ -11,6 +11,7 @@ interface GoalCardProps {
   total: number;
   clickable?: boolean;
   className?: string;
+  scoreMode?: 'target' | 'average';
 }
 
 // Get progress bar color based on target type and value
@@ -41,6 +42,11 @@ function getProgressColor(targetType: GoalTargetType, targetValue: string): stri
   return 'bg-primary';
 }
 
+// Format score for display (e.g., 985000 -> "985,000")
+function formatScore(score: number): string {
+  return score.toLocaleString();
+}
+
 export function GoalCard({ 
   id,
   title, 
@@ -50,9 +56,13 @@ export function GoalCard({
   total,
   clickable = true,
   className,
+  scoreMode,
 }: GoalCardProps) {
   const navigate = useNavigate();
-  const progressPercent = total > 0 ? (current / total) * 100 : 0;
+  const isAverageMode = targetType === 'score' && scoreMode === 'average';
+  
+  // For average mode, progress is based on current avg vs target avg
+  const progressPercent = total > 0 ? Math.min((current / total) * 100, 100) : 0;
   const progressColor = getProgressColor(targetType, targetValue);
 
   const handleClick = () => {
@@ -85,7 +95,10 @@ export function GoalCard({
       
       {/* Progress text */}
       <p className="text-xs text-muted-foreground uppercase tracking-wide">
-        {current}/{total} completed
+        {isAverageMode 
+          ? `Avg. ${formatScore(current)} / ${formatScore(total)}`
+          : `${current}/${total} completed`
+        }
       </p>
       
       {/* Progress bar */}

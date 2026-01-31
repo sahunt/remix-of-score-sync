@@ -176,7 +176,10 @@ export default function GoalDetail() {
             targetType={goal.target_type as 'lamp' | 'grade' | 'flare' | 'score'}
             targetValue={goal.target_value}
             current={progress.current}
-            total={musicDbTotal > 0 ? musicDbTotal : progress.total}
+            total={goal.target_type === 'score' && goal.score_mode === 'average' 
+              ? progress.total 
+              : (musicDbTotal > 0 ? musicDbTotal : progress.total)}
+            scoreMode={goal.score_mode as 'target' | 'average' | undefined}
           />
         </div>
 
