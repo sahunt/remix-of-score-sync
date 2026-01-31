@@ -34,6 +34,7 @@ export type Database = {
           name_romanized: string | null
           playstyle: string | null
           rank: string | null
+          sanbai_rating: number | null
           score: number | null
           series: number | null
           song_id: number
@@ -61,6 +62,7 @@ export type Database = {
           name_romanized?: string | null
           playstyle?: string | null
           rank?: string | null
+          sanbai_rating?: number | null
           score?: number | null
           series?: number | null
           song_id: number
@@ -88,6 +90,7 @@ export type Database = {
           name_romanized?: string | null
           playstyle?: string | null
           rank?: string | null
+          sanbai_rating?: number | null
           score?: number | null
           series?: number | null
           song_id?: number
