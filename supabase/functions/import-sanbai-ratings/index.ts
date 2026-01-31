@@ -66,16 +66,13 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch CSV from public folder
-    const csvUrl = `${supabaseUrl.replace('.supabase.co', '.lovableproject.com')}/sanbai_difficulty_ratings.csv`;
-    console.log(`Fetching CSV from: ${csvUrl}`);
-
-    const csvResponse = await fetch(csvUrl);
-    if (!csvResponse.ok) {
-      throw new Error(`Failed to fetch CSV: ${csvResponse.status}`);
+    // Get CSV content from request body
+    const { csvContent } = await req.json();
+    
+    if (!csvContent || typeof csvContent !== "string") {
+      throw new Error("Missing csvContent in request body");
     }
 
-    const csvContent = await csvResponse.text();
     console.log(`CSV content length: ${csvContent.length} characters`);
 
     // Parse all CSV lines

@@ -24,8 +24,17 @@ export default function AdminImportRatings() {
     setResult(null);
 
     try {
+      // Fetch CSV from public folder
+      const csvResponse = await fetch("/sanbai_difficulty_ratings.csv");
+      if (!csvResponse.ok) {
+        throw new Error(`Failed to load CSV file: ${csvResponse.status}`);
+      }
+      const csvContent = await csvResponse.text();
+
+      // Send CSV content to edge function
       const { data, error: fnError } = await supabase.functions.invoke(
-        "import-sanbai-ratings"
+        "import-sanbai-ratings",
+        { body: { csvContent } }
       );
 
       if (fnError) {
@@ -106,9 +115,9 @@ export default function AdminImportRatings() {
         )}
 
         {result && (
-          <Card className="border-green-500">
+          <Card className="border-primary">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-green-600">
+              <CardTitle className="flex items-center gap-2 text-primary">
                 <CheckCircle className="h-5 w-5" />
                 Import Complete
               </CardTitle>
@@ -121,7 +130,7 @@ export default function AdminImportRatings() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Charts Updated</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-2xl font-bold text-primary">
                     {result.charts_updated}
                   </p>
                 </div>
