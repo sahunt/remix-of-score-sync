@@ -148,8 +148,8 @@ Deno.serve(async (req) => {
 
     console.log(`Matched ${updates.length} ratings to charts, ${result.not_found.length} not found`);
 
-    // Process updates in batches using Promise.all like the working function
-    const BATCH_SIZE = 50;
+    // Process updates in smaller batches with delays to avoid rate limiting
+    const BATCH_SIZE = 25;
     const batches: { id: number; rating: number }[][] = [];
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
       batches.push(updates.slice(i, i + BATCH_SIZE));
@@ -160,24 +160,46 @@ Deno.serve(async (req) => {
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex];
       
-      // Update each record in the batch in parallel
-      const updatePromises = batch.map(async (update) => {
-        const { error } = await supabase
-          .from("musicdb")
-          .update({ sanbai_rating: update.rating })
-          .eq("id", update.id);
+      // Update each record in the batch sequentially to avoid overwhelming the API
+      for (const update of batch) {
+        try {
+          const { error } = await supabase
+            .from("musicdb")
+            .update({ sanbai_rating: update.rating })
+            .eq("id", update.id);
 
-        if (error) {
-          result.errors.push(`Error updating id ${update.id}: ${error.message}`);
-          return 0;
+          if (error) {
+            // Check if error message looks like HTML (rate limit/500 error)
+            if (error.message.includes("<!DOCTYPE") || error.message.includes("<html")) {
+              result.errors.push(`Rate limit hit at id ${update.id}, waiting...`);
+              // Wait longer and retry once
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              const { error: retryError } = await supabase
+                .from("musicdb")
+                .update({ sanbai_rating: update.rating })
+                .eq("id", update.id);
+              if (!retryError) {
+                result.charts_updated++;
+              } else {
+                result.errors.push(`Retry failed for id ${update.id}`);
+              }
+            } else {
+              result.errors.push(`Error updating id ${update.id}: ${error.message}`);
+            }
+          } else {
+            result.charts_updated++;
+          }
+        } catch (e) {
+          result.errors.push(`Exception updating id ${update.id}: ${e}`);
         }
-        return 1;
-      });
+      }
 
-      const counts = await Promise.all(updatePromises);
-      result.charts_updated += counts.reduce((a: number, b: number) => a + b, 0);
+      // Add delay between batches to avoid rate limiting
+      if (batchIndex < batches.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
 
-      if ((batchIndex + 1) % 20 === 0 || batchIndex === batches.length - 1) {
+      if ((batchIndex + 1) % 50 === 0 || batchIndex === batches.length - 1) {
         console.log(`Processed batch ${batchIndex + 1}/${batches.length}, total updated: ${result.charts_updated}`);
       }
     }
