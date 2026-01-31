@@ -87,43 +87,71 @@ interface SelectedSong {
 
 /**
  * Prepare chart data for the modal from already-loaded state.
- * This eliminates the need for additional API calls when opening the modal.
+ * Uses scores data (all levels user has played) combined with musicDbCharts (current level).
+ * This provides instant display for played charts, reducing perceived load time.
  */
 function prepareChartsForModal(
   songId: number,
   scores: ScoreWithSong[],
   musicDbCharts: MusicDbChart[]
 ): PreloadedChart[] {
-  // Get all SP charts for this song from musicdb
+  // Get all user's scores for this song (covers ALL levels user has played)
+  const scoresForSong = scores.filter(s => s.musicdb?.song_id === songId);
+  
+  // Get any charts from musicDbCharts (may only be current level, but useful for no-play songs)
   const chartsForSong = musicDbCharts.filter(c => c.song_id === songId);
   
-  // Build score map for O(1) lookup by difficulty name
+  // Build score map by difficulty name for O(1) lookup
   const scoreMap = new Map(
-    scores
-      .filter(s => s.musicdb?.song_id === songId)
-      .map(s => [s.difficulty_name?.toUpperCase(), s])
+    scoresForSong.map(s => [s.difficulty_name?.toUpperCase(), s])
   );
   
-  // Merge charts with scores and sort by difficulty order
-  return chartsForSong
-    .map(chart => {
-      const userScore = scoreMap.get(chart.difficulty_name?.toUpperCase());
-      return {
+  // Track which difficulties we've added
+  const seenDifficulties = new Set<string>();
+  const result: PreloadedChart[] = [];
+  
+  // First, add all charts from user's scores (these are played charts with full data)
+  for (const score of scoresForSong) {
+    const diffName = score.difficulty_name?.toUpperCase() ?? 'UNKNOWN';
+    if (!seenDifficulties.has(diffName)) {
+      seenDifficulties.add(diffName);
+      result.push({
+        id: 0, // Not needed for display
+        difficulty_name: diffName,
+        difficulty_level: score.difficulty_level ?? 0,
+        score: score.score,
+        rank: score.rank,
+        flare: score.flare,
+        halo: score.halo,
+        source_type: null,
+      });
+    }
+  }
+  
+  // Then, add any charts from musicDbCharts that user hasn't played (no-play at current level)
+  for (const chart of chartsForSong) {
+    const diffName = chart.difficulty_name?.toUpperCase() ?? 'UNKNOWN';
+    if (!seenDifficulties.has(diffName)) {
+      seenDifficulties.add(diffName);
+      result.push({
         id: chart.id,
-        difficulty_name: chart.difficulty_name ?? 'UNKNOWN',
+        difficulty_name: diffName,
         difficulty_level: chart.difficulty_level ?? 0,
-        score: userScore?.score ?? null,
-        rank: userScore?.rank ?? null,
-        flare: userScore?.flare ?? null,
-        halo: userScore?.halo ?? null,
-        source_type: null, // Not tracked in current queries
-      };
-    })
-    .sort((a, b) => {
-      const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());
-      const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name.toUpperCase());
-      return aIndex - bIndex;
-    });
+        score: null,
+        rank: null,
+        flare: null,
+        halo: null,
+        source_type: null,
+      });
+    }
+  }
+  
+  // Sort by difficulty order (Challenge first, Beginner last)
+  return result.sort((a, b) => {
+    const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
+    const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
+    return aIndex - bIndex;
+  });
 }
 
 // Filter matching logic
