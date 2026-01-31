@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.import-romanized-titles]
 verify_jwt = false
+
+[functions.import-era]
+verify_jwt = false

@@ -20,6 +20,7 @@ import AdminUpdateMappings from "./pages/AdminUpdateMappings";
 import AdminImportRatings from "./pages/AdminImportRatings";
 import AdminImportBias from "./pages/AdminImportBias";
 import AdminImportRomanized from "./pages/AdminImportRomanized";
+import AdminImportEra from "./pages/AdminImportEra";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +63,7 @@ const App = () => (
                 <Route path="/admin/import-ratings" element={<AdminImportRatings />} />
                 <Route path="/admin/import-bias" element={<AdminImportBias />} />
                 <Route path="/admin/import-romanized" element={<AdminImportRomanized />} />
+                <Route path="/admin/import-era" element={<AdminImportEra />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </TwelveMSModeProvider>
