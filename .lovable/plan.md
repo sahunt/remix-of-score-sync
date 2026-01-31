@@ -1,201 +1,112 @@
 
+# Import Romanized Titles to musicdb
 
-# Offset/Bias Feature - Database Schema
+## Overview
 
-## Feature Overview
+Populate the `name_romanized` field in musicdb using the CSV that maps `eamuse_id` to `romanized_title`. The CSV contains ~1,390 entries, each updating ALL chart rows in musicdb that share the same `eamuse_id` (multiple difficulties per song = ~7-8 rows per song on average).
 
-This feature allows users to adjust timing offsets for DDR songs based on audio sync data:
+## Key Insight
 
-1. Store a **master bias value per SONG** (from your static list)
-2. Allow users to **override bias per SONG** (optional, personal preference)
-3. Allow users to set a **reference song** in their profile to adjust all calculated offsets
+Unlike chart-level updates, this is a **song-level field** - one `eamuse_id` in the CSV should update ALL musicdb rows with that `eamuse_id`. This means ~1,390 CSV rows will update ~10,600+ database rows.
 
-## How the Math Works
+## Strategy: Database RPC Function
 
-Based on the finaloffset.telp.gg website:
+Individual UPDATE calls would hit rate limits and timeout. Instead, create a PostgreSQL function that processes the entire update in a **single transaction**:
 
 ```text
-Final Offset = Target Song Bias - Reference Song Bias
-
-Example:
-- Reference song "3y3s" has bias: -0.9ms
-- Target song "NGO" has bias: +12.4ms
-- Final offset: 12.4 - (-0.9) = 13.3ms early
+CSV (1,390 rows)
+    ↓
+Edge Function (parses CSV, sends JSONB array)
+    ↓
+RPC Function (bulk_update_romanized_titles)
+    ↓
+Single UPDATE statement with FROM clause
+    ↓
+All ~10,600 rows updated in one go
 ```
 
 ---
 
 ## Database Changes
 
-### 1. New Table: `song_bias` (Master Bias Values)
-
-Stores the static bias values per song from your imported list.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | uuid | Primary key |
-| `song_id` | bigint | Unique song identifier |
-| `eamuse_id` | text | E-Amusement ID for external matching |
-| `bias_ms` | numeric(6,2) | Bias value in milliseconds |
-| `confidence` | smallint | Optional: confidence percentage (0-100) |
-| `created_at` | timestamptz | Record creation time |
-| `updated_at` | timestamptz | Last update time |
-
-### 2. New Table: `user_song_offsets` (User Overrides)
-
-Stores user-specific offset overrides per song.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | uuid | Primary key |
-| `user_id` | uuid | User identifier |
-| `song_id` | bigint | The song being overridden |
-| `custom_bias_ms` | numeric(6,2) | User's custom bias value in ms |
-| `created_at` | timestamptz | Record creation time |
-| `updated_at` | timestamptz | Last update time |
-
-### 3. Modify Table: `user_profiles`
-
-| New Column | Type | Description |
-|------------|------|-------------|
-| `reference_song_id` | bigint | The song the user considers "on sync" (nullable) |
-
----
-
-## Schema Diagram
-
-```text
-┌─────────────────────────────────┐
-│          musicdb                │
-│  (existing - chart-level)       │
-├─────────────────────────────────┤
-│  id (PK)                        │
-│  song_id ─────────────┐         │
-│  eamuse_id            │         │
-│  name                 │         │
-│  ...                  │         │
-└───────────────────────│─────────┘
-                        │
-    ┌───────────────────┼───────────────────┐
-    │                   │                   │
-    ▼                   ▼                   ▼
-┌───────────────┐  ┌───────────────┐  ┌─────────────────────┐
-│  song_bias    │  │ user_profiles │  │ user_song_offsets   │
-│  (NEW)        │  │ (MODIFIED)    │  │ (NEW)               │
-├───────────────┤  ├───────────────┤  ├─────────────────────┤
-│ song_id (UK)  │  │ user_id       │  │ user_id             │
-│ eamuse_id     │  │ display_name  │  │ song_id             │
-│ bias_ms       │  │ reference_    │  │ custom_bias_ms      │
-│ confidence    │  │   song_id     │  │                     │
-└───────────────┘  └───────────────┘  └─────────────────────┘
-```
-
----
-
-## SQL Migration
+### New RPC Function: `bulk_update_romanized_titles`
 
 ```sql
--- 1. Create song_bias table for master bias values
-CREATE TABLE public.song_bias (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  song_id BIGINT NOT NULL UNIQUE,
-  eamuse_id TEXT,
-  bias_ms NUMERIC(6,2) NOT NULL,
-  confidence SMALLINT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Create index on eamuse_id for faster lookups during import
-CREATE INDEX idx_song_bias_eamuse_id ON public.song_bias(eamuse_id);
-
--- Enable RLS but allow all authenticated users to read
-ALTER TABLE public.song_bias ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Authenticated users can read song_bias"
-  ON public.song_bias
-  FOR SELECT
-  TO authenticated
-  USING (true);
-
--- 2. Create user_song_offsets table for user overrides
-CREATE TABLE public.user_song_offsets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  song_id BIGINT NOT NULL,
-  custom_bias_ms NUMERIC(6,2) NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(user_id, song_id)
-);
-
--- Enable RLS
-ALTER TABLE public.user_song_offsets ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view their own offsets"
-  ON public.user_song_offsets
-  FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert their own offsets"
-  ON public.user_song_offsets
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update their own offsets"
-  ON public.user_song_offsets
-  FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own offsets"
-  ON public.user_song_offsets
-  FOR DELETE
-  TO authenticated
-  USING (auth.uid() = user_id);
-
--- 3. Add reference_song_id to user_profiles
-ALTER TABLE public.user_profiles
-  ADD COLUMN reference_song_id BIGINT;
-
--- 4. Create triggers for updated_at on new tables
-CREATE TRIGGER update_song_bias_updated_at
-  BEFORE UPDATE ON public.song_bias
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_user_song_offsets_updated_at
-  BEFORE UPDATE ON public.user_song_offsets
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+CREATE OR REPLACE FUNCTION bulk_update_romanized_titles(
+  updates JSONB
+)
+RETURNS TABLE(updated_count INTEGER) 
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = 'public'
+AS $$
+BEGIN
+  UPDATE musicdb m
+  SET name_romanized = (u->>'romanized_title')
+  FROM jsonb_array_elements(updates) AS u
+  WHERE m.eamuse_id = (u->>'eamuse_id');
+  
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN QUERY SELECT updated_count;
+END;
+$$;
 ```
 
----
-
-## Data Import Strategy
-
-For the master `song_bias` table, you'll provide a CSV with:
-- `eamuse_id` (for matching to musicdb)
-- `bias_ms` value
-- Optional: `confidence` percentage
-
-An edge function will:
-1. Parse the CSV
-2. Look up `song_id` from musicdb using `eamuse_id`
-3. UPSERT into `song_bias` table with both `song_id` and `eamuse_id`
+**Why this works:**
+- Processes all updates in a single transaction
+- No rate limit issues (one database call)
+- No timeout issues (PostgreSQL handles the batch efficiently)
+- Matches the proven pattern from the Sanbai ratings bulk import
 
 ---
 
-## Summary of Changes
+## Implementation Components
 
-| Change Type | Object | Description |
-|-------------|--------|-------------|
-| CREATE | `song_bias` table | Master bias values per song (includes eamuse_id) |
-| CREATE | `user_song_offsets` table | User override biases per song |
-| ALTER | `user_profiles` table | Add `reference_song_id` column |
-| CREATE | 1 index | Index on `song_bias.eamuse_id` for fast imports |
-| CREATE | 2 triggers | Auto-update `updated_at` timestamps |
-| CREATE | 5 RLS policies | Secure access to new tables |
+### 1. Edge Function: `import-romanized-titles`
 
+Receives CSV content, parses it, and calls the RPC function:
+
+| Step | Action |
+|------|--------|
+| 1 | Parse CSV into array of `{eamuse_id, romanized_title}` |
+| 2 | Validate 32-character eamuse_ids |
+| 3 | Convert to JSONB array |
+| 4 | Call `bulk_update_romanized_titles` RPC |
+| 5 | Return count of updated rows |
+
+### 2. Admin Page: `/admin/import-romanized`
+
+Simple UI matching the existing import pages:
+- Fetches CSV from public folder
+- Sends to edge function
+- Displays results (total in CSV, rows updated)
+
+### 3. Data File
+
+Copy CSV to `public/romanized_titles.csv` for access by admin tool.
+
+---
+
+## Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `public/romanized_titles.csv` | Copy uploaded CSV |
+| Migration SQL | Create `bulk_update_romanized_titles` RPC function |
+| `supabase/functions/import-romanized-titles/index.ts` | New edge function |
+| `src/pages/AdminImportRomanized.tsx` | New admin page |
+| `src/App.tsx` | Add route for admin page |
+
+---
+
+## Expected Results
+
+| Metric | Expected Value |
+|--------|----------------|
+| CSV Rows | ~1,390 |
+| DB Rows Updated | ~10,600+ |
+| Match Rate | ~100% (all eamuse_ids should exist in musicdb) |
+
+## Success Criteria
+
+The import MUST complete in a single run without timeouts or partial updates, as the RPC function processes everything in one atomic transaction.
