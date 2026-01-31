@@ -391,6 +391,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bulk_update_romanized_titles: {
+        Args: { updates: Json }
+        Returns: {
+          updated_count: number
+        }[]
+      }
       get_user_stats: {
         Args: {
           p_difficulty_level?: number
