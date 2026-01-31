@@ -4,6 +4,7 @@ import { use12MSMode } from '@/hooks/use12MSMode';
 import { useScoresFilterState } from '@/hooks/useScoresFilterState';
 import { useUserStats } from '@/hooks/useUserStats';
 import { useScores } from '@/contexts/ScoresContext';
+import { useSongChartsCache } from '@/hooks/useSongChartsCache';
 import { supabase } from '@/integrations/supabase/client';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
@@ -87,69 +88,8 @@ interface SelectedSong {
   preloadedCharts?: PreloadedChart[];
 }
 
-/**
- * Prepare chart data for the modal using the GLOBAL scores cache.
- * This uses ALL user scores (not filtered by level) to instantly show all played difficulties.
- * musicDbCharts is only used to add unplayed charts at the currently selected level.
- */
-function prepareChartsForModal(
-  songId: number,
-  globalScores: GlobalScoreWithSong[],
-  musicDbCharts: MusicDbChart[]
-): PreloadedChart[] {
-  // Get ALL user's scores for this song from global cache (all levels)
-  const scoresForSong = globalScores.filter(s => s.musicdb?.song_id === songId);
-  
-  // Get any charts from musicDbCharts (may only be current level, but useful for no-play songs)
-  const chartsForSong = musicDbCharts.filter(c => c.song_id === songId);
-  
-  // Track which difficulties we've added
-  const seenDifficulties = new Set<string>();
-  const result: PreloadedChart[] = [];
-  
-  // First, add all charts from user's scores (these are played charts with full data)
-  for (const score of scoresForSong) {
-    const diffName = score.difficulty_name?.toUpperCase() ?? 'UNKNOWN';
-    if (!seenDifficulties.has(diffName)) {
-      seenDifficulties.add(diffName);
-      result.push({
-        id: score.musicdb_id ?? 0,
-        difficulty_name: diffName,
-        difficulty_level: score.difficulty_level ?? 0,
-        score: score.score,
-        rank: score.rank,
-        flare: score.flare,
-        halo: score.halo,
-        source_type: null,
-      });
-    }
-  }
-  
-  // Then, add any charts from musicDbCharts that user hasn't played (no-play at current level)
-  for (const chart of chartsForSong) {
-    const diffName = chart.difficulty_name?.toUpperCase() ?? 'UNKNOWN';
-    if (!seenDifficulties.has(diffName)) {
-      seenDifficulties.add(diffName);
-      result.push({
-        id: chart.id,
-        difficulty_name: diffName,
-        difficulty_level: chart.difficulty_level ?? 0,
-        score: null,
-        rank: null,
-        flare: null,
-        halo: null,
-        source_type: null,
-      });
-    }
-  }
-  
-  // Sort by difficulty order (Challenge first, Beginner last)
-  return result.sort((a, b) => {
-    const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
-    const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
-    return aIndex - bIndex;
-  });
-}
+// No longer needed - prepareChartsForModal logic is now inline in handleSongClick
+// using the songChartsCache for complete data
 
 // Filter matching logic
 function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
@@ -258,6 +198,7 @@ export default function Scores() {
   const { user } = useAuth();
   const { transformHaloLabel } = use12MSMode();
   const { scores: globalScores } = useScores(); // Global cache for modal preloading
+  const { data: songChartsCache } = useSongChartsCache(); // Pre-cached all SP charts by song_id
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
   const [musicDbCharts, setMusicDbCharts] = useState<MusicDbChart[]>([]);
   const [loading, setLoading] = useState(false); // Start as false - no initial load
@@ -283,9 +224,36 @@ export default function Scores() {
   const handleSongClick = useCallback((song: DisplaySong) => {
     if (!song.song_id) return;
     
-    // Use GLOBAL scores cache (all levels) to instantly show all played difficulties
-    // This eliminates flicker by providing complete data for played charts
-    const preloadedCharts = prepareChartsForModal(song.song_id, globalScores, musicDbCharts);
+    // Get ALL charts for this song from the pre-cached data
+    const allChartsForSong = songChartsCache?.get(song.song_id) ?? [];
+    
+    // Build score lookup from global scores cache (all user's played scores)
+    const scoreMap = new Map(
+      globalScores
+        .filter(s => s.musicdb?.song_id === song.song_id)
+        .map(s => [s.difficulty_name?.toUpperCase(), s])
+    );
+    
+    // Merge: all charts + user scores for instant, complete modal data
+    const preloadedCharts: PreloadedChart[] = allChartsForSong
+      .map(chart => {
+        const userScore = scoreMap.get(chart.difficulty_name);
+        return {
+          id: chart.id,
+          difficulty_name: chart.difficulty_name,
+          difficulty_level: chart.difficulty_level,
+          score: userScore?.score ?? null,
+          rank: userScore?.rank ?? null,
+          flare: userScore?.flare ?? null,
+          halo: userScore?.halo ?? null,
+          source_type: null,
+        };
+      })
+      .sort((a, b) => {
+        const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
+        const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
+        return aIndex - bIndex;
+      });
     
     setSelectedSong({
       songId: song.song_id,
@@ -295,7 +263,7 @@ export default function Scores() {
       preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, [globalScores, musicDbCharts]);
+  }, [globalScores, songChartsCache]);
 
   const handleCloseModal = useCallback(() => {
     setIsDetailModalOpen(false);
