@@ -28,6 +28,7 @@ interface ScoreWithSong {
   rank: string | null;
   flare: number | null;
   halo: string | null;
+  source_type: string | null;
   musicdb: {
     name: string | null;
     artist: string | null;
@@ -35,6 +36,7 @@ interface ScoreWithSong {
     song_id: number | null;
     name_romanized: string | null;
     era: number | null;
+    deleted?: boolean | null;
   } | null;
 }
 
@@ -231,42 +233,47 @@ export default function Scores() {
     // Get ALL charts for this song from the pre-cached data
     const allChartsForSong = songChartsCache?.get(song.song_id) ?? [];
     
-    // Build score lookup from LOCAL scores state (matches what's displayed in the list)
-    // This fixes the bug where globalScores cache was out of sync with local fetched data
-    const scoreMap = new Map(
-      scores
-        .filter(s => s.musicdb?.song_id === song.song_id)
-        .map(s => [s.difficulty_name?.toUpperCase(), s])
-    );
+    let preloadedCharts: PreloadedChart[] | undefined;
     
-    // Merge: all charts + user scores for instant, complete modal data
-    const preloadedCharts: PreloadedChart[] = allChartsForSong
-      .map(chart => {
-        const userScore = scoreMap.get(chart.difficulty_name);
-        return {
-          id: chart.id,
-          difficulty_name: chart.difficulty_name,
-          difficulty_level: chart.difficulty_level,
-          score: userScore?.score ?? null,
-          rank: userScore?.rank ?? null,
-          flare: userScore?.flare ?? null,
-          halo: userScore?.halo ?? null,
-          source_type: null,
-        };
-      })
-      .sort((a, b) => {
-        const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
-        const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
-        return aIndex - bIndex;
-      });
+    // Only preload if we have charts from the cache
+    // Otherwise let modal fetch directly (handles edge cases like deleted songs)
+    if (allChartsForSong.length > 0) {
+      // Build score lookup from LOCAL scores state (matches what's displayed in the list)
+      const scoreMap = new Map(
+        scores
+          .filter(s => s.musicdb?.song_id === song.song_id)
+          .map(s => [s.difficulty_name?.toUpperCase(), s])
+      );
+      
+      // Merge: all charts + user scores for instant, complete modal data
+      preloadedCharts = allChartsForSong
+        .map(chart => {
+          const userScore = scoreMap.get(chart.difficulty_name);
+          return {
+            id: chart.id,
+            difficulty_name: chart.difficulty_name,
+            difficulty_level: chart.difficulty_level,
+            score: userScore?.score ?? null,
+            rank: userScore?.rank ?? null,
+            flare: userScore?.flare ?? null,
+            halo: userScore?.halo ?? null,
+            source_type: userScore?.source_type ?? null,
+          };
+        })
+        .sort((a, b) => {
+          const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
+          const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
+          return aIndex - bIndex;
+        });
+    }
     
     setSelectedSong({
       songId: song.song_id,
       songName: song.name ?? 'Unknown Song',
       artist: song.artist,
       eamuseId: song.eamuse_id,
-      era: song.era ?? null, // Explicitly coerce undefined to null for era=0 Classic support
-      preloadedCharts,
+      era: song.era ?? null,
+      preloadedCharts, // undefined triggers modal fetch for edge cases
     });
     setIsDetailModalOpen(true);
   }, [scores, songChartsCache]);
@@ -315,13 +322,15 @@ export default function Scores() {
             rank,
             flare,
             halo,
+            source_type,
             musicdb (
               name,
               artist,
               eamuse_id,
               song_id,
               name_romanized,
-              era
+              era,
+              deleted
             )
           `)
           .eq('user_id', user.id)
@@ -364,7 +373,12 @@ export default function Scores() {
           return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
         });
         
-        setScores(sortedData);
+        // Filter out scores for deleted songs (matches useSongChartsCache behavior)
+        const validScores = sortedData.filter(s => 
+          s.musicdb !== null && s.musicdb.deleted !== true
+        );
+        
+        setScores(validScores);
       } catch (err) {
         console.error('Error fetching scores:', err);
       } finally {
@@ -447,6 +461,7 @@ export default function Scores() {
           rank: song.rank,
           flare: song.flare,
           halo: song.halo,
+          source_type: null,
           musicdb: {
             name: song.name,
             artist: song.artist,
