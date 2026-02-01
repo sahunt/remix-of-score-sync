@@ -4,6 +4,7 @@ import { useGoal, useGoals } from '@/hooks/useGoals';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useMusicDbCount } from '@/hooks/useMusicDbCount';
 import { useUserScores } from '@/hooks/useUserScores';
+import { useScores } from '@/contexts/ScoresContext';
 import { useAllChartsCache, filterChartsByCriteria } from '@/hooks/useAllChartsCache';
 import { useSongChartsCache } from '@/hooks/useSongChartsCache';
 import { use12MSMode } from '@/hooks/use12MSMode';
@@ -65,6 +66,9 @@ export default function GoalDetail() {
   // Use the cached all-charts data instead of a separate query per goal
   // This eliminates redundant musicdb queries - the cache is shared across all goals
   const { data: allCharts = [] } = useAllChartsCache();
+  
+  // Use global scores cache for modal preloading (all difficulties for any song)
+  const { scores: globalScores } = useScores();
   
   // Pre-cached all SP charts by song_id (for modal preloading)
   const { data: songChartsCache } = useSongChartsCache();
@@ -131,9 +135,9 @@ export default function GoalDetail() {
     
     // Only preload if we have charts from the cache
     if (allChartsForSong.length > 0) {
-      // Build score lookup from all scores for this goal
+      // Build score lookup from ALL user scores (not goal-filtered)
       const scoreMap = new Map(
-        scores
+        globalScores
           .filter(s => (s.musicdb?.song_id ?? s.song_id) === songId)
           .map(s => [s.difficulty_name?.toUpperCase(), s])
       );
@@ -169,7 +173,7 @@ export default function GoalDetail() {
       preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, [scores, songChartsCache]);
+  }, [globalScores, songChartsCache]);
 
   const handleBack = () => {
     navigate('/home');

@@ -91,9 +91,9 @@ export default function Scores() {
     
     // Only preload if we have charts from the cache
     if (allChartsForSong.length > 0) {
-      // Build score lookup from filtered scores (matches what's displayed in the list)
+      // Build score lookup from ALL user scores (not level-filtered)
       const scoreMap = new Map(
-        filteredScores
+        globalScores
           .filter(s => s.musicdb?.song_id === song.song_id)
           .map(s => [s.difficulty_name?.toUpperCase(), s])
       );
@@ -129,7 +129,7 @@ export default function Scores() {
       preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, [filteredScores, songChartsCache]);
+  }, [globalScores, songChartsCache]);
 
   const handleCloseModal = useCallback(() => {
     setIsDetailModalOpen(false);
