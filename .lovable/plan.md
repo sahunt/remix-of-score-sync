@@ -1,65 +1,152 @@
-# Performance Audit: Edi (DDR Score Tracker)
 
-## Status: ✅ All Issues Complete
+# Plan: Enable Song Detail Modal on Goal Detail Page
 
-All 7 optimizations from the audit have been implemented:
-
-| Issue | Status | Impact |
-|-------|--------|--------|
-| #1 Extract matchesRule | ✅ Done | Eliminated ~350 lines duplication |
-| #2 Consolidate types | ✅ Done | Single source of truth for types |
-| #3 Integrate ScoresProvider | ✅ Done | Global cache in AppLayout |
-| #4 Fix stats derivation | ✅ Done | Uses displayedScores directly |
-| #5 Reuse charts cache in GoalDetail | ✅ Done | No per-goal musicdb queries |
-| #6 Unify Scores.tsx with global cache | ✅ Done | No redundant score fetching |
-| #7 Server-side goal progress RPC | ✅ Done | Single RPC per goal |
+## Overview
+Make song cards clickable on the Goal Detail page to open the same `SongDetailModal` used on the Scores page. No new components needed - we'll reuse the existing modal and add the click handling plumbing.
 
 ---
 
-## Files Created
+## Changes Required
 
-| File | Purpose |
-|------|---------|
-| `src/types/scores.ts` | Canonical type definitions |
-| `src/lib/filterMatcher.ts` | Centralized filter logic |
-| `src/hooks/useAllChartsCache.ts` | Flat chart cache for filtering |
-| `src/hooks/useServerGoalProgress.ts` | Server-side goal progress hook |
+### 1. GoalDetail.tsx - Add Modal State and Handler
+Add the same modal pattern used in Scores.tsx:
 
-## Files Updated
+```typescript
+// Add imports
+import { SongDetailModal } from '@/components/scores/SongDetailModal';
+import { useSongChartsCache } from '@/hooks/useSongChartsCache';
+import type { PreloadedChart } from '@/types/scores';
 
-| File | Changes |
-|------|---------|
-| `src/hooks/useGoalProgress.ts` | Uses shared filterMatcher |
-| `src/hooks/useFilterResults.ts` | Uses shared filterMatcher |
-| `src/pages/Scores.tsx` | Uses global caches, optimized stats |
-| `src/pages/GoalDetail.tsx` | Uses useAllChartsCache |
-| `src/pages/Home.tsx` | Uses useServerGoalProgress RPC |
-| `src/components/scores/FiltersSection.tsx` | Uses ScoreForFiltering type |
-| `src/components/filters/FilterModal.tsx` | Uses ScoreForFiltering type |
-| `src/components/filters/CreateFilterSheet.tsx` | Uses ScoreForFiltering type |
+// Add state for selected song and modal visibility
+const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
+const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-## Database Changes
+// Add song charts cache for preloading modal data
+const { data: songChartsCache } = useSongChartsCache();
 
-Added PostgreSQL function `calculate_goal_progress`:
-- Calculates both completed and total counts in single query
-- Supports lamp, grade, flare, and score target types
-- Handles level/difficulty filters with is/is_not/is_between operators
+// Add click handler (mirrors Scores.tsx handleSongClick)
+const handleSongClick = useCallback((song: ScoreWithSong) => {
+  const songId = song.musicdb?.song_id ?? song.song_id;
+  if (!songId) return;
+  
+  // Get charts from cache and merge with user scores
+  const allChartsForSong = songChartsCache?.get(songId) ?? [];
+  // ... preload chart data logic ...
+  
+  setSelectedSong({ songId, songName, artist, eamuseId, era, preloadedCharts });
+  setIsDetailModalOpen(true);
+}, [scores, songChartsCache]);
+
+// Render modal at end of component
+<SongDetailModal
+  isOpen={isDetailModalOpen}
+  onClose={() => setIsDetailModalOpen(false)}
+  songId={selectedSong?.songId ?? null}
+  songName={selectedSong?.songName ?? ''}
+  artist={selectedSong?.artist ?? null}
+  eamuseId={selectedSong?.eamuseId ?? null}
+  era={selectedSong?.era ?? null}
+  preloadedCharts={selectedSong?.preloadedCharts}
+/>
+```
+
+### 2. GoalSongTabs.tsx - Accept and Pass Click Handler
+Add a prop for the click callback and pass it to child components:
+
+```typescript
+interface GoalSongTabsProps {
+  goal: Goal;
+  completedSongs: ScoreWithSong[];
+  remainingSongs: ScoreWithSong[];
+  isLoading: boolean;
+  onSongClick?: (song: ScoreWithSong) => void;  // NEW
+}
+
+// Pass to list components
+<RemainingSongsList 
+  songs={remainingSongs} 
+  goal={goal}
+  isLoading={isLoading}
+  onSongClick={onSongClick}  // NEW
+/>
+<CompletedSongsList 
+  songs={completedSongs} 
+  isLoading={isLoading}
+  onSongClick={onSongClick}  // NEW
+/>
+```
+
+### 3. CompletedSongsList.tsx - Accept and Use Click Handler
+Add the callback prop and pass it to each SongCard:
+
+```typescript
+interface CompletedSongsListProps {
+  songs: ScoreWithSong[];
+  isLoading: boolean;
+  onSongClick?: (song: ScoreWithSong) => void;  // NEW
+}
+
+// In the render
+<SongCard
+  key={song.id}
+  onClick={onSongClick ? () => onSongClick(song) : undefined}  // NEW
+  // ... other props
+/>
+```
+
+### 4. RemainingSongsList.tsx - Accept and Use Click Handler
+Same pattern - add callback prop and pass to SongCards (both played and unplayed sections):
+
+```typescript
+interface RemainingSongsListProps {
+  songs: ScoreWithSong[];
+  goal: Goal;
+  isLoading: boolean;
+  onSongClick?: (song: ScoreWithSong) => void;  // NEW
+}
+
+// For both played and unplayed song cards
+<SongCard
+  onClick={onSongClick ? () => onSongClick(song) : undefined}  // NEW
+  // ... other props
+/>
+```
 
 ---
 
-## Performance Impact Summary
+## Data Flow
 
-**Network Requests Reduced:**
-- Home page: N+1 queries → N queries (1 RPC per goal instead of musicdb count + scores)
-- GoalDetail: Per-goal chart query → Shared cache lookup
-- Scores page: Per-level fetch → Global cache with client filtering
+```text
+GoalDetail.tsx (modal state + handler)
+    │
+    ├── handleSongClick(song)
+    │     └── Opens SongDetailModal with preloaded charts
+    │
+    └── GoalSongTabs (passes onSongClick)
+          │
+          ├── CompletedSongsList (passes to SongCard onClick)
+          │     └── SongCard (onClick triggers handler)
+          │
+          └── RemainingSongsList (passes to SongCard onClick)
+                ├── Played songs → SongCard (onClick)
+                └── Unplayed songs → SongCard (onClick)
+```
 
-**Bundle Size:**
-- Removed ~350 lines of duplicated filter logic
-- Added ~200 lines of shared utilities
-- Net reduction: ~150 lines
+---
 
-**Memory:**
-- All pages share a single scores cache
-- All pages share a single charts cache
-- No duplicate data in memory
+## Files Modified
+
+| File | Change |
+|------|--------|
+| `src/pages/GoalDetail.tsx` | Add modal state, handler, useSongChartsCache, render SongDetailModal |
+| `src/components/goals/GoalSongTabs.tsx` | Accept onSongClick prop, pass to children |
+| `src/components/goals/CompletedSongsList.tsx` | Accept onSongClick prop, pass to SongCard |
+| `src/components/goals/RemainingSongsList.tsx` | Accept onSongClick prop, pass to SongCard |
+
+---
+
+## Key Points
+- Reuses the exact same `SongDetailModal` component from Scores page
+- Preloads chart data from `useSongChartsCache` for instant modal open
+- Works for both played and unplayed charts
+- No new components created - pure prop drilling through existing structure
