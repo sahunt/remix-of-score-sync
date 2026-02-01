@@ -1,216 +1,245 @@
 
-# Fix Song Detail Modal: Data Reliability and Synchronization
+# Fix Era Filtering: Data Flow and UI Implementation
 
 ## Problem Summary
 
-The Song Detail Modal shows "No SP charts available" for songs that clearly have scores in the list, and source icons (sanbai/phaseii) are not displaying.
+Two issues with era:
+1. **Era values not displaying reliably** - The `ScoreWithSong.musicdb` interface doesn't include `era`, so TypeScript/data passing is inconsistent
+2. **Era filter has no UI** - The filter rule row shows a text input instead of visual chip selectors for Classic/White/Gold
 
 ## Root Cause Analysis
 
-I traced the entire data flow and found **THREE critical bugs** creating this unreliable behavior:
+### Issue 1: Era Not in Interface
 
-### Bug 1: Deleted Songs Not Filtered in Scores.tsx
+The `ScoreWithSong` interface defines `musicdb` without the `era` field:
 
-The local `scores` fetch in `Scores.tsx` (lines 306-328) does NOT filter out deleted songs from the `musicdb` table. Meanwhile, the `useSongChartsCache` hook DOES filter deleted songs (line 33: `.eq('deleted', false)`).
-
-**Result**: Songs like "CARTOON HEROES (20th Anniversary Mix)" appear in the song list (because their user_scores still exist), but when clicked, the modal gets **zero charts** from the cache because the charts are marked `deleted: true`.
-
-**Evidence from database**:
-```
-CARTOON HEROES (20th Anniversary Mix) - song_id 38897
-- All 5 SP charts have deleted: true
-- User has 72 scores linked to deleted songs
-```
-
-### Bug 2: source_type Field Missing from Query
-
-The local scores fetch in `Scores.tsx` does NOT include `source_type` in its SELECT statement:
 ```typescript
-.select(`
-  id, score, timestamp, playstyle,
-  difficulty_name, difficulty_level, rank, flare, halo,
-  musicdb (...) 
-`) // NO source_type!
+// Current (lines 28-39 of Scores.tsx)
+musicdb: {
+  name: string | null;
+  artist: string | null;
+  eamuse_id: string | null;
+  song_id: number | null;
+  name_romanized: string | null;
+  deleted?: boolean | null;
+  // MISSING: era: number | null;
+} | null;
 ```
 
-And worse, the preloading logic hardcodes `source_type: null`:
+This means TypeScript doesn't type-check era references, and the data can get lost in transformations.
+
+### Issue 2: Era Filter Returns True (Placeholder)
+
+In `matchesRule` function (lines 195-197 of Scores.tsx):
 ```typescript
-source_type: null,  // Line 254 - should be: source_type: userScore?.source_type ?? null
+case 'era':
+  return true; // Placeholder - never actually filters!
 ```
 
-### Bug 3: ScoreWithSong Interface Missing source_type
+### Issue 3: Era UI is Text Input
 
-The `ScoreWithSong` interface in Scores.tsx (lines 21-39) doesn't include the `source_type` field, so even if we fetched it, TypeScript wouldn't recognize it.
-
-## The Elegant Solution: Unify Data Sources
-
-The core problem is **data fragmentation**. There are currently 3+ sources of score data:
-1. Global context (`ScoresProvider` / `useScores`)  
-2. Local state (`scores` in Scores.tsx)
-3. `useSongChartsCache` for chart metadata
-
-Instead of patching each individually, the fix should:
-
-1. **Add `deleted` field to local query** so deleted songs are filtered consistently
-2. **Add `source_type` to interface and query** so source icons display
-3. **Use local scores directly for modal** (keeping the recent fix that switched from globalScores to local scores)
-4. **Handle edge case when cache is empty** by falling back to modal's internal fetch
+In `FilterRuleRow.tsx` (lines 327-337), era uses a generic text input:
+```typescript
+case 'version':
+case 'era':
+  return (
+    <input type="text" ... />  // Should be chip selector!
+  );
+```
 
 ## Implementation Plan
 
-### Step 1: Update ScoreWithSong Interface
-**File**: `src/pages/Scores.tsx` (lines 21-39)
+### Step 1: Add Era to ScoreWithSong Interface
+**File**: `src/pages/Scores.tsx`
 
-Add `source_type` field to the interface:
+Update the `musicdb` subobject to include era:
 ```typescript
-interface ScoreWithSong {
-  id: string;
-  score: number | null;
-  // ... existing fields
-  halo: string | null;
-  source_type: string | null;  // ADD THIS
-  musicdb: {
-    // ... existing fields
-    deleted?: boolean | null;  // ADD THIS for filtering
-  } | null;
+musicdb: {
+  name: string | null;
+  artist: string | null;
+  eamuse_id: string | null;
+  song_id: number | null;
+  name_romanized: string | null;
+  era: number | null;        // ADD THIS
+  deleted?: boolean | null;
+} | null;
+```
+
+### Step 2: Add ERA_OPTIONS to filterTypes.ts
+**File**: `src/components/filters/filterTypes.ts`
+
+Add era options with visual mapping to match the EraChip component:
+```typescript
+// Era options with visual chip support
+import type { EraType } from '@/components/ui/EraChip';
+
+export const ERA_OPTIONS: { value: number; label: string; eraType: EraType }[] = [
+  { value: 0, label: 'Classic', eraType: 'classic' },
+  { value: 1, label: 'White', eraType: 'white' },
+  { value: 2, label: 'Gold', eraType: 'gold' },
+];
+```
+
+Also update `getDefaultValue` for era to return an empty array (multi-select):
+```typescript
+case 'era':
+  return []; // Empty multi-select array (not string)
+```
+
+### Step 3: Create EraSelector Component
+**File**: `src/components/filters/EraSelector.tsx` (NEW FILE)
+
+Create a visual selector component similar to DifficultySelector:
+```typescript
+import { cn } from '@/lib/utils';
+import { ERA_OPTIONS } from './filterTypes';
+import { EraChip } from '@/components/ui/EraChip';
+
+interface EraSelectorProps {
+  value: number[];
+  onChange: (value: number[]) => void;
+}
+
+export function EraSelector({ value, onChange }: EraSelectorProps) {
+  const selectedEras = Array.isArray(value) ? value : [];
+
+  const toggleEra = (era: number) => {
+    if (selectedEras.includes(era)) {
+      onChange(selectedEras.filter(e => e !== era));
+    } else {
+      onChange([...selectedEras, era]);
+    }
+  };
+
+  return (
+    <div className="flex gap-3 justify-center">
+      {ERA_OPTIONS.map((option) => {
+        const isSelected = selectedEras.includes(option.value);
+        return (
+          <button
+            key={option.value}
+            onClick={() => toggleEra(option.value)}
+            className={cn(
+              "flex flex-col items-center gap-2 p-3 rounded-[10px] transition-all",
+              isSelected
+                ? "bg-primary/20 ring-2 ring-primary"
+                : "bg-[#3B3F51] hover:bg-[#454a5e]"
+            )}
+          >
+            <EraChip era={option.value} className="h-6" />
+            <span className="text-xs text-muted-foreground">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 ```
 
-### Step 2: Update Supabase Query
-**File**: `src/pages/Scores.tsx` (lines 306-328)
+### Step 4: Update FilterRuleRow to Use EraSelector
+**File**: `src/components/filters/FilterRuleRow.tsx`
 
-Add `source_type` to the select and `deleted` to the musicdb join:
+Import EraSelector and update the renderValueInput switch statement:
 ```typescript
-.select(`
-  id,
-  score,
-  timestamp,
-  playstyle,
-  difficulty_name,
-  difficulty_level,
-  rank,
-  flare,
-  halo,
-  source_type,
-  musicdb (
-    name,
-    artist,
-    eamuse_id,
-    song_id,
-    name_romanized,
-    era,
-    deleted
-  )
-`)
-```
+import { EraSelector } from './EraSelector';
 
-### Step 3: Filter Out Deleted Songs
-**File**: `src/pages/Scores.tsx` (after the fetch, ~line 366)
-
-Filter deleted songs client-side to match the shared hook behavior:
-```typescript
-// Filter out scores for deleted songs (matches useUserScores behavior)
-const validScores = sortedData.filter(s => 
-  s.musicdb !== null && s.musicdb.deleted !== true
-);
-setScores(validScores);
-```
-
-### Step 4: Pass source_type to Preloaded Charts
-**File**: `src/pages/Scores.tsx` (line 254)
-
-Fix the hardcoded null:
-```typescript
-return {
-  id: chart.id,
-  difficulty_name: chart.difficulty_name,
-  difficulty_level: chart.difficulty_level,
-  score: userScore?.score ?? null,
-  rank: userScore?.rank ?? null,
-  flare: userScore?.flare ?? null,
-  halo: userScore?.halo ?? null,
-  source_type: userScore?.source_type ?? null,  // FIX: was hardcoded null
-};
-```
-
-### Step 5: Handle Empty Cache Gracefully
-**File**: `src/pages/Scores.tsx` (in handleSongClick, around line 232)
-
-When `songChartsCache` returns empty (e.g., for deleted songs that somehow got scores), let the modal's internal fetch handle it instead of passing empty preloaded data:
-```typescript
-const handleSongClick = useCallback((song: DisplaySong) => {
-  if (!song.song_id) return;
-  
-  const allChartsForSong = songChartsCache?.get(song.song_id) ?? [];
-  
-  let preloadedCharts: PreloadedChart[] | undefined;
-  
-  // Only preload if we have charts from the cache
-  // Otherwise let modal fetch directly (handles edge cases like deleted songs)
-  if (allChartsForSong.length > 0) {
-    const scoreMap = new Map(
-      scores
-        .filter(s => s.musicdb?.song_id === song.song_id)
-        .map(s => [s.difficulty_name?.toUpperCase(), s])
-    );
-    
-    preloadedCharts = allChartsForSong.map(chart => {
-      const userScore = scoreMap.get(chart.difficulty_name);
-      return {
-        id: chart.id,
-        difficulty_name: chart.difficulty_name,
-        difficulty_level: chart.difficulty_level,
-        score: userScore?.score ?? null,
-        rank: userScore?.rank ?? null,
-        flare: userScore?.flare ?? null,
-        halo: userScore?.halo ?? null,
-        source_type: userScore?.source_type ?? null,
-      };
-    }).sort((a, b) => {
-      const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
-      const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
-      return aIndex - bIndex;
-    });
+// In renderValueInput(), replace the era case:
+case 'era': {
+  let eraValue: number[];
+  if (Array.isArray(rule.value)) {
+    eraValue = rule.value.filter((v): v is number => typeof v === 'number');
+  } else if (typeof rule.value === 'number') {
+    eraValue = [rule.value];
+  } else {
+    eraValue = [];
   }
   
-  setSelectedSong({
-    songId: song.song_id,
-    songName: song.name ?? 'Unknown Song',
-    artist: song.artist,
-    eamuseId: song.eamuse_id,
-    era: song.era ?? null,
-    preloadedCharts,  // undefined triggers modal fetch
-  });
-  setIsDetailModalOpen(true);
-}, [scores, songChartsCache]);
+  return (
+    <EraSelector
+      value={eraValue}
+      onChange={handleValueChange}
+    />
+  );
+}
 ```
 
-## Summary of Changes
+### Step 5: Implement Era Filter Logic in matchesRule
+**File**: `src/pages/Scores.tsx`
 
-| File | Change |
-|------|--------|
-| `src/pages/Scores.tsx` | Add `source_type` to interface |
-| `src/pages/Scores.tsx` | Add `source_type` and `deleted` to query |
-| `src/pages/Scores.tsx` | Filter deleted songs from results |
-| `src/pages/Scores.tsx` | Pass `source_type` to preloaded charts |
-| `src/pages/Scores.tsx` | Handle empty cache gracefully |
+Update the matchesRule function to actually filter by era:
+```typescript
+case 'era': {
+  const songEra = score.musicdb?.era;
+  // Multi-select array comparison (similar to lamp/grade but numeric)
+  if (Array.isArray(value)) {
+    if (value.length === 0) return true; // Empty = no filter
+    if (songEra === null || songEra === undefined) return false;
+    const matches = value.includes(songEra);
+    return operator === 'is' ? matches : !matches;
+  }
+  // Single value
+  if (songEra === null || songEra === undefined) return false;
+  const singleValue = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (isNaN(singleValue)) return true; // Invalid value = no filter
+  switch (operator) {
+    case 'is': return songEra === singleValue;
+    case 'is_not': return songEra !== singleValue;
+    default: return true;
+  }
+}
+```
 
-## Why This Approach?
+### Step 6: Update useFilterResults.ts matchesRule
+**File**: `src/hooks/useFilterResults.ts`
 
-**Simplicity**: Rather than adding more caching layers or complex synchronization, this fix:
-- Aligns the local fetch with the shared hook's behavior (filtering deleted songs)
-- Adds the missing field that was always meant to be there
-- Gracefully handles edge cases without breaking the modal's fallback mechanism
+Update the ScoreData interface to include era and implement the era filter logic (same as Step 5):
+```typescript
+interface ScoreData {
+  // ... existing fields
+  musicdb: { 
+    name: string | null; 
+    artist: string | null;
+    eamuse_id: string | null;
+    song_id: number | null;
+    era: number | null;  // ADD THIS
+  } | null;
+}
 
-**Reliability**: After this fix:
-- Deleted songs won't appear in the list (consistent with Goals page)
-- Source icons (sanbai/phaseii) will display in the modal
-- Modal will never show "No SP charts" for songs that have scores
+// In matchesRule switch statement:
+case 'era': {
+  const songEra = score.musicdb?.era;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return true;
+    if (songEra === null || songEra === undefined) return false;
+    const matches = (value as number[]).includes(songEra);
+    return operator === 'is' ? matches : !matches;
+  }
+  if (songEra === null || songEra === undefined) return false;
+  const singleValue = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (isNaN(singleValue)) return true;
+  switch (operator) {
+    case 'is': return songEra === singleValue;
+    case 'is_not': return songEra !== singleValue;
+    default: return true;
+  }
+}
+```
+
+## Summary of Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/pages/Scores.tsx` | Add `era` to `ScoreWithSong.musicdb` interface; implement era case in `matchesRule` |
+| `src/components/filters/filterTypes.ts` | Add `ERA_OPTIONS` constant; update `getDefaultValue` for era |
+| `src/components/filters/EraSelector.tsx` | **NEW FILE** - Visual chip selector for eras |
+| `src/components/filters/FilterRuleRow.tsx` | Import EraSelector; update switch case for era |
+| `src/hooks/useFilterResults.ts` | Add `era` to `ScoreData.musicdb`; implement era matching logic |
 
 ## Testing Checklist
 
-1. Songs with `deleted: true` should NOT appear in the Scores list
-2. Clicking any song should show all difficulties with correct scores
-3. Source icons (sanbai/phaseii) should appear next to scores in the modal
-4. Era chips should display for all songs (including era=0 Classic)
-5. Modal should work even if songChartsCache hasn't loaded yet
+1. Era chips appear in Song Detail Modal for all songs (Classic=0, White=1, Gold=2)
+2. Era filter UI shows three visual chips (Classic, White, Gold)
+3. Selecting "Classic" era filter shows only Classic era songs
+4. Selecting multiple eras (e.g., Classic + Gold) shows songs from both eras
+5. "Is not" operator correctly excludes selected eras
+6. Filter preview count updates correctly when era filter is applied
