@@ -24,8 +24,8 @@ export default function AdminImportEra() {
     setResult(null);
 
     try {
-      // Fetch CSV from public folder
-      const csvResponse = await fetch("/ddr_all_songs_era.csv");
+      // Fetch CSV from public folder with cache bust
+      const csvResponse = await fetch(`/ddr_all_songs_era.csv?t=${Date.now()}`);
       if (!csvResponse.ok) {
         throw new Error(`Failed to load CSV file: ${csvResponse.status}`);
       }
