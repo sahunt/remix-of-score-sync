@@ -1,136 +1,104 @@
 
-# Plan: Enable Song Detail Modal on Goal Detail Page
+# Fix: Song Detail Modal Missing Scores
 
-## Overview
-Make song cards clickable on the Goal Detail page to open the same `SongDetailModal` used on the Scores page. No new components needed - we'll reuse the existing modal and add the click handling plumbing.
+## Problem Identified
+The Song Detail Modal shows "No play" for difficulties that actually have scores in the database. This happens because both **Scores.tsx** and **GoalDetail.tsx** are building the modal's `scoreMap` from **filtered data** instead of the complete user score history.
+
+**Example:**
+- User views Goal Detail page for a goal targeting Level 14 Expert charts
+- User clicks on "Red. by Full Metal Jacket" 
+- Modal shows Challenge (17) as "No play" even though a 999,710 score exists
+- Root cause: The goal-filtered `scores` array only includes Level 14 data, so the Level 17 Challenge score is never passed to the modal
+
+## Data Flow Issue
+
+```text
+Current (Broken):
+┌─────────────────────────────────────────────────────────────┐
+│ GoalDetail.tsx                                              │
+│   scores = useUserScores({ filterRules: criteriaRules })    │
+│   └── Only Level 14 Expert scores fetched                   │
+│                                                             │
+│   handleSongClick():                                        │
+│     scoreMap = scores.filter(song_id)                       │
+│     └── Missing Level 17 Challenge score!                   │
+│                                                             │
+│   Modal: Challenge shows "No play" ❌                        │
+└─────────────────────────────────────────────────────────────┘
+
+Fixed:
+┌─────────────────────────────────────────────────────────────┐
+│ GoalDetail.tsx                                              │
+│   globalScores = useScores() // ALL user scores             │
+│   goalScores = useUserScores({ filterRules }) // for lists  │
+│                                                             │
+│   handleSongClick():                                        │
+│     scoreMap = globalScores.filter(song_id)                 │
+│     └── Has ALL scores for this song                        │
+│                                                             │
+│   Modal: Challenge shows 999,710 ✓                          │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Changes Required
 
-### 1. GoalDetail.tsx - Add Modal State and Handler
-Add the same modal pattern used in Scores.tsx:
+### 1. GoalDetail.tsx - Use Global Scores for Modal
 
+**Add import:**
 ```typescript
-// Add imports
-import { SongDetailModal } from '@/components/scores/SongDetailModal';
-import { useSongChartsCache } from '@/hooks/useSongChartsCache';
-import type { PreloadedChart } from '@/types/scores';
-
-// Add state for selected song and modal visibility
-const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
-const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-
-// Add song charts cache for preloading modal data
-const { data: songChartsCache } = useSongChartsCache();
-
-// Add click handler (mirrors Scores.tsx handleSongClick)
-const handleSongClick = useCallback((song: ScoreWithSong) => {
-  const songId = song.musicdb?.song_id ?? song.song_id;
-  if (!songId) return;
-  
-  // Get charts from cache and merge with user scores
-  const allChartsForSong = songChartsCache?.get(songId) ?? [];
-  // ... preload chart data logic ...
-  
-  setSelectedSong({ songId, songName, artist, eamuseId, era, preloadedCharts });
-  setIsDetailModalOpen(true);
-}, [scores, songChartsCache]);
-
-// Render modal at end of component
-<SongDetailModal
-  isOpen={isDetailModalOpen}
-  onClose={() => setIsDetailModalOpen(false)}
-  songId={selectedSong?.songId ?? null}
-  songName={selectedSong?.songName ?? ''}
-  artist={selectedSong?.artist ?? null}
-  eamuseId={selectedSong?.eamuseId ?? null}
-  era={selectedSong?.era ?? null}
-  preloadedCharts={selectedSong?.preloadedCharts}
-/>
+import { useScores } from '@/contexts/ScoresContext';
 ```
 
-### 2. GoalSongTabs.tsx - Accept and Pass Click Handler
-Add a prop for the click callback and pass it to child components:
-
+**Add global scores hook:**
 ```typescript
-interface GoalSongTabsProps {
-  goal: Goal;
-  completedSongs: ScoreWithSong[];
-  remainingSongs: ScoreWithSong[];
-  isLoading: boolean;
-  onSongClick?: (song: ScoreWithSong) => void;  // NEW
-}
-
-// Pass to list components
-<RemainingSongsList 
-  songs={remainingSongs} 
-  goal={goal}
-  isLoading={isLoading}
-  onSongClick={onSongClick}  // NEW
-/>
-<CompletedSongsList 
-  songs={completedSongs} 
-  isLoading={isLoading}
-  onSongClick={onSongClick}  // NEW
-/>
+// Use global scores cache for modal preloading (all difficulties)
+const { scores: globalScores } = useScores();
 ```
 
-### 3. CompletedSongsList.tsx - Accept and Use Click Handler
-Add the callback prop and pass it to each SongCard:
-
+**Update handleSongClick to use globalScores:**
 ```typescript
-interface CompletedSongsListProps {
-  songs: ScoreWithSong[];
-  isLoading: boolean;
-  onSongClick?: (song: ScoreWithSong) => void;  // NEW
-}
-
-// In the render
-<SongCard
-  key={song.id}
-  onClick={onSongClick ? () => onSongClick(song) : undefined}  // NEW
-  // ... other props
-/>
+// Build score lookup from ALL user scores (not goal-filtered)
+const scoreMap = new Map(
+  globalScores  // Changed from: scores
+    .filter(s => (s.musicdb?.song_id ?? s.song_id) === songId)
+    .map(s => [s.difficulty_name?.toUpperCase(), s])
+);
 ```
 
-### 4. RemainingSongsList.tsx - Accept and Use Click Handler
-Same pattern - add callback prop and pass to SongCards (both played and unplayed sections):
-
+**Update dependency array:**
 ```typescript
-interface RemainingSongsListProps {
-  songs: ScoreWithSong[];
-  goal: Goal;
-  isLoading: boolean;
-  onSongClick?: (song: ScoreWithSong) => void;  // NEW
-}
+}, [globalScores, songChartsCache]);  // Changed from: [scores, songChartsCache]
+```
 
-// For both played and unplayed song cards
-<SongCard
-  onClick={onSongClick ? () => onSongClick(song) : undefined}  // NEW
-  // ... other props
-/>
+### 2. Scores.tsx - Use Global Scores for Modal
+
+The Scores page already imports `useScores()` for its `globalScores`, but uses `filteredScores` for the modal. Update to use `globalScores`:
+
+**Update handleSongClick to use globalScores:**
+```typescript
+// Build score lookup from ALL user scores (not level-filtered)
+const scoreMap = new Map(
+  globalScores  // Changed from: filteredScores
+    .filter(s => s.musicdb?.song_id === song.song_id)
+    .map(s => [s.difficulty_name?.toUpperCase(), s])
+);
+```
+
+**Update dependency array:**
+```typescript
+}, [globalScores, songChartsCache]);  // Changed from: [filteredScores, songChartsCache]
 ```
 
 ---
 
-## Data Flow
+## Technical Notes
 
-```text
-GoalDetail.tsx (modal state + handler)
-    │
-    ├── handleSongClick(song)
-    │     └── Opens SongDetailModal with preloaded charts
-    │
-    └── GoalSongTabs (passes onSongClick)
-          │
-          ├── CompletedSongsList (passes to SongCard onClick)
-          │     └── SongCard (onClick triggers handler)
-          │
-          └── RemainingSongsList (passes to SongCard onClick)
-                ├── Played songs → SongCard (onClick)
-                └── Unplayed songs → SongCard (onClick)
-```
+- The filtered data (`filteredScores` / `scores`) should still be used for displaying the song **list** (respects level/filter selection)
+- The unfiltered global data (`globalScores`) should be used for the **modal** (needs all difficulties for the selected song)
+- No additional API calls are introduced - both data sources are already cached via React Query
+- The architecture rule from `docs/architecture-rules.md` is being followed: "Consume scores from useScores() context"
 
 ---
 
@@ -138,15 +106,5 @@ GoalDetail.tsx (modal state + handler)
 
 | File | Change |
 |------|--------|
-| `src/pages/GoalDetail.tsx` | Add modal state, handler, useSongChartsCache, render SongDetailModal |
-| `src/components/goals/GoalSongTabs.tsx` | Accept onSongClick prop, pass to children |
-| `src/components/goals/CompletedSongsList.tsx` | Accept onSongClick prop, pass to SongCard |
-| `src/components/goals/RemainingSongsList.tsx` | Accept onSongClick prop, pass to SongCard |
-
----
-
-## Key Points
-- Reuses the exact same `SongDetailModal` component from Scores page
-- Preloads chart data from `useSongChartsCache` for instant modal open
-- Works for both played and unplayed charts
-- No new components created - pure prop drilling through existing structure
+| `src/pages/GoalDetail.tsx` | Import useScores, use globalScores in handleSongClick |
+| `src/pages/Scores.tsx` | Use globalScores instead of filteredScores in handleSongClick |
