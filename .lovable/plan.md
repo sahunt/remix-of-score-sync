@@ -1,148 +1,101 @@
 
-
-# Add Era Column to MusicDB
+# Song Card Era Chip Implementation
 
 ## Overview
+Add era chips (Classic, White, Gold) to the SongCard component. The chips will display below the song title, center-aligned. This lays the groundwork for future icons to be added in the same row.
 
-Add an `era` column to the `musicdb` table and populate it using the uploaded CSV file containing 1,269 song-to-era mappings. The era values are small integers (0, 1, 2) that classify songs by game era.
+## Data Flow Changes
 
----
+### 1. Add Era to Database Queries
+The `era` field already exists in the `musicdb` table. Need to add it to all queries that fetch song data:
 
-## Data Analysis
+- **src/pages/Scores.tsx**: Add `era` to the musicdb selection in the user_scores query
+- **src/hooks/useUserScores.ts**: Add `era` to the musicdb selection
+- **src/hooks/useSongChartsCache.ts**: Check if era is fetched for modal display
 
-**CSV Structure:**
-- Header: `song_name,eamuse_id,era`
-- 1,269 data rows
-- Era values: 0, 1, or 2 (SMALLINT is appropriate)
-- `eamuse_id` is the 32-character identifier used to match musicdb rows
+### 2. Update Type Definitions
+Update interfaces to include era:
+- **src/pages/Scores.tsx**: Add `era` to `ScoreWithSong`, `MusicDbChart`, and `DisplaySong` interfaces
+- **src/hooks/useGoalProgress.ts**: Add `era` to `ScoreWithSong` interface
 
-**Database Impact:**
-- Each `eamuse_id` in musicdb appears in multiple rows (one per difficulty chart)
-- ~1,269 unique songs will update ~10,000+ rows total (same as romanized titles pattern)
+## Component Changes
 
----
+### 3. Create Era Assets
+Copy the uploaded SVG files to `src/assets/eras/`:
+- `era_classic.svg` (from classicerachip.svg)
+- `era_white.svg` (from whiteerachip.svg)  
+- `era_gold.svg` (from golderachip.svg)
 
-## Implementation Strategy
+### 4. Create EraChip Component
+New file: `src/components/ui/EraChip.tsx`
+- Props: `era: 0 | 1 | 2 | null`
+- Map: 0 = Classic, 1 = White, 2 = Gold
+- Returns null if era is null/undefined
+- Follows FlareChip pattern: imports SVGs and renders as img
 
-Following the established **bulk update pattern** (used for romanized titles), we will:
+### 5. Update SongCard Component
+File: `src/components/scores/SongCard.tsx`
 
-1. **Add the column** via migration (nullable SMALLINT)
-2. **Create an RPC function** that updates all rows atomically in a single transaction
-3. **Create an edge function** that parses CSV and calls the RPC
-4. **Create an admin UI page** to trigger the import
+Changes:
+- Add `era?: number | null` prop
+- Add new icon row below the title row (between title and score)
+- Center-align icons with `justify-center`
+- Use 4px gap between icons
+- Only render the icon row if there's at least one icon to show
 
-This approach avoids timeouts and rate-limiting by processing all updates in a single database transaction.
+Layout update:
+```
+[Album Art] [Song Info Section]              [Rank]
+            [14] SONG TITLE
+            [Era Icon] ← new row, center-aligned
+            999,999 [Flare]
+```
 
----
+### 6. Update Consumers of SongCard
+Pass era through in all places using SongCard:
 
-## Files to Create/Modify
+- **src/components/scores/VirtualizedSongList.tsx**: Add era to SongRow and SongCard props
+- **src/components/goals/CompletedSongsList.tsx**: Add era prop
+- **src/components/goals/RemainingSongsList.tsx**: Check and add era prop
+- **src/components/goals/SuggestionsList.tsx**: Check and add era prop
 
-| File | Action | Description |
-|------|--------|-------------|
-| `supabase/migrations/...` | CREATE | Add `era` column to musicdb |
-| `supabase/migrations/...` | CREATE | Create `bulk_update_era` RPC function |
-| `supabase/functions/import-era/index.ts` | CREATE | Edge function to parse CSV and call RPC |
-| `supabase/config.toml` | MODIFY | Add `import-era` function config |
-| `public/ddr_all_songs_era.csv` | COPY | Copy uploaded CSV to public folder |
-| `src/pages/AdminImportEra.tsx` | CREATE | Admin UI page for triggering import |
-| `src/App.tsx` | MODIFY | Add route for admin import era page |
-| `src/integrations/supabase/types.ts` | AUTO-UPDATE | Types will auto-update after migration |
+### 7. Update VirtualizedSongList Height Estimate
+Since we're adding a new row, the card height increases. Update the `estimateSize` from 70px to approximately 88px to account for the new icon row.
 
----
+## UX Spacing Guidelines
+- Icon row: 4px gap between icons (gap-1)
+- Icon row margin: 2px above (mt-0.5)
+- Icons center-aligned with `justify-center`
+- Only render row if icons exist to prevent empty space
 
 ## Technical Details
 
-### 1. Database Migration - Add Era Column
+### Era Mapping
+```typescript
+type EraType = 'classic' | 'white' | 'gold';
 
-```sql
-ALTER TABLE musicdb ADD COLUMN era SMALLINT;
+const eraNumberToType = (era: number | null): EraType | null => {
+  if (era === null || era === undefined) return null;
+  const mapping: Record<number, EraType> = {
+    0: 'classic',
+    1: 'white',
+    2: 'gold'
+  };
+  return mapping[era] ?? null;
+};
 ```
 
-### 2. Database Migration - Bulk Update RPC Function
+### Files to Modify
+1. `src/assets/eras/` - new folder with 3 SVGs
+2. `src/components/ui/EraChip.tsx` - new component
+3. `src/components/scores/SongCard.tsx` - add era prop and icon row
+4. `src/components/scores/VirtualizedSongList.tsx` - pass era, update height
+5. `src/pages/Scores.tsx` - add era to types and query
+6. `src/hooks/useUserScores.ts` - add era to query
+7. `src/hooks/useGoalProgress.ts` - add era to type
+8. `src/components/goals/CompletedSongsList.tsx` - pass era
+9. `src/components/goals/RemainingSongsList.tsx` - pass era
+10. `src/components/goals/SuggestionsList.tsx` - pass era
 
-```sql
-CREATE OR REPLACE FUNCTION bulk_update_era(updates JSONB)
-RETURNS TABLE(updated_count INTEGER)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = 'public'
-AS $$
-BEGIN
-  UPDATE musicdb m
-  SET era = (u->>'era')::SMALLINT
-  FROM jsonb_array_elements(updates) AS u
-  WHERE m.eamuse_id = (u->>'eamuse_id');
-  
-  GET DIAGNOSTICS updated_count = ROW_COUNT;
-  RETURN QUERY SELECT updated_count;
-END;
-$$;
-```
-
-This function:
-- Accepts a JSONB array of `{eamuse_id, era}` objects
-- Updates ALL rows matching each eamuse_id in a single atomic transaction
-- Returns the total count of rows updated (should be ~10,000+)
-
-### 3. Edge Function - Parse CSV and Call RPC
-
-The edge function will:
-1. Receive CSV content from the client
-2. Parse each line to extract `eamuse_id` and `era` (ignoring `song_name`)
-3. Handle quoted fields in CSV
-4. Call the `bulk_update_era` RPC with all mappings
-5. Return the update count
-
-Key CSV parsing logic:
-- Skip header row
-- Handle quoted song_name field (the first column has commas inside quotes)
-- Extract the 32-character eamuse_id (second column)
-- Parse era as integer (third column)
-
-### 4. Admin UI Page
-
-A simple page matching the existing admin import pattern:
-- "Start Import" button
-- Progress indicator during import
-- Success/error display with row count
-
----
-
-## Data Flow
-
-```text
-User clicks "Start Import" on /admin/import-era
-        ↓
-Frontend fetches /ddr_all_songs_era.csv from public folder
-        ↓
-Frontend sends CSV content to import-era edge function
-        ↓
-Edge function parses 1,269 rows → [{eamuse_id, era}, ...]
-        ↓
-Edge function calls bulk_update_era RPC with all mappings
-        ↓
-RPC updates all matching rows atomically (~10,000 rows)
-        ↓
-Returns updated_count to UI
-```
-
----
-
-## Why This Approach Avoids Errors
-
-| Problem | Solution |
-|---------|----------|
-| Cloudflare/Supabase timeout (30-60s) | Single RPC call processes all updates in one transaction |
-| Rate limiting (429 errors) | No batched HTTP requests - just one database call |
-| Partial updates | Atomic transaction - all or nothing |
-| URL length limits | RPC accepts JSONB body, not URL params |
-
----
-
-## Expected Outcome
-
-- `era` column added to musicdb table
-- All ~10,000+ rows updated with era values (0, 1, or 2)
-- Admin UI shows success with exact row count
-- No timeout or rate limit errors
-
+## Future Extensibility
+The icon row structure allows easily adding more chips in the future by simply adding more components to the flex container. The center alignment and gap spacing will automatically accommodate additional icons.
