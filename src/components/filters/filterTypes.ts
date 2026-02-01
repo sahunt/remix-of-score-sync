@@ -1,5 +1,6 @@
 import type { FlareType } from '@/components/ui/FlareChip';
 import type { HaloType } from '@/components/ui/HaloChip';
+import type { EraType } from '@/components/ui/EraChip';
 
 // Filter types
 export type FilterType = 
@@ -155,6 +156,13 @@ export const FLARE_OPTIONS: { value: number; flareType: FlareType | 'none' }[] =
   { value: 0, flareType: 'none' }, // No flare
 ];
 
+// Era options with visual chip support
+export const ERA_OPTIONS: { value: number; label: string; eraType: EraType }[] = [
+  { value: 0, label: 'Classic', eraType: 'classic' },
+  { value: 1, label: 'White', eraType: 'white' },
+  { value: 2, label: 'Gold', eraType: 'gold' },
+];
+
 // Helper to generate a unique rule ID
 export function generateRuleId(): string {
   return `rule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -185,7 +193,7 @@ export function getDefaultValue(type: FilterType): string | number | string[] | 
     case 'version':
       return '';
     case 'era':
-      return '';
+      return []; // Empty multi-select array
     default:
       return null;
   }

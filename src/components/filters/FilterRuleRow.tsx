@@ -13,6 +13,7 @@ import { LampSelector } from './LampSelector';
 import { LevelSelector } from './LevelSelector';
 import { GradeSelector } from './GradeSelector';
 import { DifficultySelector } from './DifficultySelector';
+import { EraSelector } from './EraSelector';
 import {
   FILTER_TYPES,
   OPERATORS_BY_TYPE,
@@ -325,16 +326,33 @@ export function FilterRuleRow({ rule, onChange, onRemove, showRemove, allowedTyp
         );
 
       case 'version':
-      case 'era':
         return (
           <input
             type="text"
             value={typeof rule.value === 'string' ? rule.value : ''}
             onChange={(e) => handleValueChange(e.target.value)}
-            className="w-full h-[44px] rounded-[10px] bg-[#3B3F51] px-5 text-white placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary"
+            className="w-full h-[44px] rounded-[10px] bg-secondary px-5 text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary"
             placeholder={`Enter ${rule.type}...`}
           />
         );
+
+      case 'era': {
+        let eraValue: number[];
+        if (Array.isArray(rule.value)) {
+          eraValue = rule.value.filter((v): v is number => typeof v === 'number');
+        } else if (typeof rule.value === 'number') {
+          eraValue = [rule.value];
+        } else {
+          eraValue = [];
+        }
+        
+        return (
+          <EraSelector
+            value={eraValue}
+            onChange={handleValueChange}
+          />
+        );
+      }
 
       default:
         return null;
