@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGoal, useGoals } from '@/hooks/useGoals';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useMusicDbCount } from '@/hooks/useMusicDbCount';
 import { useUserScores } from '@/hooks/useUserScores';
+import { useAllChartsCache, filterChartsByCriteria } from '@/hooks/useAllChartsCache';
 import { use12MSMode } from '@/hooks/use12MSMode';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { GoalDetailHeader } from '@/components/goals/GoalDetailHeader';
 import { GoalCard } from '@/components/home/GoalCard';
 import { GoalSongTabs } from '@/components/goals/GoalSongTabs';
@@ -44,71 +43,60 @@ export default function GoalDetail() {
     queryKeySuffix: `goal-${goal?.id}`,
   });
 
-  // Fetch all matching charts from musicdb to identify unplayed ones
+  // Use the cached all-charts data instead of a separate query per goal
+  // This eliminates redundant musicdb queries - the cache is shared across all goals
+  const { data: allCharts = [] } = useAllChartsCache();
+  
+  // Extract rules for filtering
   const levelRule = criteriaRules.find(r => r.type === 'level');
   const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
 
-  const { data: allMatchingCharts = [] } = useQuery({
-    queryKey: ['musicdb-charts-for-goal', goal?.id],
-    queryFn: async () => {
-      let query = supabase
-        .from('musicdb')
-        .select('id, name, artist, eamuse_id, song_id, difficulty_level, difficulty_name, playstyle')
-        .eq('playstyle', 'SP')
-        .eq('deleted', false)
-        .not('difficulty_level', 'is', null);
-      
-      // Apply level filter
-      if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
-        if (levelRule.operator === 'is') {
-          query = query.in('difficulty_level', levelRule.value as number[]);
-        }
-      }
-      
-      // Apply difficulty filter
-      if (difficultyRule && Array.isArray(difficultyRule.value) && difficultyRule.value.length > 0) {
-        const diffs = (difficultyRule.value as string[]).map(d => d.toUpperCase());
-        if (difficultyRule.operator === 'is') {
-          query = query.in('difficulty_name', diffs);
-        }
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!goal,
-  });
+  // Filter charts client-side from the cache
+  const matchingCharts = useMemo(() => {
+    if (!goal || allCharts.length === 0) return [];
+    return filterChartsByCriteria(
+      allCharts,
+      levelRule ? { operator: levelRule.operator, value: levelRule.value as number[] | [number, number] } : null,
+      difficultyRule ? { operator: difficultyRule.operator, value: difficultyRule.value as string[] } : null
+    );
+  }, [allCharts, goal, levelRule, difficultyRule]);
 
   // Create set of played chart IDs (musicdb.id) for quick lookup
-  const playedChartIds = new Set(
-    scores.map(s => s.musicdb_id).filter(Boolean)
+  const playedChartIds = useMemo(() => 
+    new Set(scores.map(s => s.musicdb_id).filter(Boolean)),
+    [scores]
   );
 
   // Identify unplayed charts and convert to ScoreWithSong format
-  const unplayedCharts: ScoreWithSong[] = allMatchingCharts
-    .filter(chart => !playedChartIds.has(chart.id))
-    .map(chart => ({
-      id: `unplayed-${chart.id}`,
-      score: null,
-      rank: null,
-      flare: null,
-      halo: null,
-      difficulty_level: chart.difficulty_level,
-      difficulty_name: chart.difficulty_name,
-      playstyle: chart.playstyle,
-      name: chart.name,
-      artist: chart.artist,
-      eamuse_id: chart.eamuse_id,
-      song_id: chart.song_id,
-      isUnplayed: true,
-    }));
+  const unplayedCharts: ScoreWithSong[] = useMemo(() => 
+    matchingCharts
+      .filter(chart => !playedChartIds.has(chart.id))
+      .map(chart => ({
+        id: `unplayed-${chart.id}`,
+        score: null,
+        rank: null,
+        flare: null,
+        halo: null,
+        difficulty_level: chart.difficulty_level,
+        difficulty_name: chart.difficulty_name,
+        playstyle: chart.playstyle,
+        name: chart.name,
+        artist: chart.artist,
+        eamuse_id: chart.eamuse_id,
+        song_id: chart.song_id,
+        isUnplayed: true,
+      })),
+    [matchingCharts, playedChartIds]
+  );
 
   // Calculate progress with 12MS mode transformation
   const progress = useGoalProgress(goal ?? null, scores, [], scoresLoading, reverseTransformHalo);
 
   // Combine remaining songs with unplayed charts for the tabs
-  const allRemainingSongs = [...progress.remainingSongs, ...unplayedCharts];
+  const allRemainingSongs = useMemo(() => 
+    [...progress.remainingSongs, ...unplayedCharts],
+    [progress.remainingSongs, unplayedCharts]
+  );
 
   const handleBack = () => {
     navigate('/home');
