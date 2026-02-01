@@ -1,97 +1,229 @@
 
 
-# Fix Score Data Uniformity Across the App
+# Add Goal Editing Functionality
 
-## Problem Summary
+## Overview
 
-The Scores page shows incorrect statistics:
-- **Displayed**: Total: 234, No Play: 37 (271 total)
-- **Expected**: Total: 248, No Play: 5 (253 total)
+This plan adds the ability to edit existing goals by reusing the existing `CreateGoalSheet` component with minimal modifications. The edit flow will be nearly identical to the creation flow, with only the CTA button text changing from "Save Goal" to "Update Goal".
 
-This is caused by the `get_user_stats` database function still referencing dropped columns from `user_scores`.
+## UX Considerations & Best Practices
 
-## Root Cause
+### 1. **Reuse Existing UI Pattern**
+- Users are already familiar with the goal creation flow
+- Using the same sheet ensures consistency and reduces cognitive load
+- No new patterns to learn - edit looks exactly like create
 
-The `get_user_stats` RPC function references `us.playstyle` and `us.difficulty_level` from the `user_scores` table (aliased as `us`), but these columns were dropped in a previous schema optimization. The function should read these values from the joined `musicdb` table (aliased as `m`) instead.
+### 2. **Edit Icon Placement**
+- Add edit icon to the LEFT of the delete icon (following action grouping convention)
+- Both actions are secondary actions, grouped together in the header
+- Edit is less destructive than delete, so it comes first (left-to-right reading order)
 
-When this RPC fails, the frontend falls back to client-side stat calculation. However, if the React Query cache contains stale data from before the pagination fix, the displayed numbers will be incorrect.
+### 3. **Form Pre-population**
+- When editing, the sheet opens with ALL existing goal values pre-filled
+- User can modify any field - name, target type, target value, criteria, goal mode
+- Preview card updates in real-time (existing behavior)
 
-## Solution
+### 4. **Clear Feedback on Update**
+- CTA button changes to "Update Goal" (vs "Save Goal" for create)
+- Success toast confirms "Goal updated!" 
+- Sheet closes and user returns to goal detail view with updated data
 
-### 1. Fix the `get_user_stats` RPC Function
+### 5. **Cache Invalidation**
+- After update, invalidate both goals list AND the individual goal query
+- This ensures Home page cards AND the Goal Detail page both reflect changes immediately
 
-Create a migration to update the function with the correct column references:
+## Technical Approach
 
-| Current (broken) | Fixed |
-|------------------|-------|
-| `us.playstyle = p_playstyle` | `m.playstyle = p_playstyle` |
-| `us.difficulty_level = p_difficulty_level` | `m.difficulty_level = p_difficulty_level` |
+### Component Changes
 
-### 2. Technical Changes
+**1. `CreateGoalSheet.tsx` → Modified to support edit mode**
 
-**New Migration SQL:**
+Add optional props to receive an existing goal for editing:
 
-```sql
-CREATE OR REPLACE FUNCTION public.get_user_stats(
-  p_user_id UUID,
-  p_playstyle TEXT DEFAULT 'SP',
-  p_difficulty_level SMALLINT DEFAULT NULL
-)
-RETURNS TABLE(
-  total_count BIGINT,
-  mfc_count BIGINT,
-  pfc_count BIGINT,
-  gfc_count BIGINT,
-  fc_count BIGINT,
-  life4_count BIGINT,
-  clear_count BIGINT,
-  fail_count BIGINT,
-  aaa_count BIGINT,
-  avg_score BIGINT
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    COUNT(*)::BIGINT as total_count,
-    COUNT(*) FILTER (WHERE LOWER(us.halo) = 'mfc')::BIGINT as mfc_count,
-    COUNT(*) FILTER (WHERE LOWER(us.halo) = 'pfc')::BIGINT as pfc_count,
-    COUNT(*) FILTER (WHERE LOWER(us.halo) = 'gfc')::BIGINT as gfc_count,
-    COUNT(*) FILTER (WHERE LOWER(us.halo) = 'fc')::BIGINT as fc_count,
-    COUNT(*) FILTER (WHERE LOWER(us.halo) = 'life4')::BIGINT as life4_count,
-    COUNT(*) FILTER (WHERE LOWER(us.halo) IN ('clear','life4','fc','gfc','pfc','mfc'))::BIGINT as clear_count,
-    COUNT(*) FILTER (WHERE LOWER(us.halo) = 'fail')::BIGINT as fail_count,
-    COUNT(*) FILTER (WHERE UPPER(us.rank) = 'AAA')::BIGINT as aaa_count,
-    COALESCE((ROUND(AVG(us.score) / 10) * 10)::BIGINT, 0) as avg_score
-  FROM public.user_scores us
-  JOIN public.musicdb m ON us.musicdb_id = m.id
-  WHERE us.user_id = p_user_id
-    AND m.playstyle = p_playstyle           -- Changed from us.playstyle
-    AND m.deleted = false
-    AND (p_difficulty_level IS NULL OR m.difficulty_level = p_difficulty_level);  -- Changed from us.difficulty_level
-END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public;
+```typescript
+interface CreateGoalSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  // New: optional goal to edit
+  editingGoal?: Goal | null;
+}
 ```
 
-## Files Changed
+Key modifications:
+- Accept `editingGoal` prop with existing goal data
+- Initialize form state from `editingGoal` values when provided
+- Change header text: "New Goal" → "Edit Goal"
+- Change CTA text: "Save Goal" → "Update Goal"
+- Call `updateGoal.mutateAsync()` instead of `createGoal.mutateAsync()` when editing
 
-| File | Change |
-|------|--------|
-| **New Migration** | `CREATE OR REPLACE FUNCTION get_user_stats` with corrected column references |
+**2. `GoalDetailHeader.tsx` → Add edit button**
 
-## Why This Fixes Everything
+Add edit icon button to the left of delete:
 
-1. **Server-side stats work again**: The RPC will successfully return accurate counts directly from the database
-2. **Consistent data source**: Both `get_user_stats` and `calculate_goal_progress` now read chart metadata from `musicdb`
-3. **No frontend changes needed**: The `useUserStats` hook already handles the RPC response correctly
-4. **Cache invalidation**: Once the RPC works, React Query will cache fresh, correct data
+```typescript
+interface GoalDetailHeaderProps {
+  onBack: () => void;
+  onEdit?: () => void;  // New
+  onDelete?: () => void;
+  isDeleting?: boolean;
+}
+```
+
+Render order: back button | flex-1 title | edit button | delete button
+
+**3. `GoalDetail.tsx` → Wire up edit sheet**
+
+- Add state for edit sheet open/close
+- Pass `goal` data to `CreateGoalSheet` when editing
+- After successful update, sheet closes and goal data refetches automatically
+
+**4. `useGoals.ts` → Fix updateGoal mutation**
+
+The current `updateGoal` mutation is missing `score_floor` in the update payload. This needs to be added for complete goal updates:
+
+```typescript
+.update({
+  // ... existing fields
+  score_floor: updates.score_floor,  // Add this
+})
+```
+
+Also need to invalidate the individual goal query key:
+
+```typescript
+onSuccess: (_, variables) => {
+  queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+  queryClient.invalidateQueries({ queryKey: ['goal', variables.id] });
+},
+```
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/goals/CreateGoalSheet.tsx` | Add `editingGoal` prop, conditional form initialization, update mode handling |
+| `src/components/goals/GoalDetailHeader.tsx` | Add `onEdit` prop and edit icon button |
+| `src/pages/GoalDetail.tsx` | Add edit sheet state, pass goal to sheet |
+| `src/hooks/useGoals.ts` | Add `score_floor` to update payload, invalidate individual goal query |
+
+## Implementation Details
+
+### CreateGoalSheet Modifications
+
+```typescript
+// Props interface update
+interface CreateGoalSheetProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editingGoal?: Goal | null;
+}
+
+// Inside component
+const isEditMode = Boolean(editingGoal);
+
+// Form reset logic - use editing goal values when provided
+useEffect(() => {
+  if (open) {
+    if (editingGoal) {
+      // Edit mode: populate from existing goal
+      setName(editingGoal.name);
+      setTargetType(editingGoal.target_type);
+      setTargetValue(editingGoal.target_value);
+      // ... etc
+    } else {
+      // Create mode: reset to defaults
+      setName('');
+      setTargetType(null);
+      // ... etc
+    }
+  }
+}, [open, editingGoal]);
+
+// Handle save - call different mutation based on mode
+const handleSave = async () => {
+  if (isEditMode) {
+    await updateGoal.mutateAsync({
+      id: editingGoal.id,
+      name: displayName,
+      target_type: targetType,
+      // ... all fields
+    });
+    toast({ title: "Goal updated!" });
+  } else {
+    await createGoal.mutateAsync({ ... });
+    toast({ title: "Goal created!" });
+  }
+};
+
+// UI conditionals
+<h2>{isEditMode ? 'Edit Goal' : 'New Goal'}</h2>
+<Button>{isEditMode ? 'Update Goal' : 'Save Goal'}</Button>
+```
+
+### GoalDetailHeader Edit Button
+
+```typescript
+// Add edit button before delete
+{onEdit && (
+  <Button
+    variant="ghost"
+    size="icon"
+    onClick={onEdit}
+    className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground"
+  >
+    <Icon name="edit" size={24} />
+  </Button>
+)}
+{onDelete && ( /* existing delete button */ )}
+```
+
+### GoalDetail Page Integration
+
+```typescript
+// State
+const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+
+// Header
+<GoalDetailHeader 
+  onBack={handleBack}
+  onEdit={() => setIsEditSheetOpen(true)}  // New
+  onDelete={handleDelete}
+  isDeleting={isDeleting}
+/>
+
+// Sheet (add at bottom of page)
+<CreateGoalSheet
+  open={isEditSheetOpen}
+  onOpenChange={setIsEditSheetOpen}
+  editingGoal={goal}
+/>
+```
+
+## Data Flow After Update
+
+```text
+User clicks "Update Goal"
+    ↓
+updateGoal.mutateAsync() called
+    ↓
+Database updated
+    ↓
+onSuccess invalidates:
+  - ['goals', user.id] → Home page cards refresh
+  - ['goal', goalId] → Current goal detail refreshes
+    ↓
+Sheet closes, user sees updated goal
+```
 
 ## Testing Checklist
 
-After applying this fix:
-1. Navigate to the Scores page and select level 14
-2. Verify Total shows 248 (matching database count)
-3. Verify No Play shows 5 (253 total charts - 248 played)
-4. Verify MFC, PFC, AAA counts match expected values
-5. Navigate to Home page and verify goal progress still displays correctly
-6. Create a new goal and verify the progress calculation works
+1. Tap edit icon on goal detail page - verify sheet opens with all values pre-populated
+2. Verify header shows "Edit Goal" not "New Goal"
+3. Verify CTA shows "Update Goal" not "Save Goal"
+4. Modify goal name and save - verify toast shows "Goal updated!"
+5. Verify goal detail page shows new name immediately
+6. Navigate to Home - verify goal card shows updated name
+7. Edit goal to change target type - verify preview card updates in real-time
+8. Cancel edit (tap X or outside) - verify no changes saved
+9. Create a new goal - verify form still resets to defaults (not old edit values)
 
