@@ -1,146 +1,242 @@
 
 
-# Add Google Authentication to DDR Score Tracker
+# Performance Audit: Edi (DDR Score Tracker)
 
-## Overview
+## Executive Summary
 
-You're right - Lovable Cloud now natively supports Google authentication with a managed solution that requires no additional API keys or configuration. This makes adding Google Sign-In very straightforward.
+After a thorough review of the codebase, I've identified **7 critical optimization opportunities** across three categories: code duplication, data fetching inefficiencies, and architectural concerns. Addressing these will reduce bundle size, improve runtime performance, and make the codebase more maintainable.
 
-## What Will Be Added
+---
 
-A "Continue with Google" button on the Auth page that allows users to sign in with their Google account alongside the existing email/password option.
+## Critical Issue #1: Triplicated `matchesRule` Function
 
-## Implementation Plan
+**Severity: High | Impact: Maintainability + Bundle Size**
 
-### Step 1: Configure Google OAuth Provider
-First, I'll use Lovable's social auth configuration tool to set up the Google provider. This will:
-- Generate the `@lovable.dev/cloud-auth-js` package integration
-- Create the `src/integrations/lovable/` module with the auth client
+The exact same filter matching logic is duplicated in **three separate files**:
 
-### Step 2: Add Google Sign-In Function to Auth Context
-**File**: `src/hooks/useAuth.tsx`
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/pages/Scores.tsx` | 101-219 | Filtering displayed scores |
+| `src/hooks/useFilterResults.ts` | 20-148 | Filter preview counting |
+| `src/hooks/useGoalProgress.ts` | 5-76 | Goal progress filtering |
 
-Add a new `signInWithGoogle` function that uses the Lovable auth module:
-```typescript
-import { lovable } from "@/integrations/lovable/index";
+Each implementation is ~120 lines with identical logic for comparing scores, levels, grades, lamps, eras, etc.
 
-// Add to AuthContextType interface
-signInWithGoogle: () => Promise<{ error: Error | null }>;
+**Problems:**
+- When you added era filtering, you had to update 3 files
+- Bug fixes must be applied 3 times
+- Adds ~350 lines of duplicated code to bundle
 
-// Add function in AuthProvider
-const signInWithGoogle = async () => {
-  const { error } = await lovable.auth.signInWithOAuth("google", {
-    redirect_uri: window.location.origin,
-  });
-  return { error: error as Error | null };
-};
+**Fix:** Extract to a single `matchesFilterRule` utility:
+```
+src/lib/filterMatcher.ts
+├── matchesRule(score, rule) - core matching logic
+├── filterScoresByRules(scores, rules, matchMode) - bulk filtering
+└── Export shared ScoreData interface
 ```
 
-### Step 3: Add Google Button to Auth Page
-**File**: `src/pages/Auth.tsx`
+---
 
-Add a styled Google sign-in button with a visual separator:
+## Critical Issue #2: Duplicate `ScoreWithSong` Interface Definitions
+
+**Severity: Medium | Impact: Type Safety + Maintenance**
+
+The `ScoreWithSong` interface is defined in **multiple locations** with slight variations:
+
+| Location | Includes era? | Includes source_type? | Includes musicdb_id? |
+|----------|--------------|----------------------|---------------------|
+| `useGoalProgress.ts` (canonical) | Yes | No | Yes |
+| `Scores.tsx` (local) | Yes | Yes | No (uses musicdb.song_id) |
+| `useFilterResults.ts` (local) | Yes | No | No |
+
+**Problems:**
+- Scores.tsx imports `GlobalScoreWithSong` but then redefines a local `ScoreWithSong` anyway
+- Fields get out of sync (e.g., `name_romanized` exists locally but not in global)
+- TypeScript can't catch mismatches between pages
+
+**Fix:** Create a single source of truth:
 ```typescript
-// After the form, before the toggle text
-<div className="relative my-6">
-  <div className="absolute inset-0 flex items-center">
-    <div className="w-full border-t border-border" />
-  </div>
-  <div className="relative flex justify-center text-xs uppercase">
-    <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
-  </div>
-</div>
-
-<Button
-  type="button"
-  variant="outline"
-  className="w-full"
-  onClick={handleGoogleSignIn}
-  disabled={isSubmitting}
->
-  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-    {/* Google "G" logo SVG path */}
-  </svg>
-  Continue with Google
-</Button>
+// src/types/scores.ts
+export interface ScoreWithSong {
+  id: string;
+  score: number | null;
+  timestamp?: string | null;
+  playstyle: string | null;
+  difficulty_name: string | null;
+  difficulty_level: number | null;
+  rank: string | null;
+  flare: number | null;
+  halo: string | null;
+  source_type?: string | null;
+  musicdb_id?: number | null;
+  musicdb: {
+    name: string | null;
+    artist: string | null;
+    eamuse_id: string | null;
+    song_id: number | null;
+    name_romanized?: string | null;
+    era: number | null;
+    deleted?: boolean | null;
+  } | null;
+  // For unplayed charts
+  isUnplayed?: boolean;
+}
 ```
 
-### Step 4: Handle Google Sign-In with Error Handling
-**File**: `src/pages/Auth.tsx`
+---
 
-Add the handler function:
+## Critical Issue #3: Scores Page Bypasses Global Cache
+
+**Severity: High | Impact: Network Efficiency + Memory**
+
+The `ScoresContext` was created to provide a single cached source of scores, but `Scores.tsx` **completely ignores it**:
+
 ```typescript
-const handleGoogleSignIn = async () => {
-  setIsSubmitting(true);
-  try {
-    const { error } = await signInWithGoogle();
-    if (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Google Sign In Failed',
-        description: error.message || 'Could not sign in with Google. Please try again.',
-      });
-    }
-  } catch (err) {
-    toast({
-      variant: 'destructive',
-      title: 'Error',
-      description: 'An unexpected error occurred. Please try again.',
-    });
-  } finally {
-    setIsSubmitting(false);
+// Line 224 in Scores.tsx - explicitly removed!
+// Removed: globalScores from useScores() - now using local scores state for modal preloading
+const [scores, setScores] = useState<ScoreWithSong[]>([]);
+```
+
+**What happens:**
+1. Home.tsx fetches ALL user scores via `useUserScores()` (global cache)
+2. Scores.tsx fetches scores AGAIN via direct Supabase query (local state)
+3. GoalDetail.tsx fetches scores AGAIN via `useUserScores()` with different query key
+
+**Impact:** Users with 4,500+ scores are fetching that data 2-3x as they navigate.
+
+**Fix:** Unify data fetching:
+- Remove the local fetch in Scores.tsx
+- Consume scores from ScoresProvider (which wraps all protected routes)
+- Pass level/filters to `useUserScores` for DB-level optimization
+- Use client-side filtering from the cached set for display
+
+---
+
+## Critical Issue #4: GoalDetail Makes Redundant Chart Queries
+
+**Severity: Medium | Impact: Network Requests**
+
+GoalDetail.tsx fetches unplayed charts like this:
+
+```typescript
+// Line 51-81 in GoalDetail.tsx
+const { data: allMatchingCharts = [] } = useQuery({
+  queryKey: ['musicdb-charts-for-goal', goal?.id],
+  queryFn: async () => {
+    let query = supabase.from('musicdb')
+      .select('id, name, artist, eamuse_id, song_id, difficulty_level, difficulty_name, playstyle')
+      // ... filters
+  },
+});
+```
+
+**But the app already has:**
+- `useSongChartsCache()` - fetches ALL 10,000+ SP charts and caches them for 30 minutes
+- `useMusicDbCount()` - server-side counting with filters
+
+**Fix:** 
+1. Reuse `useSongChartsCache` to identify unplayed charts client-side
+2. Filter the cached charts by goal criteria
+3. Eliminate the redundant query per goal
+
+---
+
+## Critical Issue #5: Unused ScoresProvider Context
+
+**Severity: Low | Impact: Dead Code + Confusion**
+
+`ScoresContext.tsx` exists and is documented in architecture memories, but:
+
+1. It's **not imported** in `App.tsx` - no `<ScoresProvider>` wraps the routes
+2. `Scores.tsx` has a comment saying it was "removed" in favor of local state
+3. `Home.tsx` uses `useUserScores()` directly, not `useScores()` context
+
+**The result:** A context was created, documented, but never actually integrated.
+
+**Fix:** Either:
+- (A) Remove `ScoresContext.tsx` entirely and update docs
+- (B) Actually integrate it: wrap routes in `<ScoresProvider>` and consume via `useScores()` hook
+
+---
+
+## Critical Issue #6: Stats Calculation Fallback Runs Redundantly
+
+**Severity: Medium | Impact: CPU on Mobile**
+
+In Scores.tsx (lines 593-690), stats are calculated:
+
+```typescript
+const { stats, averageScore } = useMemo(() => {
+  // Case 1: Use server-side stats when available
+  if (serverStats && selectedLevel !== null && activeFilters.length === 0) {
+    return { stats: [...], averageScore: serverStats.avg_score };
   }
-};
+  
+  // Case 2: Fall back to client-side calculation
+  let filteredForStats = [...scores];
+  // Re-filters the ENTIRE score array with the same matchesRule logic
+  // that was already applied to create displayedScores
+});
 ```
 
-## Files to Create/Modify
+**Problem:** When filters are active, the same scores are filtered twice:
+1. First in `displayedScores` useMemo (line 444)
+2. Again in stats calculation useMemo (line 593)
 
-| File | Change |
-|------|--------|
-| `src/integrations/lovable/` | **AUTO-GENERATED** - Lovable auth module |
-| `src/hooks/useAuth.tsx` | Add `signInWithGoogle` function |
-| `src/pages/Auth.tsx` | Add Google button with separator |
-
-## Visual Design
-
-The auth page will look like this:
-
-```
-┌──────────────────────────────┐
-│    🎵 DDR Score Tracker      │
-│                              │
-│  ┌────────────────────────┐  │
-│  │     Welcome back       │  │
-│  │                        │  │
-│  │  Email: [_________]    │  │
-│  │  Password: [______]    │  │
-│  │                        │  │
-│  │  [    Sign In    ]     │  │
-│  │                        │  │
-│  │  ─── Or continue with ───│  │
-│  │                        │  │
-│  │  [G Continue with Google]│  │
-│  │                        │  │
-│  │  Don't have an account? │  │
-│  │        Sign up          │  │
-│  └────────────────────────┘  │
-└──────────────────────────────┘
+**Fix:** Derive stats from `displayedScores` directly:
+```typescript
+const stats = useMemo(() => {
+  // displayedScores already has filters applied
+  const playedSongs = displayedScores.filter(s => !s.isNoPlay);
+  // Calculate MFC, PFC, etc. from playedSongs
+}, [displayedScores]);
 ```
 
-## How It Works
+---
 
-1. User clicks "Continue with Google"
-2. Lovable Cloud handles the OAuth flow with its managed Google credentials
-3. User is redirected to Google to authorize
-4. After authorization, user is redirected back and automatically signed in
-5. The existing `onAuthStateChange` listener in `useAuth.tsx` picks up the session
+## Critical Issue #7: Database Query Inefficiency in Goal Progress
 
-## No Configuration Needed
+**Severity: Medium | Impact: Scalability**
 
-Lovable Cloud automatically manages:
-- Google OAuth client ID and secret
-- Redirect URLs
-- Token handling and refresh
+Each goal on the Home page triggers:
+1. `useMusicDbCount()` - 1 query per goal
+2. `useGoalProgress()` - filters scores client-side
 
-You can optionally bring your own Google OAuth credentials through Cloud Dashboard > Users > Authentication Settings if you want custom branding on the Google consent screen.
+With 5 goals, that's 5 count queries on page load.
+
+**Fix (Phase 4 from docs):** Create a server-side `calculate_goal_progress` RPC:
+```sql
+CREATE FUNCTION calculate_goal_progress(
+  p_user_id UUID,
+  p_criteria_rules JSONB,
+  p_target_type TEXT,
+  p_target_value TEXT
+) RETURNS TABLE(completed INT, total INT)
+```
+
+This moves all goal calculations to PostgreSQL, returning only the final numbers.
+
+---
+
+## Summary: Recommended Refactoring Order
+
+| Priority | Issue | Effort | Impact |
+|----------|-------|--------|--------|
+| 1 | Extract `matchesRule` to shared utility | Low | High (maintainability) |
+| 2 | Consolidate `ScoreWithSong` types | Low | Medium (type safety) |
+| 3 | Integrate or remove ScoresProvider | Medium | Medium (cleanup) |
+| 4 | Derive stats from displayedScores | Low | Medium (CPU reduction) |
+| 5 | Reuse songChartsCache in GoalDetail | Medium | Medium (fewer queries) |
+| 6 | Unify Scores.tsx with global cache | High | High (network/memory) |
+| 7 | Server-side goal progress RPC | High | High (scalability) |
+
+---
+
+## Immediate Quick Wins (Can Do Now)
+
+1. **Extract matchesRule** - Create `src/lib/filterMatcher.ts`, import in 3 files
+2. **Create shared types** - Create `src/types/scores.ts` with canonical interface
+3. **Fix stats derivation** - Use displayedScores instead of re-filtering
+
+Would you like me to implement any of these optimizations?
 
