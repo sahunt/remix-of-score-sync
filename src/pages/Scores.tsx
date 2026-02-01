@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useState, useMemo, useCallback } from 'react';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useScoresFilterState } from '@/hooks/useScoresFilterState';
 import { useUserStats } from '@/hooks/useUserStats';
+import { useScores } from '@/contexts/ScoresContext';
 import { useSongChartsCache } from '@/hooks/useSongChartsCache';
-import { supabase } from '@/integrations/supabase/client';
+import { useAllChartsCache, filterChartsByCriteria } from '@/hooks/useAllChartsCache';
 import { matchesFilterRule } from '@/lib/filterMatcher';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
@@ -20,7 +20,6 @@ import type { SavedFilter } from '@/components/filters/filterTypes';
 import type { 
   ScoreWithSong,
   DisplaySong, 
-  MusicDbChart, 
   PreloadedChart 
 } from '@/types/scores';
 
@@ -36,16 +35,17 @@ interface SelectedSong {
   preloadedCharts?: PreloadedChart[];
 }
 
-// matchesRule is now imported from @/lib/filterMatcher as matchesFilterRule
-
 export default function Scores() {
-  const { user } = useAuth();
   const { transformHaloLabel } = use12MSMode();
-  // Removed: globalScores from useScores() - now using local scores state for modal preloading
-  const { data: songChartsCache } = useSongChartsCache(); // Pre-cached all SP charts by song_id
-  const [scores, setScores] = useState<ScoreWithSong[]>([]);
-  const [musicDbCharts, setMusicDbCharts] = useState<MusicDbChart[]>([]);
-  const [loading, setLoading] = useState(false); // Start as false - no initial load
+  
+  // Use global scores cache - eliminates redundant fetching between pages
+  const { scores: globalScores, isLoading: scoresLoading } = useScores();
+  
+  // Pre-cached all SP charts by song_id (for modal preloading)
+  const { data: songChartsCache } = useSongChartsCache();
+  
+  // Pre-cached all SP charts flat (for "no play" songs)
+  const { data: allCharts = [] } = useAllChartsCache();
   
   // Persistent filter state
   const {
@@ -65,6 +65,22 @@ export default function Scores() {
   const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+  // Filter global scores to current view criteria
+  const filteredScores = useMemo(() => {
+    let result = [...globalScores];
+    
+    // Apply level filter
+    if (selectedLevel !== null) {
+      result = result.filter(s => s.difficulty_level === selectedLevel);
+    } else if (levelsFromFilters.length > 0) {
+      result = result.filter(s => 
+        s.difficulty_level !== null && levelsFromFilters.includes(s.difficulty_level)
+      );
+    }
+    
+    return result;
+  }, [globalScores, selectedLevel, levelsFromFilters]);
+
   const handleSongClick = useCallback((song: DisplaySong) => {
     if (!song.song_id) return;
     
@@ -74,11 +90,10 @@ export default function Scores() {
     let preloadedCharts: PreloadedChart[] | undefined;
     
     // Only preload if we have charts from the cache
-    // Otherwise let modal fetch directly (handles edge cases like deleted songs)
     if (allChartsForSong.length > 0) {
-      // Build score lookup from LOCAL scores state (matches what's displayed in the list)
+      // Build score lookup from filtered scores (matches what's displayed in the list)
       const scoreMap = new Map(
-        scores
+        filteredScores
           .filter(s => s.musicdb?.song_id === song.song_id)
           .map(s => [s.difficulty_name?.toUpperCase(), s])
       );
@@ -95,7 +110,7 @@ export default function Scores() {
             rank: userScore?.rank ?? null,
             flare: userScore?.flare ?? null,
             halo: userScore?.halo ?? null,
-            source_type: userScore?.source_type ?? null,
+            source_type: null,
           };
         })
         .sort((a, b) => {
@@ -111,159 +126,34 @@ export default function Scores() {
       artist: song.artist,
       eamuseId: song.eamuse_id,
       era: song.era ?? null,
-      preloadedCharts, // undefined triggers modal fetch for edge cases
+      preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, [scores, songChartsCache]);
+  }, [filteredScores, songChartsCache]);
 
   const handleCloseModal = useCallback(() => {
     setIsDetailModalOpen(false);
   }, []);
 
-  // Determine if we should fetch scores:
-  // - Level selected, OR
-  // - Has active filters with level rules, OR  
-  // - Has any active filter (show all matching scores across all levels), OR
-  // - Has a search query (search across all scores)
+  // Determine if we should show scores
   const hasActiveFilters = activeFilters.length > 0;
   const hasSearchQuery = searchQuery.trim().length > 0;
-  const shouldFetchScores = selectedLevel !== null || levelsFromFilters.length > 0 || hasActiveFilters || hasSearchQuery;
-  
-  // Compute the levels to fetch - either the selected level, levels from filters, or null (all levels)
-  const levelsToFetch = selectedLevel !== null 
-    ? [selectedLevel] 
-    : levelsFromFilters.length > 0
-      ? levelsFromFilters
-      : []; // Empty means fetch all levels when hasActiveFilters is true
+  const shouldShowScores = selectedLevel !== null || levelsFromFilters.length > 0 || hasActiveFilters || hasSearchQuery;
 
-  useEffect(() => {
-    const fetchScoresForLevels = async () => {
-      if (!user || !shouldFetchScores) {
-        setScores([]);
-        setLoading(false);
-        return;
-      }
+  // Get musicdb charts for the current level from the cache
+  const musicDbChartsForLevel = useMemo(() => {
+    if (selectedLevel === null || allCharts.length === 0) return [];
+    return filterChartsByCriteria(
+      allCharts,
+      { operator: 'is', value: [selectedLevel] },
+      null
+    );
+  }, [allCharts, selectedLevel]);
 
-      setLoading(true);
-      
-      try {
-        // Build query with level filter for better performance
-        let query = supabase
-          .from('user_scores')
-          .select(`
-            id,
-            score,
-            timestamp,
-            playstyle,
-            difficulty_name,
-            difficulty_level,
-            rank,
-            flare,
-            halo,
-            source_type,
-            musicdb (
-              name,
-              artist,
-              eamuse_id,
-              song_id,
-              name_romanized,
-              era,
-              deleted
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('playstyle', 'SP');
-        
-        // Filter by levels if we have specific levels to fetch
-        // If levelsToFetch is empty but we're fetching (hasActiveFilters), fetch all levels
-        if (levelsToFetch.length === 1) {
-          query = query.eq('difficulty_level', levelsToFetch[0]);
-        } else if (levelsToFetch.length > 1) {
-          query = query.in('difficulty_level', levelsToFetch);
-        }
-        // else: no level filter, fetch all levels (for filter-only queries)
-        
-        // Paginate to handle large result sets
-        const PAGE_SIZE = 1000;
-        let allScores: ScoreWithSong[] = [];
-        let from = 0;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
-
-          if (error) throw error;
-          
-          if (data && data.length > 0) {
-            allScores = [...allScores, ...data];
-            from += PAGE_SIZE;
-            hasMore = data.length === PAGE_SIZE;
-          } else {
-            hasMore = false;
-          }
-        }
-        
-        // Sort client-side by timestamp (recent first), with nulls last
-        const sortedData = allScores.sort((a, b) => {
-          if (!a.timestamp && !b.timestamp) return 0;
-          if (!a.timestamp) return 1;
-          if (!b.timestamp) return -1;
-          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        });
-        
-        // Filter out scores for deleted songs (matches useSongChartsCache behavior)
-        const validScores = sortedData.filter(s => 
-          s.musicdb !== null && s.musicdb.deleted !== true
-        );
-        
-        setScores(validScores);
-      } catch (err) {
-        console.error('Error fetching scores:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchScoresForLevels();
-  }, [user, shouldFetchScores, selectedLevel, levelsFromFilters.join(','), hasActiveFilters]); // Join array for stable dependency
-
-  // Fetch musicdb charts for the current level (to show "no play" songs)
-  const [musicDbTotal, setMusicDbTotal] = useState<number>(0);
-  
-  useEffect(() => {
-    const fetchMusicDbCharts = async () => {
-      // Only fetch when a level is selected (to avoid fetching all 10k+ charts)
-      if (selectedLevel === null) {
-        setMusicDbCharts([]);
-        setMusicDbTotal(0);
-        return;
-      }
-      
-      try {
-        const { data, count, error } = await supabase
-          .from('musicdb')
-          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle, name_romanized, era', { count: 'exact' })
-          .not('difficulty_level', 'is', null)
-          .eq('playstyle', 'SP')
-          .eq('deleted', false)
-          .eq('difficulty_level', selectedLevel);
-        
-        if (error) throw error;
-        setMusicDbCharts(data ?? []);
-        setMusicDbTotal(count ?? 0);
-      } catch (err) {
-        console.error('Error fetching musicdb charts:', err);
-      }
-    };
-    
-    fetchMusicDbCharts();
-  }, [selectedLevel]);
-
-  // Filter and sort scores for display, including "no play" songs from musicdb
-  // Moved above stats calculation so we can use noPlaySongs.length for accurate count
+  // Filter and sort scores for display, including "no play" songs
   const { displayedScores, noPlayCount } = useMemo((): { displayedScores: DisplaySong[], noPlayCount: number } => {
     // Convert user scores to DisplaySong format
-    let playedSongs: DisplaySong[] = scores.map(s => ({
+    let playedSongs: DisplaySong[] = filteredScores.map(s => ({
       id: s.id,
       score: s.score,
       rank: s.rank,
@@ -279,11 +169,6 @@ export default function Scores() {
       era: s.musicdb?.era ?? null,
       isNoPlay: false,
     }));
-
-    // Filter by difficulty level
-    if (selectedLevel !== null) {
-      playedSongs = playedSongs.filter(s => s.difficulty_level === selectedLevel);
-    }
 
     // Apply active filters to played songs
     if (activeFilters.length > 0) {
@@ -328,8 +213,8 @@ export default function Scores() {
 
     // Add "no play" songs from musicdb (only when a level is selected and no active filters)
     let noPlaySongs: DisplaySong[] = [];
-    if (selectedLevel !== null && musicDbCharts.length > 0 && activeFilters.length === 0) {
-      noPlaySongs = musicDbCharts
+    if (selectedLevel !== null && musicDbChartsForLevel.length > 0 && activeFilters.length === 0) {
+      noPlaySongs = musicDbChartsForLevel
         .filter(chart => !playedChartKeys.has(`${chart.song_id}|${chart.difficulty_name}`))
         .map(chart => ({
           id: `noplay-${chart.id}`,
@@ -343,8 +228,8 @@ export default function Scores() {
           artist: chart.artist,
           eamuse_id: chart.eamuse_id,
           song_id: chart.song_id,
-          name_romanized: chart.name_romanized,
-          era: chart.era,
+          name_romanized: null, // Not in cache
+          era: null, // Not in cache
           isNoPlay: true,
         }));
     }
@@ -374,7 +259,6 @@ export default function Scores() {
           comparison = (a.difficulty_level ?? 0) - (b.difficulty_level ?? 0);
           break;
         case 'score':
-          // No play songs (null score) should sort last for descending, first for ascending
           if (a.score === null && b.score === null) comparison = 0;
           else if (a.score === null) comparison = -1;
           else if (b.score === null) comparison = 1;
@@ -401,18 +285,17 @@ export default function Scores() {
     });
 
     return { displayedScores: result, noPlayCount: noPlaySongs.length };
-  }, [scores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection, musicDbCharts]);
+  }, [filteredScores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection, musicDbChartsForLevel]);
 
   // Server-side stats from get_user_stats RPC - only fetch when a single level is selected
-  // This optimizes the common case of viewing a specific level's stats
-  const { data: serverStats, isLoading: statsLoading } = useUserStats(
+  const { data: serverStats } = useUserStats(
     selectedLevel !== null && activeFilters.length === 0 ? selectedLevel : null
   );
 
   // Calculate stats - use server-side when available, fall back to client-side for filtered views
   const { stats, averageScore } = useMemo(() => {
     // Return empty stats if no level is selected
-    if (!shouldFetchScores) {
+    if (!shouldShowScores) {
       return {
         stats: [
           { label: 'Total', value: 0 },
@@ -429,8 +312,6 @@ export default function Scores() {
     
     // Use server-side stats when available (single level, no filters)
     if (serverStats && selectedLevel !== null && activeFilters.length === 0) {
-      // Calculate "Clear" as total minus MFC, PFC, AAA, and Fail
-      // This matches the existing UI logic where Clear = songs that passed but aren't top achievements
       const clearCount = serverStats.total_count - serverStats.mfc_count - serverStats.pfc_count - serverStats.aaa_count - serverStats.fail_count;
       
       return {
@@ -447,9 +328,7 @@ export default function Scores() {
       };
     }
     
-    // Fall back to client-side calculation when filters are active
-    // OPTIMIZATION: Use displayedScores instead of re-filtering the scores array
-    // displayedScores already has all filters applied, so we just need to exclude noPlay songs
+    // Fall back to client-side calculation from displayedScores
     const playedSongs = displayedScores.filter(s => !s.isNoPlay);
 
     const total = playedSongs.length;
@@ -457,22 +336,19 @@ export default function Scores() {
     const pfc = playedSongs.filter(s => s.halo?.toLowerCase() === 'pfc').length;
     const aaa = playedSongs.filter(s => s.rank?.toUpperCase() === 'AAA').length;
     
-    // Clear = passed songs that are NOT MFC, NOT PFC, and NOT AAA (the leftovers)
     const clear = playedSongs.filter(s => {
       const halo = s.halo?.toLowerCase();
       const rank = s.rank?.toUpperCase();
       const isMfc = halo === 'mfc';
       const isPfc = halo === 'pfc';
       const isAaa = rank === 'AAA';
-      const hasPassed = s.rank !== null; // Has a rank means passed
+      const hasPassed = s.rank !== null;
       
       return hasPassed && !isMfc && !isPfc && !isAaa;
     }).length;
     
     const fail = playedSongs.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
 
-    // Calculate average score (only for played songs with non-null score)
-    // DDR scores are always multiples of 10, so round to nearest 10
     const playedWithScores = playedSongs.filter(s => s.score !== null);
     const avgScore = playedWithScores.length > 0
       ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length / 10) * 10
@@ -490,8 +366,7 @@ export default function Scores() {
       ],
       averageScore: avgScore,
     };
-  }, [displayedScores, selectedLevel, activeFilters, transformHaloLabel, shouldFetchScores, noPlayCount, serverStats]);
-
+  }, [displayedScores, selectedLevel, activeFilters, transformHaloLabel, shouldShowScores, noPlayCount, serverStats]);
 
   const handleRemoveFilter = useCallback((id: string) => {
     setActiveFilters(prev => prev.filter(f => f.id !== id));
@@ -525,7 +400,7 @@ export default function Scores() {
           activeFilters={activeFilters}
           onRemoveFilter={handleRemoveFilter}
           onApplyFilters={handleApplyFilters}
-          scores={scores}
+          scores={filteredScores}
         />
 
         {/* Stats summary */}
@@ -540,7 +415,7 @@ export default function Scores() {
         />
 
         {/* Song list */}
-        {!shouldFetchScores ? (
+        {!shouldShowScores ? (
           <Card className="card-base border-none">
             <CardContent className="flex flex-col items-center justify-center py-10 text-center !p-6">
               <img 
@@ -554,7 +429,7 @@ export default function Scores() {
               </p>
             </CardContent>
           </Card>
-        ) : loading ? (
+        ) : scoresLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>

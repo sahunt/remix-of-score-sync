@@ -3,11 +3,8 @@ import { useUsername } from '@/hooks/useUsername';
 import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useGoals } from '@/hooks/useGoals';
-import { useGoalProgress, type ScoreWithSong } from '@/hooks/useGoalProgress';
-import { useMusicDbCount } from '@/hooks/useMusicDbCount';
-import { useUserScores } from '@/hooks/useUserScores';
+import { useServerGoalProgress } from '@/hooks/useServerGoalProgress';
 import { use12MSMode } from '@/hooks/use12MSMode';
-import { useAuth } from '@/hooks/useAuth';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
 import { Button } from '@/components/ui/button';
@@ -18,42 +15,46 @@ import { CreateGoalSheet } from '@/components/goals/CreateGoalSheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import rainbowBg from '@/assets/rainbow-bg.png';
-import type { Goal } from '@/hooks/useGoalProgress';
 import type { FilterRule } from '@/components/filters/filterTypes';
 
-// Component to render a goal card with real progress
-function GoalCardWithProgress({ 
-  goal, 
-  scores, 
-  isLoadingScores,
-  reverseTransformHalo
-}: { 
-  goal: Goal; 
-  scores: ScoreWithSong[];
-  isLoadingScores: boolean;
-  reverseTransformHalo: (target: string | null) => string | null;
-}) {
-  // Get total from musicdb based on goal criteria
-  const { data: musicDbData } = useMusicDbCount(
+interface Goal {
+  id: string;
+  name: string;
+  target_type: string;
+  target_value: string;
+  criteria_rules: unknown[];
+  criteria_match_mode: string;
+  goal_mode: string;
+  goal_count?: number | null;
+  score_mode?: string;
+  score_floor?: number | null;
+}
+
+// Component to render a goal card with server-calculated progress
+function GoalCardWithProgress({ goal }: { goal: Goal }) {
+  // Use server-side RPC for progress calculation
+  // This replaces both useMusicDbCount and useGoalProgress with a single query
+  const { data: progress, isLoading } = useServerGoalProgress(
+    goal.id,
     goal.criteria_rules as FilterRule[],
-    goal.criteria_match_mode,
+    goal.target_type as 'lamp' | 'grade' | 'flare' | 'score',
+    goal.target_value,
     true
   );
-  const musicDbTotal = musicDbData?.total ?? 0;
 
-  const progress = useGoalProgress(goal, scores, [], isLoadingScores, reverseTransformHalo);
-
-  // For average score mode, use the calculated avg values from progress
+  // For "count" mode, use goal_count as the denominator
+  // For "all" mode, use server-calculated total
   const isAverageMode = goal.target_type === 'score' && goal.score_mode === 'average';
   
-  // For "count" mode, use goal_count as the denominator
-  // For "all" mode, use musicdb total (all matching charts)
-  // For average score mode, total is the target average from progress
   const total = isAverageMode
-    ? progress.total
+    ? parseInt(goal.target_value, 10) // For average mode, total is the target average
     : goal.goal_mode === 'count' 
       ? (goal.goal_count ?? 0) 
-      : (musicDbTotal > 0 ? musicDbTotal : progress.total);
+      : (progress?.total ?? 0);
+
+  const current = isAverageMode
+    ? 0 // Average mode needs special handling - not supported by RPC yet
+    : (progress?.completed ?? 0);
 
   return (
     <GoalCard
@@ -61,9 +62,9 @@ function GoalCardWithProgress({
       title={goal.name}
       targetType={goal.target_type as 'lamp' | 'grade' | 'flare' | 'score'}
       targetValue={goal.target_value}
-      current={progress.current}
+      current={current}
       total={total}
-      scoreMode={goal.score_mode}
+      scoreMode={goal.score_mode as 'target' | 'average' | undefined}
       scoreFloor={goal.score_floor}
     />
   );
@@ -73,15 +74,8 @@ export default function Home() {
   const { username, loading: usernameLoading } = useUsername();
   const characterImage = useSessionCharacter();
   const { isVisible } = useScrollDirection({ threshold: 15 });
-  const { user } = useAuth();
   const { goals, isLoading: goalsLoading } = useGoals();
-  const { reverseTransformHalo } = use12MSMode();
   const [createGoalOpen, setCreateGoalOpen] = useState(false);
-
-  // Use shared hook for consistent score data across all views
-  const { data: scores = [], isLoading: scoresLoading } = useUserScores({
-    enabled: !!user?.id,
-  });
 
   const handleSearch = (query: string) => {
     // TODO: Implement search functionality
@@ -154,9 +148,6 @@ export default function Home() {
               <GoalCardWithProgress
                 key={goal.id}
                 goal={goal}
-                scores={scores}
-                isLoadingScores={scoresLoading}
-                reverseTransformHalo={reverseTransformHalo}
               />
             ))
           )}

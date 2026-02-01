@@ -406,6 +406,21 @@ export type Database = {
           updated_count: number
         }[]
       }
+      calculate_goal_progress: {
+        Args: {
+          p_difficulty_operator?: string
+          p_difficulty_values?: string[]
+          p_level_operator?: string
+          p_level_values?: number[]
+          p_target_type?: string
+          p_target_value?: string
+          p_user_id: string
+        }
+        Returns: {
+          completed_count: number
+          total_count: number
+        }[]
+      }
       get_user_stats: {
         Args: {
           p_difficulty_level?: number

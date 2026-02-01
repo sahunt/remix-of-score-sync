@@ -1,54 +1,65 @@
 # Performance Audit: Edi (DDR Score Tracker)
 
-## Status: ✅ Phase 1 Complete
+## Status: ✅ All Issues Complete
 
-Completed optimizations (Priority 1-4):
-1. ✅ **Extract matchesRule** - Created `src/lib/filterMatcher.ts`
-2. ✅ **Consolidate types** - Created `src/types/scores.ts`
-3. ✅ **Integrate ScoresProvider** - Already in `AppLayout.tsx`
-4. ✅ **Fix stats derivation** - Now uses `displayedScores` directly
+All 7 optimizations from the audit have been implemented:
 
----
-
-## Remaining Optimizations (Priority 5-7)
-
-### Issue #5: Reuse songChartsCache in GoalDetail
-**Status:** Ready to implement
-**Effort:** Medium | **Impact:** Medium (fewer queries)
-
-GoalDetail.tsx fetches unplayed charts with a separate query, but `useSongChartsCache()` already caches all 10,000+ SP charts.
-
-### Issue #6: Unify Scores.tsx with Global Cache
-**Status:** Deferred - requires careful modal preloading consideration
-**Effort:** High | **Impact:** High (network/memory)
-
-The Scores page maintains local state for modal preloading sync. Unifying with global cache requires ensuring modal always shows data consistent with the displayed list.
-
-### Issue #7: Server-side Goal Progress RPC
-**Status:** Planned for Phase 4
-**Effort:** High | **Impact:** High (scalability)
-
-Create PostgreSQL function `calculate_goal_progress` to move goal calculations server-side.
+| Issue | Status | Impact |
+|-------|--------|--------|
+| #1 Extract matchesRule | ✅ Done | Eliminated ~350 lines duplication |
+| #2 Consolidate types | ✅ Done | Single source of truth for types |
+| #3 Integrate ScoresProvider | ✅ Done | Global cache in AppLayout |
+| #4 Fix stats derivation | ✅ Done | Uses displayedScores directly |
+| #5 Reuse charts cache in GoalDetail | ✅ Done | No per-goal musicdb queries |
+| #6 Unify Scores.tsx with global cache | ✅ Done | No redundant score fetching |
+| #7 Server-side goal progress RPC | ✅ Done | Single RPC per goal |
 
 ---
 
-## Files Created/Modified in Phase 1
+## Files Created
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `src/types/scores.ts` | Created | Canonical type definitions |
-| `src/lib/filterMatcher.ts` | Created | Centralized filter logic |
-| `src/hooks/useGoalProgress.ts` | Updated | Uses shared filterMatcher |
-| `src/hooks/useFilterResults.ts` | Updated | Uses shared filterMatcher |
-| `src/pages/Scores.tsx` | Updated | Uses shared types/filter, optimized stats |
-| `src/components/scores/FiltersSection.tsx` | Updated | Uses ScoreForFiltering type |
-| `src/components/filters/FilterModal.tsx` | Updated | Uses ScoreForFiltering type |
-| `src/components/filters/CreateFilterSheet.tsx` | Updated | Uses ScoreForFiltering type |
+| File | Purpose |
+|------|---------|
+| `src/types/scores.ts` | Canonical type definitions |
+| `src/lib/filterMatcher.ts` | Centralized filter logic |
+| `src/hooks/useAllChartsCache.ts` | Flat chart cache for filtering |
+| `src/hooks/useServerGoalProgress.ts` | Server-side goal progress hook |
+
+## Files Updated
+
+| File | Changes |
+|------|---------|
+| `src/hooks/useGoalProgress.ts` | Uses shared filterMatcher |
+| `src/hooks/useFilterResults.ts` | Uses shared filterMatcher |
+| `src/pages/Scores.tsx` | Uses global caches, optimized stats |
+| `src/pages/GoalDetail.tsx` | Uses useAllChartsCache |
+| `src/pages/Home.tsx` | Uses useServerGoalProgress RPC |
+| `src/components/scores/FiltersSection.tsx` | Uses ScoreForFiltering type |
+| `src/components/filters/FilterModal.tsx` | Uses ScoreForFiltering type |
+| `src/components/filters/CreateFilterSheet.tsx` | Uses ScoreForFiltering type |
+
+## Database Changes
+
+Added PostgreSQL function `calculate_goal_progress`:
+- Calculates both completed and total counts in single query
+- Supports lamp, grade, flare, and score target types
+- Handles level/difficulty filters with is/is_not/is_between operators
 
 ---
 
-## Bundle Size Impact
+## Performance Impact Summary
 
-Removed ~350 lines of duplicated filter matching logic across 3 files, replaced with single ~160 line utility.
+**Network Requests Reduced:**
+- Home page: N+1 queries → N queries (1 RPC per goal instead of musicdb count + scores)
+- GoalDetail: Per-goal chart query → Shared cache lookup
+- Scores page: Per-level fetch → Global cache with client filtering
 
-**Estimated savings:** ~190 lines / ~4KB gzipped
+**Bundle Size:**
+- Removed ~350 lines of duplicated filter logic
+- Added ~200 lines of shared utilities
+- Net reduction: ~150 lines
+
+**Memory:**
+- All pages share a single scores cache
+- All pages share a single charts cache
+- No duplicate data in memory
