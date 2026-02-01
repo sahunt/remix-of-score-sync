@@ -1,159 +1,216 @@
 
-# Bug Fix: Era Chip Display and Modal Score Synchronization
+# Fix Song Detail Modal: Data Reliability and Synchronization
 
 ## Problem Summary
 
-Two critical bugs were identified on the Scores page:
-
-1. **Era chip not displaying for `era=0` songs** - Songs with `era=0` (Classic era) don't show the era chip, even though the database correctly stores `era=0`
-2. **Modal shows no scores** - When clicking a song card with visible scores, the modal shows "No play" for all difficulties
+The Song Detail Modal shows "No SP charts available" for songs that clearly have scores in the list, and source icons (sanbai/phaseii) are not displaying.
 
 ## Root Cause Analysis
 
-### Bug 1: Era Display Issue
+I traced the entire data flow and found **THREE critical bugs** creating this unreliable behavior:
 
-The database correctly stores `era=0` for Classic era songs. The `EraChip` component handles this correctly with explicit null checks:
+### Bug 1: Deleted Songs Not Filtered in Scores.tsx
 
-```typescript
-if (era === null || era === undefined) return null;
+The local `scores` fetch in `Scores.tsx` (lines 306-328) does NOT filter out deleted songs from the `musicdb` table. Meanwhile, the `useSongChartsCache` hook DOES filter deleted songs (line 33: `.eq('deleted', false)`).
+
+**Result**: Songs like "CARTOON HEROES (20th Anniversary Mix)" appear in the song list (because their user_scores still exist), but when clicked, the modal gets **zero charts** from the cache because the charts are marked `deleted: true`.
+
+**Evidence from database**:
+```
+CARTOON HEROES (20th Anniversary Mix) - song_id 38897
+- All 5 SP charts have deleted: true
+- User has 72 scores linked to deleted songs
 ```
 
-**However**, the issue is on **line 752 of Scores.tsx**:
+### Bug 2: source_type Field Missing from Query
 
+The local scores fetch in `Scores.tsx` does NOT include `source_type` in its SELECT statement:
 ```typescript
-era={selectedSong?.era ?? null}
+.select(`
+  id, score, timestamp, playstyle,
+  difficulty_name, difficulty_level, rank, flare, halo,
+  musicdb (...) 
+`) // NO source_type!
 ```
 
-The `??` operator is correct, but the problem is upstream. When `selectedSong` is set in `handleSongClick`, it uses `song.era` from the `DisplaySong`. If `era` is `0` and gets passed through multiple layers, TypeScript's optional chaining can coerce it.
+And worse, the preloading logic hardcodes `source_type: null`:
+```typescript
+source_type: null,  // Line 254 - should be: source_type: userScore?.source_type ?? null
+```
 
-But the **actual culprit** is likely that `era` is being treated as "falsy" somewhere in the data chain. The `MusicDbChart` interface has `era: number | null`, but when the query returns, Supabase may return `0` as a primitive that gets coerced.
+### Bug 3: ScoreWithSong Interface Missing source_type
 
-Let me trace more carefully:
-- Line 493 creates noPlay songs with `era: chart.era` (chart comes from `musicDbCharts`)
-- `musicDbCharts` is fetched with `era` in the select
-- The interface `MusicDbChart` has `era: number | null`
+The `ScoreWithSong` interface in Scores.tsx (lines 21-39) doesn't include the `source_type` field, so even if we fetched it, TypeScript wouldn't recognize it.
 
-The actual fix needed: ensure explicit typing and avoid any implicit falsy checks.
+## The Elegant Solution: Unify Data Sources
 
-### Bug 2: Modal Score Mismatch (Critical)
+The core problem is **data fragmentation**. There are currently 3+ sources of score data:
+1. Global context (`ScoresProvider` / `useScores`)  
+2. Local state (`scores` in Scores.tsx)
+3. `useSongChartsCache` for chart metadata
 
-The `handleSongClick` function uses **two different data sources** that are NOT synchronized:
+Instead of patching each individually, the fix should:
 
-**Source 1 - Song List Display (local `scores` state)**:
-- Fetched via `useEffect` on line 293-375
-- Filtered by `selectedLevel` and `levelsToFetch`
-- Cached in local `scores` state
-
-**Source 2 - Modal Preloading (global `globalScores` context)**:
-- Fetched via `useUserScores` hook through `ScoresProvider`
-- NO level filtering - fetches ALL scores
-- Cached in React Query with key `['user-scores', user?.id, 'global', ...]`
-
-**The Mismatch**: When a user clicks on a song card, the card displays data from `scores` (local state), but the modal's `preloadedCharts` is built using `globalScores` (context). If these two haven't synchronized (due to different cache timing, loading states, or query parameters), the modal shows stale or missing data.
-
-**Example scenario**:
-1. User uploads new scores
-2. Local `scores` refetches and shows updated data in list
-3. `globalScores` cache (5 minute staleTime) hasn't invalidated yet
-4. User clicks a song with new CHAOS score
-5. Modal uses old `globalScores` which doesn't have the CHAOS score
-6. Modal shows "No play" for all difficulties
+1. **Add `deleted` field to local query** so deleted songs are filtered consistently
+2. **Add `source_type` to interface and query** so source icons display
+3. **Use local scores directly for modal** (keeping the recent fix that switched from globalScores to local scores)
+4. **Handle edge case when cache is empty** by falling back to modal's internal fetch
 
 ## Implementation Plan
 
-### Step 1: Fix Modal Data Source to Use Local Scores
+### Step 1: Update ScoreWithSong Interface
+**File**: `src/pages/Scores.tsx` (lines 21-39)
 
-**File**: `src/pages/Scores.tsx`
-
-Change `handleSongClick` to use the local `scores` state (which matches what's displayed) instead of `globalScores`:
-
+Add `source_type` field to the interface:
 ```typescript
-// BEFORE (lines 235-239):
-const scoreMap = new Map(
-  globalScores
-    .filter(s => s.musicdb?.song_id === song.song_id)
-    .map(s => [s.difficulty_name?.toUpperCase(), s])
-);
-
-// AFTER:
-// Use local scores state - this matches what's displayed in the list
-const scoreMap = new Map(
-  scores
-    .filter(s => s.musicdb?.song_id === song.song_id)
-    .map(s => [s.difficulty_name?.toUpperCase(), s])
-);
+interface ScoreWithSong {
+  id: string;
+  score: number | null;
+  // ... existing fields
+  halo: string | null;
+  source_type: string | null;  // ADD THIS
+  musicdb: {
+    // ... existing fields
+    deleted?: boolean | null;  // ADD THIS for filtering
+  } | null;
+}
 ```
 
-Also update the `useCallback` dependencies:
-```typescript
-// BEFORE:
-}, [globalScores, songChartsCache]);
+### Step 2: Update Supabase Query
+**File**: `src/pages/Scores.tsx` (lines 306-328)
 
-// AFTER:
+Add `source_type` to the select and `deleted` to the musicdb join:
+```typescript
+.select(`
+  id,
+  score,
+  timestamp,
+  playstyle,
+  difficulty_name,
+  difficulty_level,
+  rank,
+  flare,
+  halo,
+  source_type,
+  musicdb (
+    name,
+    artist,
+    eamuse_id,
+    song_id,
+    name_romanized,
+    era,
+    deleted
+  )
+`)
+```
+
+### Step 3: Filter Out Deleted Songs
+**File**: `src/pages/Scores.tsx` (after the fetch, ~line 366)
+
+Filter deleted songs client-side to match the shared hook behavior:
+```typescript
+// Filter out scores for deleted songs (matches useUserScores behavior)
+const validScores = sortedData.filter(s => 
+  s.musicdb !== null && s.musicdb.deleted !== true
+);
+setScores(validScores);
+```
+
+### Step 4: Pass source_type to Preloaded Charts
+**File**: `src/pages/Scores.tsx` (line 254)
+
+Fix the hardcoded null:
+```typescript
+return {
+  id: chart.id,
+  difficulty_name: chart.difficulty_name,
+  difficulty_level: chart.difficulty_level,
+  score: userScore?.score ?? null,
+  rank: userScore?.rank ?? null,
+  flare: userScore?.flare ?? null,
+  halo: userScore?.halo ?? null,
+  source_type: userScore?.source_type ?? null,  // FIX: was hardcoded null
+};
+```
+
+### Step 5: Handle Empty Cache Gracefully
+**File**: `src/pages/Scores.tsx` (in handleSongClick, around line 232)
+
+When `songChartsCache` returns empty (e.g., for deleted songs that somehow got scores), let the modal's internal fetch handle it instead of passing empty preloaded data:
+```typescript
+const handleSongClick = useCallback((song: DisplaySong) => {
+  if (!song.song_id) return;
+  
+  const allChartsForSong = songChartsCache?.get(song.song_id) ?? [];
+  
+  let preloadedCharts: PreloadedChart[] | undefined;
+  
+  // Only preload if we have charts from the cache
+  // Otherwise let modal fetch directly (handles edge cases like deleted songs)
+  if (allChartsForSong.length > 0) {
+    const scoreMap = new Map(
+      scores
+        .filter(s => s.musicdb?.song_id === song.song_id)
+        .map(s => [s.difficulty_name?.toUpperCase(), s])
+    );
+    
+    preloadedCharts = allChartsForSong.map(chart => {
+      const userScore = scoreMap.get(chart.difficulty_name);
+      return {
+        id: chart.id,
+        difficulty_name: chart.difficulty_name,
+        difficulty_level: chart.difficulty_level,
+        score: userScore?.score ?? null,
+        rank: userScore?.rank ?? null,
+        flare: userScore?.flare ?? null,
+        halo: userScore?.halo ?? null,
+        source_type: userScore?.source_type ?? null,
+      };
+    }).sort((a, b) => {
+      const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
+      const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
+      return aIndex - bIndex;
+    });
+  }
+  
+  setSelectedSong({
+    songId: song.song_id,
+    songName: song.name ?? 'Unknown Song',
+    artist: song.artist,
+    eamuseId: song.eamuse_id,
+    era: song.era ?? null,
+    preloadedCharts,  // undefined triggers modal fetch
+  });
+  setIsDetailModalOpen(true);
 }, [scores, songChartsCache]);
 ```
 
-### Step 2: Remove Unused globalScores Import (Optional Cleanup)
+## Summary of Changes
 
-If `globalScores` is no longer needed in Scores.tsx after the fix, remove the import:
+| File | Change |
+|------|--------|
+| `src/pages/Scores.tsx` | Add `source_type` to interface |
+| `src/pages/Scores.tsx` | Add `source_type` and `deleted` to query |
+| `src/pages/Scores.tsx` | Filter deleted songs from results |
+| `src/pages/Scores.tsx` | Pass `source_type` to preloaded charts |
+| `src/pages/Scores.tsx` | Handle empty cache gracefully |
 
-```typescript
-// Line 204 - can be removed if not used elsewhere:
-const { scores: globalScores } = useScores();
-```
+## Why This Approach?
 
-**Note**: Check if `globalScores` is used elsewhere in the component before removing.
+**Simplicity**: Rather than adding more caching layers or complex synchronization, this fix:
+- Aligns the local fetch with the shared hook's behavior (filtering deleted songs)
+- Adds the missing field that was always meant to be there
+- Gracefully handles edge cases without breaking the modal's fallback mechanism
 
-### Step 3: Fix Era Display for Value `0`
+**Reliability**: After this fix:
+- Deleted songs won't appear in the list (consistent with Goals page)
+- Source icons (sanbai/phaseii) will display in the modal
+- Modal will never show "No SP charts" for songs that have scores
 
-The era display issue is subtle. The fix is to ensure that anywhere era is conditionally rendered, we use explicit null/undefined checks rather than truthy checks.
+## Testing Checklist
 
-**File**: `src/components/scores/SongDetailModal.tsx`
-
-The current check (lines 241-245) is correct:
-```typescript
-{era !== null && era !== undefined && (
-  <div className="flex justify-center mt-2">
-    <EraChip era={era} />
-  </div>
-)}
-```
-
-**However**, if `era` is coming through as `undefined` from the data chain, this would fail to render. Verify the data is being passed correctly by checking:
-
-1. `DisplaySong` interface includes `era: number | null`
-2. `SelectedSong` interface includes `era: number | null`
-3. Data mapping uses `??` not `||`
-
-All these appear correct in the current code. The remaining possibility is that the `musicdb` join returns `null` for some rows, making `s.musicdb?.era` become `undefined`.
-
-**Additional fix in `handleSongClick`** to ensure era is explicitly passed:
-```typescript
-// Line 267:
-era: song.era ?? null, // Explicitly coerce undefined to null
-```
-
-## Technical Details
-
-### Files to Modify
-
-1. **`src/pages/Scores.tsx`**
-   - Line 235-239: Change `globalScores` to `scores` in `scoreMap` construction
-   - Line 271: Update `useCallback` dependencies from `globalScores` to `scores`
-   - Line 267: Ensure era uses explicit null coalescing
-
-### Testing Checklist
-
-After implementation:
-- Click on a song card with visible scores and verify modal shows the same scores
-- Click on a song with `era=0` (Classic) and verify the Classic era chip appears
-- Click on songs with `era=1` (White) and `era=2` (Gold) to verify those chips appear
-- Upload new scores and immediately verify the modal shows updated data
-- Test with various filter combinations to ensure data consistency
-
-## Risk Assessment
-
-- **Low risk**: The change is isolated to data source selection in `handleSongClick`
-- Uses data that's already loaded and displayed in the list
-- No database queries or schema changes required
-- No RLS policy changes needed
+1. Songs with `deleted: true` should NOT appear in the Scores list
+2. Clicking any song should show all difficulties with correct scores
+3. Source icons (sanbai/phaseii) should appear next to scores in the modal
+4. Era chips should display for all songs (including era=0 Classic)
+5. Modal should work even if songChartsCache hasn't loaded yet
