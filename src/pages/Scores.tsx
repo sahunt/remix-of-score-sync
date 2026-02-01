@@ -3,9 +3,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useScoresFilterState } from '@/hooks/useScoresFilterState';
 import { useUserStats } from '@/hooks/useUserStats';
-import { useScores } from '@/contexts/ScoresContext';
 import { useSongChartsCache } from '@/hooks/useSongChartsCache';
 import { supabase } from '@/integrations/supabase/client';
+import { matchesFilterRule } from '@/lib/filterMatcher';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
 import { FiltersSection, type ActiveFilter } from '@/components/scores/FiltersSection';
@@ -16,74 +16,16 @@ import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
 import rinonFilter from '@/assets/rinon-filter.png';
-import type { SavedFilter, FilterRule } from '@/components/filters/filterTypes';
-import type { ScoreWithSong as GlobalScoreWithSong } from '@/hooks/useGoalProgress';
-interface ScoreWithSong {
-  id: string;
-  score: number | null;
-  timestamp: string | null;
-  playstyle: string | null;
-  difficulty_name: string | null;
-  difficulty_level: number | null;
-  rank: string | null;
-  flare: number | null;
-  halo: string | null;
-  source_type: string | null;
-  musicdb: {
-    name: string | null;
-    artist: string | null;
-    eamuse_id: string | null;
-    song_id: number | null;
-    name_romanized: string | null;
-    era: number | null;
-    deleted?: boolean | null;
-  } | null;
-}
-
-interface MusicDbChart {
-  id: number;
-  song_id: number;
-  name: string | null;
-  artist: string | null;
-  eamuse_id: string | null;
-  difficulty_name: string | null;
-  difficulty_level: number | null;
-  playstyle: string | null;
-  name_romanized: string | null;
-  era: number | null;
-}
-
-interface DisplaySong {
-  id: string;
-  score: number | null;
-  rank: string | null;
-  flare: number | null;
-  halo: string | null;
-  difficulty_level: number | null;
-  difficulty_name: string | null;
-  name: string | null;
-  artist: string | null;
-  eamuse_id: string | null;
-  song_id: number | null;
-  name_romanized: string | null;
-  era: number | null;
-  isNoPlay: boolean;
-}
+import type { SavedFilter } from '@/components/filters/filterTypes';
+import type { 
+  ScoreWithSong,
+  DisplaySong, 
+  MusicDbChart, 
+  PreloadedChart 
+} from '@/types/scores';
 
 // Difficulty order for display (highest to lowest) - shared with SongDetailModal
 const DIFFICULTY_ORDER = ['CHALLENGE', 'EXPERT', 'DIFFICULT', 'BASIC', 'BEGINNER'];
-
-// Chart data structure matching SongDetailModal's ChartWithScore
-interface PreloadedChart {
-  id: number;
-  difficulty_name: string;
-  difficulty_level: number;
-  score: number | null;
-  rank: string | null;
-  flare: number | null;
-  halo: string | null;
-  source_type: string | null;
-}
 
 interface SelectedSong {
   songId: number;
@@ -94,129 +36,7 @@ interface SelectedSong {
   preloadedCharts?: PreloadedChart[];
 }
 
-// No longer needed - prepareChartsForModal logic is now inline in handleSongClick
-// using the songChartsCache for complete data
-
-// Filter matching logic
-function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
-  const { type, operator, value } = rule;
-
-  // Handle numeric comparisons (score only uses single values or ranges)
-  const compareNumeric = (actual: number | null, target: number | [number, number]): boolean => {
-    if (actual === null) return false;
-    
-    // Range comparison for "is_between"
-    if (Array.isArray(target) && target.length === 2) {
-      const [min, max] = target;
-      return actual >= Math.min(min, max) && actual <= Math.max(min, max);
-    }
-    
-    const singleTarget = typeof target === 'number' ? target : target[0];
-    switch (operator) {
-      case 'is': return actual === singleTarget;
-      case 'is_not': return actual !== singleTarget;
-      case 'less_than': return actual < singleTarget;
-      case 'greater_than': return actual > singleTarget;
-      default: return false;
-    }
-  };
-
-  // Handle numeric multi-select (level, flare)
-  // Special case: value 0 for flare means "no flare" (null in DB)
-  const compareNumericMulti = (actual: number | null, target: number | number[] | [number, number]): boolean => {
-    // Range comparison for "is_between"
-    if (operator === 'is_between' && Array.isArray(target) && target.length === 2) {
-      if (actual === null) return false;
-      const [min, max] = target as [number, number];
-      return actual >= Math.min(min, max) && actual <= Math.max(min, max);
-    }
-    
-    // Multi-select array
-    if (Array.isArray(target)) {
-      // Check if "no flare" (0) is in the target array
-      const includesNoFlare = target.includes(0);
-      
-      if (actual === null) {
-        // null flare matches "no flare" (0) selection
-        const matches = includesNoFlare;
-        return operator === 'is' ? matches : !matches;
-      }
-      
-      const matches = target.includes(actual);
-      return operator === 'is' ? matches : !matches;
-    }
-    
-    // Single value - treat 0 as "no flare"
-    if (target === 0) {
-      const matches = actual === null;
-      return operator === 'is' ? matches : !matches;
-    }
-    
-    if (actual === null) return false;
-    
-    switch (operator) {
-      case 'is': return actual === target;
-      case 'is_not': return actual !== target;
-      case 'less_than': return actual < target;
-      case 'greater_than': return actual > target;
-      default: return false;
-    }
-  };
-
-  // Handle string multi-select (grade, lamp, difficulty)
-  const compareStringMulti = (actual: string | null, target: string | string[]): boolean => {
-    if (actual === null) return false;
-    const normalizedActual = actual.toLowerCase();
-    
-    // Multi-select array
-    if (Array.isArray(target)) {
-      const matches = target.some(t => normalizedActual === t.toLowerCase());
-      return operator === 'is' ? matches : !matches;
-    }
-    
-    // Single string value
-    const normalizedTarget = target.toLowerCase();
-    switch (operator) {
-      case 'is': return normalizedActual === normalizedTarget;
-      case 'is_not': return normalizedActual !== normalizedTarget;
-      case 'contains': return normalizedActual.includes(normalizedTarget);
-      default: return false;
-    }
-  };
-
-  switch (type) {
-    case 'score': return compareNumeric(score.score, value as number | [number, number]);
-    case 'level': return compareNumericMulti(score.difficulty_level, value as number | number[] | [number, number]);
-    case 'flare': return compareNumericMulti(score.flare, value as number | number[] | [number, number]);
-    case 'grade': return compareStringMulti(score.rank, value as string | string[]);
-    case 'lamp': return compareStringMulti(score.halo, value as string | string[]);
-    case 'difficulty': return compareStringMulti(score.difficulty_name, value as string | string[]);
-    case 'title': return compareStringMulti(score.musicdb?.name ?? '', value as string);
-    case 'version':
-      return true; // Placeholder
-    case 'era': {
-      const songEra = score.musicdb?.era;
-      // Multi-select array comparison
-      if (Array.isArray(value)) {
-        if (value.length === 0) return true; // Empty = no filter
-        if (songEra === null || songEra === undefined) return false;
-        const matches = (value as number[]).includes(songEra);
-        return operator === 'is' ? matches : !matches;
-      }
-      // Single value
-      if (songEra === null || songEra === undefined) return false;
-      const singleValue = typeof value === 'number' ? value : parseInt(String(value), 10);
-      if (isNaN(singleValue)) return true;
-      switch (operator) {
-        case 'is': return songEra === singleValue;
-        case 'is_not': return songEra !== singleValue;
-        default: return true;
-      }
-    }
-    default:
-      return true;
-  }
-}
+// matchesRule is now imported from @/lib/filterMatcher as matchesFilterRule
 
 export default function Scores() {
   const { user } = useAuth();
@@ -493,9 +313,9 @@ export default function Scores() {
         return activeFilters.every(af => {
           const filter = af.filter;
           if (filter.matchMode === 'all') {
-            return filter.rules.every(rule => matchesRule(scoreForMatching, rule));
+            return filter.rules.every(rule => matchesFilterRule(scoreForMatching, rule));
           } else {
-            return filter.rules.some(rule => matchesRule(scoreForMatching, rule));
+            return filter.rules.some(rule => matchesFilterRule(scoreForMatching, rule));
           }
         });
       });
@@ -628,34 +448,17 @@ export default function Scores() {
     }
     
     // Fall back to client-side calculation when filters are active
-    let filteredForStats = [...scores];
-    
-    // Apply difficulty filter
-    if (selectedLevel !== null) {
-      filteredForStats = filteredForStats.filter(s => s.difficulty_level === selectedLevel);
-    }
-    
-    // Apply active filters (same logic as displayedScores)
-    if (activeFilters.length > 0) {
-      filteredForStats = filteredForStats.filter(score => {
-        return activeFilters.every(af => {
-          const filter = af.filter;
-          if (filter.matchMode === 'all') {
-            return filter.rules.every(rule => matchesRule(score, rule));
-          } else {
-            return filter.rules.some(rule => matchesRule(score, rule));
-          }
-        });
-      });
-    }
+    // OPTIMIZATION: Use displayedScores instead of re-filtering the scores array
+    // displayedScores already has all filters applied, so we just need to exclude noPlay songs
+    const playedSongs = displayedScores.filter(s => !s.isNoPlay);
 
-    const total = filteredForStats.length;
-    const mfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'mfc').length;
-    const pfc = filteredForStats.filter(s => s.halo?.toLowerCase() === 'pfc').length;
-    const aaa = filteredForStats.filter(s => s.rank?.toUpperCase() === 'AAA').length;
+    const total = playedSongs.length;
+    const mfc = playedSongs.filter(s => s.halo?.toLowerCase() === 'mfc').length;
+    const pfc = playedSongs.filter(s => s.halo?.toLowerCase() === 'pfc').length;
+    const aaa = playedSongs.filter(s => s.rank?.toUpperCase() === 'AAA').length;
     
     // Clear = passed songs that are NOT MFC, NOT PFC, and NOT AAA (the leftovers)
-    const clear = filteredForStats.filter(s => {
+    const clear = playedSongs.filter(s => {
       const halo = s.halo?.toLowerCase();
       const rank = s.rank?.toUpperCase();
       const isMfc = halo === 'mfc';
@@ -666,11 +469,11 @@ export default function Scores() {
       return hasPassed && !isMfc && !isPfc && !isAaa;
     }).length;
     
-    const fail = filteredForStats.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
+    const fail = playedSongs.filter(s => s.halo?.toLowerCase() === 'fail' || (s.rank === null && s.halo === null)).length;
 
     // Calculate average score (only for played songs with non-null score)
     // DDR scores are always multiples of 10, so round to nearest 10
-    const playedWithScores = filteredForStats.filter(s => s.score !== null);
+    const playedWithScores = playedSongs.filter(s => s.score !== null);
     const avgScore = playedWithScores.length > 0
       ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length / 10) * 10
       : 0;
@@ -687,7 +490,7 @@ export default function Scores() {
       ],
       averageScore: avgScore,
     };
-  }, [scores, selectedLevel, activeFilters, transformHaloLabel, shouldFetchScores, noPlayCount, serverStats]);
+  }, [displayedScores, selectedLevel, activeFilters, transformHaloLabel, shouldFetchScores, noPlayCount, serverStats]);
 
 
   const handleRemoveFilter = useCallback((id: string) => {

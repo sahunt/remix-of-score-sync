@@ -4,6 +4,7 @@ import { useSavedFilters } from '@/hooks/useSavedFilters';
 import { ChooseFilterSheet } from './ChooseFilterSheet';
 import { CreateFilterSheet } from './CreateFilterSheet';
 import type { FilterRule, SavedFilter } from './filterTypes';
+import type { ScoreForFiltering } from '@/types/scores';
 
 type ModalView = 'choose' | 'create';
 
@@ -11,20 +12,7 @@ interface FilterModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplyFilters: (filters: SavedFilter[]) => void;
-  scores: Array<{
-    score: number | null;
-    difficulty_level: number | null;
-    difficulty_name: string | null;
-    rank: string | null;
-    halo: string | null;
-    flare: number | null;
-    musicdb: { 
-      name: string | null; 
-      artist: string | null;
-      eamuse_id: string | null;
-      song_id: number | null;
-    } | null;
-  }>;
+  scores: ScoreForFiltering[];
 }
 
 export function FilterModal({ 

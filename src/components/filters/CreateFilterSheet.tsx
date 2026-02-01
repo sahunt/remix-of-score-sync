@@ -5,6 +5,7 @@ import { FilterRuleRow } from './FilterRuleRow';
 import { MatchModeToggle } from './MatchModeToggle';
 import { RuleConnectorChip } from './RuleConnectorChip';
 import { useFilterResults } from '@/hooks/useFilterResults';
+import type { ScoreForFiltering } from '@/types/scores';
 import {
   generateRuleId,
   getDefaultOperator,
@@ -14,20 +15,7 @@ import {
 } from './filterTypes';
 
 interface CreateFilterSheetProps {
-  scores: Array<{
-    score: number | null;
-    difficulty_level: number | null;
-    difficulty_name: string | null;
-    rank: string | null;
-    halo: string | null;
-    flare: number | null;
-    musicdb: { 
-      name: string | null; 
-      artist: string | null;
-      eamuse_id: string | null;
-      song_id: number | null;
-    } | null;
-  }>;
+  scores: ScoreForFiltering[];
   onSave: (name: string, rules: FilterRule[], matchMode: 'all' | 'any') => void;
   onShowResults: (rules: FilterRule[], matchMode: 'all' | 'any') => void;
   onBack: () => void;
