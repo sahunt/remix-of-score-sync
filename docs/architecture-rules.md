@@ -95,7 +95,23 @@ while (hasMore) {
 
 ---
 
-## 8. Before Creating New Code
+## 8. Chart Metadata: musicdb is Source of Truth
+
+**Location:** `musicdb` table, accessed via `musicdb_id` foreign key
+
+| Field | Source of Truth | Notes |
+|-------|-----------------|-------|
+| `difficulty_level` | `musicdb` | Never use user_scores.difficulty_level |
+| `difficulty_name` | `musicdb` | Never use user_scores.difficulty_name |
+| `playstyle` | `musicdb` | Never use user_scores.playstyle |
+| `song_id` | `musicdb` | Never use user_scores.song_id |
+| `score`, `rank`, `flare`, `halo` | `user_scores` | User achievements |
+
+**Rule:** All queries must pull chart metadata from the `musicdb` relation, not from redundant columns in `user_scores`. The redundant columns are preserved for backward compatibility but ignored by the application.
+
+---
+
+## 9. Before Creating New Code
 
 | If you need... | Check first... |
 |----------------|----------------|
@@ -107,7 +123,7 @@ while (hasMore) {
 
 ---
 
-## 9. File Organization
+## 10. File Organization
 
 | Category | Location |
 |----------|----------|

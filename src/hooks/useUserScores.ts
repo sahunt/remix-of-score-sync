@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import type { ScoreWithSong } from '@/hooks/useGoalProgress';
+import type { ScoreWithSong } from '@/types/scores';
 import type { FilterRule } from '@/components/filters/filterTypes';
 
 /**
@@ -9,8 +9,9 @@ import type { FilterRule } from '@/components/filters/filterTypes';
  * This ensures all components get the same score data structure, preventing
  * mismatches in progress calculations between different views.
  * 
- * IMPORTANT: Always includes musicdb_id and musicdb relation fields
- * which are required for proper goal progress tracking and UI rendering.
+ * ARCHITECTURE: Chart metadata (difficulty_level, difficulty_name, playstyle)
+ * is ALWAYS pulled from musicdb via the relation - this is the SINGLE SOURCE OF TRUTH.
+ * The redundant columns in user_scores are ignored.
  */
 export function useUserScores(options?: {
   /** Optional filter rules to apply at the database level */
@@ -42,52 +43,52 @@ export function useUserScores(options?: {
       let hasMore = true;
 
       while (hasMore) {
-        // CRITICAL: Always select musicdb_id and full musicdb relation
-        // These fields are required for:
-        // 1. Goal progress calculations (matching played vs unplayed)
-        // 2. Song card rendering (jacket art lookup via eamuse_id)
-        // 3. Unique React keys (song_id)
-        // 4. Filtering out deleted songs (deleted field)
+        // ARCHITECTURE: Chart metadata comes from musicdb (SINGLE SOURCE OF TRUTH)
+        // - difficulty_level, difficulty_name, playstyle from musicdb relation
+        // - score, rank, flare, halo from user_scores (user achievements)
+        // The redundant columns in user_scores are ignored
         let query = supabase
           .from('user_scores')
           .select(`
             id,
             score,
             timestamp,
-            playstyle,
-            difficulty_name,
-            difficulty_level,
             rank,
             flare,
             halo,
+            source_type,
             musicdb_id,
-            musicdb(name, artist, eamuse_id, song_id, deleted, era)
+            musicdb(
+              name, artist, eamuse_id, song_id, deleted, era, name_romanized,
+              difficulty_name, difficulty_level, playstyle
+            )
           `)
           .eq('user_id', user.id)
-          .eq('playstyle', 'SP');
+          // Filter by playstyle via the musicdb relation (source of truth)
+          .eq('musicdb.playstyle', 'SP');
         
-        // Apply level filter at DB level for efficiency
+        // Apply level filter via musicdb relation (source of truth)
         if (levelRule && Array.isArray(levelRule.value) && levelRule.value.length > 0) {
           if (levelRule.operator === 'is') {
-            query = query.in('difficulty_level', levelRule.value as number[]);
+            query = query.in('musicdb.difficulty_level', levelRule.value as number[]);
           } else if (levelRule.operator === 'is_not') {
             for (const level of levelRule.value as number[]) {
-              query = query.neq('difficulty_level', level);
+              query = query.neq('musicdb.difficulty_level', level);
             }
           }
         } else if (levelRule?.operator === 'is_between' && Array.isArray(levelRule.value) && levelRule.value.length === 2) {
           const [min, max] = levelRule.value as [number, number];
-          query = query.gte('difficulty_level', Math.min(min, max)).lte('difficulty_level', Math.max(min, max));
+          query = query.gte('musicdb.difficulty_level', Math.min(min, max)).lte('musicdb.difficulty_level', Math.max(min, max));
         }
         
-        // Apply difficulty filter at DB level for efficiency
+        // Apply difficulty filter via musicdb relation (source of truth)
         if (difficultyRule && Array.isArray(difficultyRule.value) && difficultyRule.value.length > 0) {
           const diffs = (difficultyRule.value as string[]).map(d => d.toUpperCase());
           if (difficultyRule.operator === 'is') {
-            query = query.in('difficulty_name', diffs);
+            query = query.in('musicdb.difficulty_name', diffs);
           } else if (difficultyRule.operator === 'is_not') {
             for (const diff of diffs) {
-              query = query.neq('difficulty_name', diff);
+              query = query.neq('musicdb.difficulty_name', diff);
             }
           }
         }
@@ -99,12 +100,26 @@ export function useUserScores(options?: {
         if (error) throw error;
         
         if (data && data.length > 0) {
-          // Filter out scores linked to deleted songs
-          // Scores are stored for all songs (including deleted), but only show non-deleted in UI
-          const validScores = (data as any[]).filter(score => {
-            // Keep score if musicdb exists and is not deleted
-            return score.musicdb !== null && score.musicdb.deleted !== true;
-          }) as ScoreWithSong[];
+          // Filter out scores where musicdb is null or deleted
+          // Also flatten musicdb fields for backward compatibility
+          const validScores = (data as any[])
+            .filter(score => score.musicdb !== null && score.musicdb.deleted !== true)
+            .map(score => ({
+              id: score.id,
+              score: score.score,
+              timestamp: score.timestamp,
+              rank: score.rank,
+              flare: score.flare,
+              halo: score.halo,
+              source_type: score.source_type,
+              musicdb_id: score.musicdb_id,
+              // Flatten chart metadata from musicdb for compatibility with existing code
+              playstyle: score.musicdb.playstyle,
+              difficulty_name: score.musicdb.difficulty_name,
+              difficulty_level: score.musicdb.difficulty_level,
+              // Keep full musicdb relation for components that use it
+              musicdb: score.musicdb,
+            })) as ScoreWithSong[];
           allScores = [...allScores, ...validScores];
           from += PAGE_SIZE;
           hasMore = data.length === PAGE_SIZE;
