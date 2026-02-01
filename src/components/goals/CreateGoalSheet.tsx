@@ -93,6 +93,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
   const { user } = useAuth();
 
   // Fetch user scores for real-time matching
+  // Chart metadata comes from musicdb relation (SINGLE SOURCE OF TRUTH)
   const [userScores, setUserScores] = useState<Array<{
     score: number | null;
     difficulty_level: number | null;
@@ -119,15 +120,33 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
         let hasMore = true;
 
         while (hasMore) {
+          // Chart metadata (difficulty_level, difficulty_name, playstyle) comes from musicdb
           const { data } = await supabase
             .from('user_scores')
-            .select('score, difficulty_level, difficulty_name, rank, halo, flare, playstyle, musicdb(name, artist, eamuse_id, song_id)')
+            .select('score, rank, halo, flare, musicdb(name, artist, eamuse_id, song_id, difficulty_level, difficulty_name, playstyle)')
             .eq('user_id', user.id)
-            .eq('playstyle', 'SP')
+            .eq('musicdb.playstyle', 'SP')
             .range(from, from + PAGE_SIZE - 1);
           
           if (data && data.length > 0) {
-            allScores = [...allScores, ...data];
+            // Flatten musicdb fields for compatibility with existing code
+            const flattenedScores = (data as any[])
+              .filter(score => score.musicdb !== null)
+              .map(score => ({
+                score: score.score,
+                rank: score.rank,
+                halo: score.halo,
+                flare: score.flare,
+                difficulty_level: score.musicdb.difficulty_level,
+                difficulty_name: score.musicdb.difficulty_name,
+                musicdb: {
+                  name: score.musicdb.name,
+                  artist: score.musicdb.artist,
+                  eamuse_id: score.musicdb.eamuse_id,
+                  song_id: score.musicdb.song_id,
+                },
+              }));
+            allScores = [...allScores, ...flattenedScores];
             from += PAGE_SIZE;
             hasMore = data.length === PAGE_SIZE;
           } else {
