@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/Icon';
 import { FilterRuleRow } from './FilterRuleRow';
@@ -12,10 +12,12 @@ import {
   getDefaultValue,
   generateFilterName,
   type FilterRule,
+  type SavedFilter,
 } from './filterTypes';
 
 interface CreateFilterSheetProps {
   scores: ScoreForFiltering[];
+  editingFilter?: SavedFilter | null;
   onSave: (name: string, rules: FilterRule[], matchMode: 'all' | 'any') => void;
   onShowResults: (rules: FilterRule[], matchMode: 'all' | 'any') => void;
   onBack: () => void;
@@ -24,6 +26,7 @@ interface CreateFilterSheetProps {
 
 export function CreateFilterSheet({
   scores,
+  editingFilter,
   onSave,
   onShowResults,
   onBack,
@@ -40,6 +43,29 @@ export function CreateFilterSheet({
   ]);
   const [matchMode, setMatchMode] = useState<'all' | 'any'>('all');
   const addRuleButtonRef = useRef<HTMLButtonElement>(null);
+
+  const isEditing = !!editingFilter;
+
+  // Initialize form from editingFilter if provided
+  useEffect(() => {
+    if (editingFilter) {
+      setFilterName(editingFilter.name);
+      setRules(editingFilter.rules);
+      setMatchMode(editingFilter.matchMode);
+    } else {
+      // Reset to defaults when not editing
+      setFilterName('');
+      setRules([
+        {
+          id: generateRuleId(),
+          type: 'level',
+          operator: getDefaultOperator('level'),
+          value: getDefaultValue('level'),
+        },
+      ]);
+      setMatchMode('all');
+    }
+  }, [editingFilter]);
 
   const { count } = useFilterResults(scores, rules, matchMode);
 
@@ -89,7 +115,9 @@ export function CreateFilterSheet({
         >
           <Icon name="close" size={24} />
         </button>
-        <h2 className="text-lg font-semibold text-white">New Filter</h2>
+        <h2 className="text-lg font-semibold text-white">
+          {isEditing ? 'Edit Filter' : 'New Filter'}
+        </h2>
         <button
           className="p-2 text-white hover:text-muted-foreground transition-colors"
           aria-label="More options"
@@ -146,13 +174,13 @@ export function CreateFilterSheet({
 
       {/* Action buttons */}
       <div className="space-y-3 pt-2">
-        {/* Save filter button - primary CTA */}
+        {/* Save/Update filter button - primary CTA */}
         <Button 
           className="w-full h-11 rounded-[10px]" 
           onClick={handleSave}
           iconLeft="favorite"
         >
-          Save Filter
+          {isEditing ? 'Update Filter' : 'Save Filter'}
         </Button>
         
         {/* Show results button - secondary */}

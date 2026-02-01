@@ -3,10 +3,11 @@ import { Drawer, DrawerContent, DrawerPortal, DrawerOverlay } from '@/components
 import { useSavedFilters } from '@/hooks/useSavedFilters';
 import { ChooseFilterSheet } from './ChooseFilterSheet';
 import { CreateFilterSheet } from './CreateFilterSheet';
+import { toast } from 'sonner';
 import type { FilterRule, SavedFilter } from './filterTypes';
 import type { ScoreForFiltering } from '@/types/scores';
 
-type ModalView = 'choose' | 'create';
+type ModalView = 'choose' | 'create' | 'edit';
 
 interface FilterModalProps {
   open: boolean;
@@ -21,9 +22,10 @@ export function FilterModal({
   onApplyFilters,
   scores 
 }: FilterModalProps) {
-  const { filters: savedFilters, loading, createFilter } = useSavedFilters();
+  const { filters: savedFilters, loading, createFilter, updateFilter, deleteFilter } = useSavedFilters();
   const [view, setView] = useState<ModalView>('choose');
   const [selectedFilterIds, setSelectedFilterIds] = useState<string[]>([]);
+  const [editingFilter, setEditingFilter] = useState<SavedFilter | null>(null);
 
   // Reset view when modal opens
   useEffect(() => {
@@ -31,8 +33,10 @@ export function FilterModal({
       // If no saved filters, go directly to create
       if (!loading && savedFilters.length === 0) {
         setView('create');
+        setEditingFilter(null);
       } else {
         setView('choose');
+        setEditingFilter(null);
       }
       setSelectedFilterIds([]);
     }
@@ -53,7 +57,22 @@ export function FilterModal({
   };
 
   const handleCreateNew = () => {
+    setEditingFilter(null);
     setView('create');
+  };
+
+  const handleEditFilter = (filter: SavedFilter) => {
+    setEditingFilter(filter);
+    setView('edit');
+  };
+
+  const handleDeleteFilter = async (id: string) => {
+    const success = await deleteFilter(id);
+    if (success) {
+      toast.success('Filter deleted');
+      // Remove from selected if it was selected
+      setSelectedFilterIds(prev => prev.filter(fid => fid !== id));
+    }
   };
 
   const handleSaveFilter = async (
@@ -63,8 +82,24 @@ export function FilterModal({
   ) => {
     const newFilter = await createFilter(name, rules, matchMode);
     if (newFilter) {
+      toast.success('Filter saved');
       onApplyFilters([newFilter]);
       onOpenChange(false);
+    }
+  };
+
+  const handleUpdateFilter = async (
+    name: string,
+    rules: FilterRule[],
+    matchMode: 'all' | 'any'
+  ) => {
+    if (!editingFilter) return;
+    
+    const success = await updateFilter(editingFilter.id, { name, rules, matchMode });
+    if (success) {
+      toast.success('Filter updated');
+      setView('choose');
+      setEditingFilter(null);
     }
   };
 
@@ -83,7 +118,10 @@ export function FilterModal({
   };
 
   const handleBack = () => {
-    if (savedFilters.length > 0) {
+    if (view === 'edit') {
+      setView('choose');
+      setEditingFilter(null);
+    } else if (savedFilters.length > 0) {
       setView('choose');
     } else {
       onOpenChange(false);
@@ -104,12 +142,15 @@ export function FilterModal({
                 onSelectFilter={handleSelectFilter}
                 onApply={handleApplySelected}
                 onCreateNew={handleCreateNew}
+                onEditFilter={handleEditFilter}
+                onDeleteFilter={handleDeleteFilter}
                 onClose={() => onOpenChange(false)}
               />
             ) : (
               <CreateFilterSheet
                 scores={scores}
-                onSave={handleSaveFilter}
+                editingFilter={view === 'edit' ? editingFilter : null}
+                onSave={view === 'edit' ? handleUpdateFilter : handleSaveFilter}
                 onShowResults={handleShowResults}
                 onBack={handleBack}
                 onCancel={() => onOpenChange(false)}
