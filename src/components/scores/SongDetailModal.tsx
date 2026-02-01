@@ -237,10 +237,10 @@ export function SongDetailModal({
             {songName}
           </p>
 
-          {/* Era Chip - centered below title */}
+          {/* Era Chip - centered below title, sized to match halo chips */}
           {era !== null && era !== undefined && (
             <div className="flex justify-center mt-2">
-              <EraChip era={era} />
+              <EraChip era={era} className="h-5" />
             </div>
           )}
         </div>
