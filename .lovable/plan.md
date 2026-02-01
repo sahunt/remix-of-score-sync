@@ -1,245 +1,146 @@
 
-# Fix Era Filtering: Data Flow and UI Implementation
 
-## Problem Summary
+# Add Google Authentication to DDR Score Tracker
 
-Two issues with era:
-1. **Era values not displaying reliably** - The `ScoreWithSong.musicdb` interface doesn't include `era`, so TypeScript/data passing is inconsistent
-2. **Era filter has no UI** - The filter rule row shows a text input instead of visual chip selectors for Classic/White/Gold
+## Overview
 
-## Root Cause Analysis
+You're right - Lovable Cloud now natively supports Google authentication with a managed solution that requires no additional API keys or configuration. This makes adding Google Sign-In very straightforward.
 
-### Issue 1: Era Not in Interface
+## What Will Be Added
 
-The `ScoreWithSong` interface defines `musicdb` without the `era` field:
-
-```typescript
-// Current (lines 28-39 of Scores.tsx)
-musicdb: {
-  name: string | null;
-  artist: string | null;
-  eamuse_id: string | null;
-  song_id: number | null;
-  name_romanized: string | null;
-  deleted?: boolean | null;
-  // MISSING: era: number | null;
-} | null;
-```
-
-This means TypeScript doesn't type-check era references, and the data can get lost in transformations.
-
-### Issue 2: Era Filter Returns True (Placeholder)
-
-In `matchesRule` function (lines 195-197 of Scores.tsx):
-```typescript
-case 'era':
-  return true; // Placeholder - never actually filters!
-```
-
-### Issue 3: Era UI is Text Input
-
-In `FilterRuleRow.tsx` (lines 327-337), era uses a generic text input:
-```typescript
-case 'version':
-case 'era':
-  return (
-    <input type="text" ... />  // Should be chip selector!
-  );
-```
+A "Continue with Google" button on the Auth page that allows users to sign in with their Google account alongside the existing email/password option.
 
 ## Implementation Plan
 
-### Step 1: Add Era to ScoreWithSong Interface
-**File**: `src/pages/Scores.tsx`
+### Step 1: Configure Google OAuth Provider
+First, I'll use Lovable's social auth configuration tool to set up the Google provider. This will:
+- Generate the `@lovable.dev/cloud-auth-js` package integration
+- Create the `src/integrations/lovable/` module with the auth client
 
-Update the `musicdb` subobject to include era:
+### Step 2: Add Google Sign-In Function to Auth Context
+**File**: `src/hooks/useAuth.tsx`
+
+Add a new `signInWithGoogle` function that uses the Lovable auth module:
 ```typescript
-musicdb: {
-  name: string | null;
-  artist: string | null;
-  eamuse_id: string | null;
-  song_id: number | null;
-  name_romanized: string | null;
-  era: number | null;        // ADD THIS
-  deleted?: boolean | null;
-} | null;
+import { lovable } from "@/integrations/lovable/index";
+
+// Add to AuthContextType interface
+signInWithGoogle: () => Promise<{ error: Error | null }>;
+
+// Add function in AuthProvider
+const signInWithGoogle = async () => {
+  const { error } = await lovable.auth.signInWithOAuth("google", {
+    redirect_uri: window.location.origin,
+  });
+  return { error: error as Error | null };
+};
 ```
 
-### Step 2: Add ERA_OPTIONS to filterTypes.ts
-**File**: `src/components/filters/filterTypes.ts`
+### Step 3: Add Google Button to Auth Page
+**File**: `src/pages/Auth.tsx`
 
-Add era options with visual mapping to match the EraChip component:
+Add a styled Google sign-in button with a visual separator:
 ```typescript
-// Era options with visual chip support
-import type { EraType } from '@/components/ui/EraChip';
+// After the form, before the toggle text
+<div className="relative my-6">
+  <div className="absolute inset-0 flex items-center">
+    <div className="w-full border-t border-border" />
+  </div>
+  <div className="relative flex justify-center text-xs uppercase">
+    <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+  </div>
+</div>
 
-export const ERA_OPTIONS: { value: number; label: string; eraType: EraType }[] = [
-  { value: 0, label: 'Classic', eraType: 'classic' },
-  { value: 1, label: 'White', eraType: 'white' },
-  { value: 2, label: 'Gold', eraType: 'gold' },
-];
+<Button
+  type="button"
+  variant="outline"
+  className="w-full"
+  onClick={handleGoogleSignIn}
+  disabled={isSubmitting}
+>
+  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+    {/* Google "G" logo SVG path */}
+  </svg>
+  Continue with Google
+</Button>
 ```
 
-Also update `getDefaultValue` for era to return an empty array (multi-select):
+### Step 4: Handle Google Sign-In with Error Handling
+**File**: `src/pages/Auth.tsx`
+
+Add the handler function:
 ```typescript
-case 'era':
-  return []; // Empty multi-select array (not string)
-```
-
-### Step 3: Create EraSelector Component
-**File**: `src/components/filters/EraSelector.tsx` (NEW FILE)
-
-Create a visual selector component similar to DifficultySelector:
-```typescript
-import { cn } from '@/lib/utils';
-import { ERA_OPTIONS } from './filterTypes';
-import { EraChip } from '@/components/ui/EraChip';
-
-interface EraSelectorProps {
-  value: number[];
-  onChange: (value: number[]) => void;
-}
-
-export function EraSelector({ value, onChange }: EraSelectorProps) {
-  const selectedEras = Array.isArray(value) ? value : [];
-
-  const toggleEra = (era: number) => {
-    if (selectedEras.includes(era)) {
-      onChange(selectedEras.filter(e => e !== era));
-    } else {
-      onChange([...selectedEras, era]);
+const handleGoogleSignIn = async () => {
+  setIsSubmitting(true);
+  try {
+    const { error } = await signInWithGoogle();
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Google Sign In Failed',
+        description: error.message || 'Could not sign in with Google. Please try again.',
+      });
     }
-  };
-
-  return (
-    <div className="flex gap-3 justify-center">
-      {ERA_OPTIONS.map((option) => {
-        const isSelected = selectedEras.includes(option.value);
-        return (
-          <button
-            key={option.value}
-            onClick={() => toggleEra(option.value)}
-            className={cn(
-              "flex flex-col items-center gap-2 p-3 rounded-[10px] transition-all",
-              isSelected
-                ? "bg-primary/20 ring-2 ring-primary"
-                : "bg-[#3B3F51] hover:bg-[#454a5e]"
-            )}
-          >
-            <EraChip era={option.value} className="h-6" />
-            <span className="text-xs text-muted-foreground">{option.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+  } catch (err) {
+    toast({
+      variant: 'destructive',
+      title: 'Error',
+      description: 'An unexpected error occurred. Please try again.',
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 ```
 
-### Step 4: Update FilterRuleRow to Use EraSelector
-**File**: `src/components/filters/FilterRuleRow.tsx`
+## Files to Create/Modify
 
-Import EraSelector and update the renderValueInput switch statement:
-```typescript
-import { EraSelector } from './EraSelector';
+| File | Change |
+|------|--------|
+| `src/integrations/lovable/` | **AUTO-GENERATED** - Lovable auth module |
+| `src/hooks/useAuth.tsx` | Add `signInWithGoogle` function |
+| `src/pages/Auth.tsx` | Add Google button with separator |
 
-// In renderValueInput(), replace the era case:
-case 'era': {
-  let eraValue: number[];
-  if (Array.isArray(rule.value)) {
-    eraValue = rule.value.filter((v): v is number => typeof v === 'number');
-  } else if (typeof rule.value === 'number') {
-    eraValue = [rule.value];
-  } else {
-    eraValue = [];
-  }
-  
-  return (
-    <EraSelector
-      value={eraValue}
-      onChange={handleValueChange}
-    />
-  );
-}
+## Visual Design
+
+The auth page will look like this:
+
+```
+┌──────────────────────────────┐
+│    🎵 DDR Score Tracker      │
+│                              │
+│  ┌────────────────────────┐  │
+│  │     Welcome back       │  │
+│  │                        │  │
+│  │  Email: [_________]    │  │
+│  │  Password: [______]    │  │
+│  │                        │  │
+│  │  [    Sign In    ]     │  │
+│  │                        │  │
+│  │  ─── Or continue with ───│  │
+│  │                        │  │
+│  │  [G Continue with Google]│  │
+│  │                        │  │
+│  │  Don't have an account? │  │
+│  │        Sign up          │  │
+│  └────────────────────────┘  │
+└──────────────────────────────┘
 ```
 
-### Step 5: Implement Era Filter Logic in matchesRule
-**File**: `src/pages/Scores.tsx`
+## How It Works
 
-Update the matchesRule function to actually filter by era:
-```typescript
-case 'era': {
-  const songEra = score.musicdb?.era;
-  // Multi-select array comparison (similar to lamp/grade but numeric)
-  if (Array.isArray(value)) {
-    if (value.length === 0) return true; // Empty = no filter
-    if (songEra === null || songEra === undefined) return false;
-    const matches = value.includes(songEra);
-    return operator === 'is' ? matches : !matches;
-  }
-  // Single value
-  if (songEra === null || songEra === undefined) return false;
-  const singleValue = typeof value === 'number' ? value : parseInt(String(value), 10);
-  if (isNaN(singleValue)) return true; // Invalid value = no filter
-  switch (operator) {
-    case 'is': return songEra === singleValue;
-    case 'is_not': return songEra !== singleValue;
-    default: return true;
-  }
-}
-```
+1. User clicks "Continue with Google"
+2. Lovable Cloud handles the OAuth flow with its managed Google credentials
+3. User is redirected to Google to authorize
+4. After authorization, user is redirected back and automatically signed in
+5. The existing `onAuthStateChange` listener in `useAuth.tsx` picks up the session
 
-### Step 6: Update useFilterResults.ts matchesRule
-**File**: `src/hooks/useFilterResults.ts`
+## No Configuration Needed
 
-Update the ScoreData interface to include era and implement the era filter logic (same as Step 5):
-```typescript
-interface ScoreData {
-  // ... existing fields
-  musicdb: { 
-    name: string | null; 
-    artist: string | null;
-    eamuse_id: string | null;
-    song_id: number | null;
-    era: number | null;  // ADD THIS
-  } | null;
-}
+Lovable Cloud automatically manages:
+- Google OAuth client ID and secret
+- Redirect URLs
+- Token handling and refresh
 
-// In matchesRule switch statement:
-case 'era': {
-  const songEra = score.musicdb?.era;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return true;
-    if (songEra === null || songEra === undefined) return false;
-    const matches = (value as number[]).includes(songEra);
-    return operator === 'is' ? matches : !matches;
-  }
-  if (songEra === null || songEra === undefined) return false;
-  const singleValue = typeof value === 'number' ? value : parseInt(String(value), 10);
-  if (isNaN(singleValue)) return true;
-  switch (operator) {
-    case 'is': return songEra === singleValue;
-    case 'is_not': return songEra !== singleValue;
-    default: return true;
-  }
-}
-```
+You can optionally bring your own Google OAuth credentials through Cloud Dashboard > Users > Authentication Settings if you want custom branding on the Google consent screen.
 
-## Summary of Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/pages/Scores.tsx` | Add `era` to `ScoreWithSong.musicdb` interface; implement era case in `matchesRule` |
-| `src/components/filters/filterTypes.ts` | Add `ERA_OPTIONS` constant; update `getDefaultValue` for era |
-| `src/components/filters/EraSelector.tsx` | **NEW FILE** - Visual chip selector for eras |
-| `src/components/filters/FilterRuleRow.tsx` | Import EraSelector; update switch case for era |
-| `src/hooks/useFilterResults.ts` | Add `era` to `ScoreData.musicdb`; implement era matching logic |
-
-## Testing Checklist
-
-1. Era chips appear in Song Detail Modal for all songs (Classic=0, White=1, Gold=2)
-2. Era filter UI shows three visual chips (Classic, White, Gold)
-3. Selecting "Classic" era filter shows only Classic era songs
-4. Selecting multiple eras (e.g., Classic + Gold) shows songs from both eras
-5. "Is not" operator correctly excludes selected eras
-6. Filter preview count updates correctly when era filter is applied
