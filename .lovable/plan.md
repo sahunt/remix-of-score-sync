@@ -1,197 +1,201 @@
 
 
-# Fix Average Score Goals on Home Screen + Add Shimmer Loading
+# Add Filter Edit & Delete Functionality
 
-## Problems Identified
+## UX Analysis & Approach
 
-### 1. Average Score Goals Show "AVG. 0"
-The Home page uses the server-side RPC `calculate_goal_progress` which only returns completed counts, not average scores. The code explicitly hardcodes `current = 0` for average mode goals because "not supported by RPC yet."
+### The Problem with 4 Buttons
+Having Apply, Create, Edit, and Delete buttons would clutter the UI. Your instinct about iOS-style jiggle mode is interesting, but there are some UX gaps:
 
-**Root cause in `Home.tsx`:**
-```typescript
-const current = isAverageMode
-  ? 0 // Average mode needs special handling - not supported by RPC yet
-  : (progress?.completed ?? 0);
+1. **Discoverability** - New users won't know to long-press
+2. **Jiggle mode complexity** - What happens to the Apply/Create buttons? How do you exit jiggle mode?
+3. **Mental model mismatch** - iOS jiggle mode works for app icons (delete/rearrange), but filters also need an "edit" action which iOS doesn't have
+
+### Recommended Approach: Contextual Actions via Three-Dot Menu
+
+The three-dot menu (already in the header) is the **ideal place** for edit/delete actions. Here's why:
+
+| Pattern | Pros | Cons |
+|---------|------|------|
+| **Three-dot menu** | Discoverable, standard pattern, keeps main UI clean | Requires extra tap to access |
+| **Jiggle mode** | Playful, familiar from iOS | Hard to discover, complex state management |
+| **Swipe-to-reveal** | Quick access | Not discoverable, conflicts with scrolling |
+| **Long-press context menu** | iOS-native feeling | Poor discoverability |
+
+### The Proposed UX Flow
+
+```text
+User opens "Add filter..." sheet
+    ↓
+Sees filter list with three-dot menu (⋮) in header
+    ↓
+Taps ⋮ → sees "Manage Filters" option
+    ↓
+Taps "Manage Filters" → enters edit mode:
+  • Header shows "Done" button instead of ⋮
+  • Each filter chip shows ✏️ and 🗑️ icons overlaid
+  • Apply/Create buttons hide (replaced by "Done")
+    ↓
+Tap ✏️ → opens CreateFilterSheet with filter data pre-populated
+Tap 🗑️ → shows delete confirmation, removes filter
+Tap "Done" → exits edit mode, returns to normal view
 ```
 
-Meanwhile, `GoalDetail.tsx` calculates averages correctly using client-side logic via `useGoalProgress`.
+### Visual Mockup (Edit Mode)
 
-### 2. No Loading Indicator for Progress Values
-When navigating to Home, goal cards immediately show values like "0/253" before the RPC returns, then update without any visual transition. There's no shimmer to indicate loading state.
+```text
+┌─────────────────────────────────────────┐
+│ ✕         Manage Filters          Done  │
+├─────────────────────────────────────────┤
+│ My saved filters                        │
+│                                         │
+│ ┌───────────────┐  ┌───────────────┐    │
+│ │ Level 17+ ✏️🗑️│  │ All PFCs  ✏️🗑️│    │
+│ └───────────────┘  └───────────────┘    │
+│                                         │
+│ ┌───────────────┐                       │
+│ │ Gold Era  ✏️🗑️ │                       │
+│ └───────────────┘                       │
+│                                         │
+└─────────────────────────────────────────┘
+```
 
----
+### Why This Works
 
-## Solution
-
-### Part 1: Add Average Calculation to RPC
-
-Extend the `calculate_goal_progress` PostgreSQL function to return `average_score` alongside the existing counts. This enables the Home page to display accurate average progress without client-side score fetching.
-
-**New RPC return type:**
-| Column | Type | Purpose |
-|--------|------|---------|
-| completed_count | bigint | Existing - songs meeting target |
-| total_count | bigint | Existing - total matching charts |
-| **average_score** | bigint | **New** - rounded average of all matching scores |
-
-**SQL changes:**
-- Add `average_score` to the return table
-- Calculate `ROUND(AVG(us.score) / 10) * 10` for matching scores
-- Return this value regardless of target_type (null if no scores)
-
-### Part 2: Update Home Page to Use Average
-
-Modify `GoalCardWithProgress` in `Home.tsx` to:
-1. Use the new `average_score` from RPC for average mode goals
-2. Pass `isLoading` state to `GoalCard`
-
-### Part 3: Add Shimmer to GoalCard
-
-Add a `isLoading` prop to `GoalCard` that shows:
-- A shimmer animation on the progress text ("AVG. -- / --")
-- A pulsing/shimmer effect on the progress bar
-
-The shimmer should use Tailwind's existing `animate-pulse` class or a custom shimmer animation for a more polished look.
+1. **Discoverable** - Three-dot menu is a universal "more options" pattern
+2. **Non-destructive** - Edit mode is explicit, not accidental
+3. **Clean main flow** - Apply/Create stay focused on the primary task
+4. **Reuses existing UI** - CreateFilterSheet already exists, we just pass the editing filter
 
 ---
 
 ## Technical Implementation
 
-### Database Migration
+### 1. Add `editMode` State to ChooseFilterSheet
 
-```sql
-CREATE OR REPLACE FUNCTION public.calculate_goal_progress(
-  p_user_id UUID,
-  p_level_values INTEGER[] DEFAULT NULL,
-  p_level_operator TEXT DEFAULT 'is',
-  p_difficulty_values TEXT[] DEFAULT NULL,
-  p_difficulty_operator TEXT DEFAULT 'is',
-  p_target_type TEXT DEFAULT 'lamp',
-  p_target_value TEXT DEFAULT 'clear'
-)
-RETURNS TABLE(
-  completed_count BIGINT,
-  total_count BIGINT,
-  average_score BIGINT  -- NEW
-) AS $$
--- ... existing logic ...
--- Add: SELECT COALESCE((ROUND(AVG(us.score) / 10) * 10)::BIGINT, 0) INTO average_score
-$$ LANGUAGE plpgsql;
-```
-
-### Hook Update (`useServerGoalProgress.ts`)
+Track whether we're in edit mode and which filter (if any) is being edited.
 
 ```typescript
-interface GoalProgressResult {
-  completed: number;
-  total: number;
-  averageScore: number;  // NEW
-}
-
-// Update query to extract average_score from RPC result
-return {
-  completed: Number(result?.completed_count ?? 0),
-  total: Number(result?.total_count ?? 0),
-  averageScore: Number(result?.average_score ?? 0),  // NEW
-};
-```
-
-### Home.tsx Changes
-
-```typescript
-function GoalCardWithProgress({ goal }: { goal: Goal }) {
-  const { data: progress, isLoading } = useServerGoalProgress(...);
-  
-  const isAverageMode = goal.target_type === 'score' && goal.score_mode === 'average';
-  
-  const current = isAverageMode
-    ? (progress?.averageScore ?? 0)  // USE RPC VALUE
-    : goal.goal_mode === 'count' 
-      ? Math.min(progress?.completed ?? 0, goal.goal_count ?? 0)
-      : (progress?.completed ?? 0);
-  
-  const total = isAverageMode
-    ? parseInt(goal.target_value, 10)
-    : goal.goal_mode === 'count' 
-      ? (goal.goal_count ?? 0) 
-      : (progress?.total ?? 0);
-
-  return (
-    <GoalCard
-      id={goal.id}
-      title={goal.name}
-      // ... other props
-      current={current}
-      total={total}
-      isLoading={isLoading}  // PASS LOADING STATE
-    />
-  );
-}
-```
-
-### GoalCard.tsx Shimmer
-
-```typescript
-interface GoalCardProps {
+interface ChooseFilterSheetProps {
   // ... existing props
-  isLoading?: boolean;  // NEW
+  onEditFilter: (filter: SavedFilter) => void;  // NEW
+  onDeleteFilter: (id: string) => void;         // NEW
 }
 
-export function GoalCard({ 
-  // ... 
-  isLoading = false,
-}: GoalCardProps) {
-  
-  return (
-    <div className="card-base w-full ...">
-      {/* Badge */}
-      <GoalBadge ... />
-      
-      {/* Title */}
-      <h3 className="...">{title}</h3>
-      
-      {/* Progress text - with shimmer when loading */}
-      {isLoading ? (
-        <div className="h-4 w-32 rounded bg-muted animate-pulse" />
-      ) : (
-        <p className="text-xs text-muted-foreground ...">
-          {isAverageMode 
-            ? `Avg. ${formatScore(current)} / ${formatScore(total)}`
-            : `${current}/${total} completed`
-          }
-        </p>
-      )}
-      
-      {/* Progress bar - shimmer when loading */}
-      <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-        {isLoading ? (
-          <div className="h-full w-full bg-gradient-to-r from-muted via-muted-foreground/20 to-muted animate-shimmer" />
-        ) : (
-          <div 
-            className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
-            style={{ width: `${progressPercent}%` }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
+// Inside component
+const [editMode, setEditMode] = useState(false);
 ```
 
-### Tailwind Shimmer Animation
+### 2. Add DropdownMenu to Header
 
-Add to `tailwind.config.ts`:
+Replace the placeholder three-dot button with an actual menu:
 
 ```typescript
-keyframes: {
-  shimmer: {
-    '0%': { transform: 'translateX(-100%)' },
-    '100%': { transform: 'translateX(100%)' },
-  },
-},
-animation: {
-  shimmer: 'shimmer 1.5s infinite',
+<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <button className="p-2 ...">
+      <Icon name="more_vert" size={24} />
+    </button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent>
+    <DropdownMenuItem onClick={() => setEditMode(true)}>
+      <Icon name="edit" size={20} className="mr-2" />
+      Manage Filters
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>
+```
+
+### 3. Edit Mode UI Changes
+
+When `editMode` is true:
+- Header shows "Manage Filters" title and "Done" button (replaces three-dot)
+- Filter chips show edit/delete icons
+- Apply/Create buttons are hidden
+- Selecting a filter doesn't toggle selection (only edit/delete icons work)
+
+```typescript
+// In edit mode, each filter chip becomes:
+<div className="relative">
+  <div className="filter-chip-content">{filter.name}</div>
+  <div className="absolute -top-1 -right-1 flex gap-1">
+    <button onClick={() => onEditFilter(filter)}>
+      <Icon name="edit" size={16} />
+    </button>
+    <button onClick={() => handleDelete(filter.id)}>
+      <Icon name="delete" size={16} />
+    </button>
+  </div>
+</div>
+```
+
+### 4. Wire Up Filter Editing in FilterModal
+
+Add new view state `'edit'` to handle editing:
+
+```typescript
+type ModalView = 'choose' | 'create' | 'edit';
+
+const [editingFilter, setEditingFilter] = useState<SavedFilter | null>(null);
+
+// When editing, pass the filter to CreateFilterSheet
+{view === 'edit' && editingFilter && (
+  <CreateFilterSheet
+    scores={scores}
+    editingFilter={editingFilter}  // NEW prop
+    onSave={handleUpdateFilter}
+    onShowResults={handleShowResults}
+    onBack={() => setView('choose')}
+    onCancel={() => onOpenChange(false)}
+  />
+)}
+```
+
+### 5. Extend CreateFilterSheet for Edit Mode
+
+Similar to how we extended it for goals:
+
+```typescript
+interface CreateFilterSheetProps {
+  // ... existing
+  editingFilter?: SavedFilter | null;  // NEW
 }
+
+// Initialize form from editingFilter if provided
+useEffect(() => {
+  if (editingFilter) {
+    setFilterName(editingFilter.name);
+    setRules(editingFilter.rules);
+    setMatchMode(editingFilter.matchMode);
+  }
+}, [editingFilter]);
+
+// Conditional UI
+<h2>{editingFilter ? 'Edit Filter' : 'New Filter'}</h2>
+<Button>{editingFilter ? 'Update Filter' : 'Save Filter'}</Button>
+```
+
+### 6. Add Delete Confirmation
+
+Use AlertDialog (already used in GoalDetailHeader):
+
+```typescript
+const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+<AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+  <AlertDialogContent>
+    <AlertDialogTitle>Delete Filter</AlertDialogTitle>
+    <AlertDialogDescription>
+      Are you sure? This action cannot be undone.
+    </AlertDialogDescription>
+    <AlertDialogFooter>
+      <AlertDialogCancel>Cancel</AlertDialogCancel>
+      <AlertDialogAction onClick={() => handleConfirmDelete()}>
+        Delete
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 ```
 
 ---
@@ -200,38 +204,66 @@ animation: {
 
 | File | Changes |
 |------|---------|
-| **New Migration** | Extend `calculate_goal_progress` to return `average_score` |
-| `src/hooks/useServerGoalProgress.ts` | Add `averageScore` to result type and parsing |
-| `src/pages/Home.tsx` | Use `averageScore` for average mode, pass `isLoading` |
-| `src/components/home/GoalCard.tsx` | Add `isLoading` prop with shimmer UI |
-| `tailwind.config.ts` | Add shimmer keyframe animation |
+| `src/components/filters/ChooseFilterSheet.tsx` | Add edit mode, three-dot menu with "Manage Filters", edit/delete icons on chips, delete confirmation |
+| `src/components/filters/CreateFilterSheet.tsx` | Add `editingFilter` prop, pre-populate form, conditional header/button text |
+| `src/components/filters/FilterModal.tsx` | Add `'edit'` view state, pass editing filter to CreateFilterSheet, wire up `updateFilter` |
+| `tailwind.config.ts` | (Optional) Add subtle jiggle animation for edit mode polish |
 
 ---
 
-## Data Flow After Fix
+## Data Flow
 
 ```text
-Home page loads
+User taps ⋮ → "Manage Filters"
     ↓
-RPC: calculate_goal_progress
+editMode = true
     ↓
-Returns: { completed_count, total_count, average_score }
+User taps ✏️ on "Level 17+"
     ↓
-GoalCard shows shimmer while isLoading=true
+view = 'edit', editingFilter = { id: '...', name: 'Level 17+', ... }
     ↓
-Data arrives → smooth transition to real values
+CreateFilterSheet opens with form pre-populated
     ↓
-Average mode: displays "AVG. 999,200 / 999,910"
+User modifies rules, taps "Update Filter"
+    ↓
+updateFilter(id, { name, rules, matchMode }) called
+    ↓
+onSuccess → view = 'choose', toast "Filter updated!"
 ```
+
+---
+
+## Alternative: Long-Press to Activate
+
+If you want the iOS-style discoverability boost, we can **add** long-press as a secondary trigger for edit mode (in addition to the menu). This gives power users a shortcut without hiding the main path:
+
+```typescript
+// Add long-press handler to filter chips (only in non-edit mode)
+<button
+  onClick={!editMode ? () => onSelectFilter(filter.id) : undefined}
+  onContextMenu={(e) => {
+    e.preventDefault();
+    setEditMode(true);
+  }}
+  // ... 
+>
+```
+
+This way:
+- Tap → selects filter (normal behavior)
+- Long-press/right-click → enters edit mode (power user shortcut)
+- Three-dot menu → enters edit mode (discoverable path)
 
 ---
 
 ## Testing Checklist
 
-1. Create a score-based goal with "Average" mode targeting 999,910
-2. Navigate to Home - verify shimmer shows while loading
-3. Verify average score displays correctly (should match GoalDetail page)
-4. Navigate to GoalDetail - verify progress matches Home
-5. Edit goal and change target - verify Home updates immediately
-6. Test lamp/grade/flare goals still work correctly with shimmer
+1. Tap three-dot menu → verify "Manage Filters" option appears
+2. Tap "Manage Filters" → verify edit mode activates (icons appear, buttons change)
+3. Tap edit icon → verify CreateFilterSheet opens with filter data
+4. Modify filter name and save → verify toast and filter updates
+5. Tap delete icon → verify confirmation dialog appears
+6. Confirm delete → verify filter is removed from list
+7. Tap "Done" → verify exit from edit mode
+8. Create new filter → verify form resets to defaults (not old edit values)
 
