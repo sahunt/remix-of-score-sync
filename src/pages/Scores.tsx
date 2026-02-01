@@ -192,6 +192,9 @@ export default function Scores() {
             song_id: song.song_id,
             name_romanized: song.name_romanized,
             era: song.era,
+            difficulty_name: song.difficulty_name,
+            difficulty_level: song.difficulty_level,
+            playstyle: 'SP',
           },
         };
         

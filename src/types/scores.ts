@@ -23,6 +23,7 @@ export interface ScoreWithSong {
   source_type?: string | null;
   musicdb_id?: number | null;
   // musicdb is optional because unplayed charts from musicdb don't have this relation
+  // Chart metadata (difficulty_level, difficulty_name, playstyle) comes from musicdb - SINGLE SOURCE OF TRUTH
   musicdb?: {
     name: string | null;
     artist: string | null;
@@ -31,6 +32,10 @@ export interface ScoreWithSong {
     name_romanized?: string | null;
     era: number | null;
     deleted?: boolean | null;
+    // Chart metadata - always use these from musicdb, not user_scores
+    difficulty_name: string | null;
+    difficulty_level: number | null;
+    playstyle: string | null;
   } | null;
   // For unplayed charts (from musicdb) - flattened fields
   name?: string | null;

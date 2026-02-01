@@ -1,6 +1,6 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { useUserScores } from '@/hooks/useUserScores';
-import type { ScoreWithSong } from '@/hooks/useGoalProgress';
+import type { ScoreWithSong } from '@/types/scores';
 
 interface ScoresContextValue {
   scores: ScoreWithSong[];
