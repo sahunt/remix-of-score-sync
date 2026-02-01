@@ -201,7 +201,7 @@ function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
 export default function Scores() {
   const { user } = useAuth();
   const { transformHaloLabel } = use12MSMode();
-  const { scores: globalScores } = useScores(); // Global cache for modal preloading
+  // Removed: globalScores from useScores() - now using local scores state for modal preloading
   const { data: songChartsCache } = useSongChartsCache(); // Pre-cached all SP charts by song_id
   const [scores, setScores] = useState<ScoreWithSong[]>([]);
   const [musicDbCharts, setMusicDbCharts] = useState<MusicDbChart[]>([]);
@@ -231,9 +231,10 @@ export default function Scores() {
     // Get ALL charts for this song from the pre-cached data
     const allChartsForSong = songChartsCache?.get(song.song_id) ?? [];
     
-    // Build score lookup from global scores cache (all user's played scores)
+    // Build score lookup from LOCAL scores state (matches what's displayed in the list)
+    // This fixes the bug where globalScores cache was out of sync with local fetched data
     const scoreMap = new Map(
-      globalScores
+      scores
         .filter(s => s.musicdb?.song_id === song.song_id)
         .map(s => [s.difficulty_name?.toUpperCase(), s])
     );
@@ -264,11 +265,11 @@ export default function Scores() {
       songName: song.name ?? 'Unknown Song',
       artist: song.artist,
       eamuseId: song.eamuse_id,
-      era: song.era,
+      era: song.era ?? null, // Explicitly coerce undefined to null for era=0 Classic support
       preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, [globalScores, songChartsCache]);
+  }, [scores, songChartsCache]);
 
   const handleCloseModal = useCallback(() => {
     setIsDetailModalOpen(false);
