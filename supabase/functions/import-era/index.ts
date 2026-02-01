@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       throw new Error("Missing csvContent in request body");
     }
 
-    console.log(`CSV content length: ${csvContent.length} characters`);
+    console.log(`[v2] CSV content length: ${csvContent.length} characters`);
 
     // Parse all CSV lines
     const eraRows = parseCSV(csvContent);
