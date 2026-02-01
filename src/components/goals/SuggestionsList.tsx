@@ -47,6 +47,7 @@ export function SuggestionsList({ songs, goal, isLoading }: SuggestionsListProps
           halo={song.halo}
           eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
           songId={song.musicdb?.song_id ?? song.song_id}
+          era={song.musicdb?.era ?? song.era}
         />
       ))}
     </div>

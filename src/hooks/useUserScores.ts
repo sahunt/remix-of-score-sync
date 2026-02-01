@@ -61,7 +61,7 @@ export function useUserScores(options?: {
             flare,
             halo,
             musicdb_id,
-            musicdb(name, artist, eamuse_id, song_id, deleted)
+            musicdb(name, artist, eamuse_id, song_id, deleted, era)
           `)
           .eq('user_id', user.id)
           .eq('playstyle', 'SP');

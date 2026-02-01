@@ -110,12 +110,14 @@ export interface ScoreWithSong {
     artist: string | null;
     eamuse_id?: string | null;
     song_id?: number | null;
+    era?: number | null;
   } | null;
   // For unplayed charts from musicdb
   name?: string | null;
   artist?: string | null;
   eamuse_id?: string | null;
   song_id?: number | null;
+  era?: number | null;
   isUnplayed?: boolean;
 }
 

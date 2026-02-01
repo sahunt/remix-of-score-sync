@@ -34,6 +34,7 @@ interface ScoreWithSong {
     eamuse_id: string | null;
     song_id: number | null;
     name_romanized: string | null;
+    era: number | null;
   } | null;
 }
 
@@ -47,6 +48,7 @@ interface MusicDbChart {
   difficulty_level: number | null;
   playstyle: string | null;
   name_romanized: string | null;
+  era: number | null;
 }
 
 interface DisplaySong {
@@ -62,6 +64,7 @@ interface DisplaySong {
   eamuse_id: string | null;
   song_id: number | null;
   name_romanized: string | null;
+  era: number | null;
   isNoPlay: boolean;
 }
 
@@ -314,7 +317,8 @@ export default function Scores() {
               artist,
               eamuse_id,
               song_id,
-              name_romanized
+              name_romanized,
+              era
             )
           `)
           .eq('user_id', user.id)
@@ -383,7 +387,7 @@ export default function Scores() {
       try {
         const { data, count, error } = await supabase
           .from('musicdb')
-          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle, name_romanized', { count: 'exact' })
+          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle, name_romanized, era', { count: 'exact' })
           .not('difficulty_level', 'is', null)
           .eq('playstyle', 'SP')
           .eq('deleted', false)
@@ -417,6 +421,7 @@ export default function Scores() {
       eamuse_id: s.musicdb?.eamuse_id ?? null,
       song_id: s.musicdb?.song_id ?? null,
       name_romanized: s.musicdb?.name_romanized ?? null,
+      era: s.musicdb?.era ?? null,
       isNoPlay: false,
     }));
 
@@ -445,6 +450,7 @@ export default function Scores() {
             eamuse_id: song.eamuse_id,
             song_id: song.song_id,
             name_romanized: song.name_romanized,
+            era: song.era,
           },
         };
         
@@ -482,6 +488,7 @@ export default function Scores() {
           eamuse_id: chart.eamuse_id,
           song_id: chart.song_id,
           name_romanized: chart.name_romanized,
+          era: chart.era,
           isNoPlay: true,
         }));
     }
