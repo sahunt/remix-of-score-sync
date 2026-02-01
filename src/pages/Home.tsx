@@ -53,7 +53,7 @@ function GoalCardWithProgress({ goal }: { goal: Goal }) {
       : (progress?.total ?? 0);
 
   const current = isAverageMode
-    ? 0 // Average mode needs special handling - not supported by RPC yet
+    ? (progress?.averageScore ?? 0) // Use average from RPC
     : (progress?.completed ?? 0);
 
   return (
@@ -66,6 +66,7 @@ function GoalCardWithProgress({ goal }: { goal: Goal }) {
       total={total}
       scoreMode={goal.score_mode as 'target' | 'average' | undefined}
       scoreFloor={goal.score_floor}
+      isLoading={isLoading}
     />
   );
 }

@@ -408,6 +408,7 @@ export type Database = {
           p_user_id: string
         }
         Returns: {
+          average_score: number
           completed_count: number
           total_count: number
         }[]

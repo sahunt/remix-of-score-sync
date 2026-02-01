@@ -6,6 +6,7 @@ import type { FilterRule } from '@/components/filters/filterTypes';
 interface GoalProgressResult {
   completed: number;
   total: number;
+  averageScore: number;
 }
 
 /**
@@ -54,7 +55,7 @@ export function useServerGoalProgress(
     queryKey: ['goal-progress-rpc', goalId, user?.id],
     queryFn: async () => {
       if (!user?.id) {
-        return { completed: 0, total: 0 };
+        return { completed: 0, total: 0, averageScore: 0 };
       }
 
       const { data, error } = await supabase.rpc('calculate_goal_progress', {
@@ -75,6 +76,7 @@ export function useServerGoalProgress(
       return {
         completed: Number(result?.completed_count ?? 0),
         total: Number(result?.total_count ?? 0),
+        averageScore: Number(result?.average_score ?? 0),
       };
     },
     enabled: enabled && !!user?.id && !!goalId,
@@ -115,7 +117,7 @@ export async function fetchGoalProgressBatch(
 
     if (error) {
       console.error(`Error fetching progress for goal ${goal.id}:`, error);
-      return { goalId: goal.id, completed: 0, total: 0 };
+      return { goalId: goal.id, completed: 0, total: 0, averageScore: 0 };
     }
 
     const result = Array.isArray(data) && data.length > 0 ? data[0] : null;
@@ -123,6 +125,7 @@ export async function fetchGoalProgressBatch(
       goalId: goal.id,
       completed: Number(result?.completed_count ?? 0),
       total: Number(result?.total_count ?? 0),
+      averageScore: Number(result?.average_score ?? 0),
     };
   });
 
@@ -131,7 +134,8 @@ export async function fetchGoalProgressBatch(
   for (const result of allResults) {
     results.set(result.goalId, { 
       completed: result.completed, 
-      total: result.total 
+      total: result.total,
+      averageScore: result.averageScore,
     });
   }
 
