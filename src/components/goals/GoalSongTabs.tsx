@@ -9,6 +9,7 @@ interface GoalSongTabsProps {
   completedSongs: ScoreWithSong[];
   remainingSongs: ScoreWithSong[];
   isLoading: boolean;
+  onSongClick?: (song: ScoreWithSong) => void;
 }
 
 export function GoalSongTabs({
@@ -16,6 +17,7 @@ export function GoalSongTabs({
   completedSongs,
   remainingSongs,
   isLoading,
+  onSongClick,
 }: GoalSongTabsProps) {
   const firstTabLabel = 'Remaining';
   const firstTabCount = remainingSongs.length;
@@ -66,10 +68,11 @@ export function GoalSongTabs({
         <RemainingSongsList 
           songs={remainingSongs} 
           goal={goal}
-          isLoading={isLoading} 
+          isLoading={isLoading}
+          onSongClick={onSongClick}
         />
       ) : (
-        <CompletedSongsList songs={completedSongs} isLoading={isLoading} />
+        <CompletedSongsList songs={completedSongs} isLoading={isLoading} onSongClick={onSongClick} />
       )}
     </div>
   );

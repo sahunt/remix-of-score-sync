@@ -7,9 +7,10 @@ interface RemainingSongsListProps {
   songs: ScoreWithSong[];
   goal: Goal;
   isLoading: boolean;
+  onSongClick?: (song: ScoreWithSong) => void;
 }
 
-export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsListProps) {
+export function RemainingSongsList({ songs, goal, isLoading, onSongClick }: RemainingSongsListProps) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -53,6 +54,7 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
               halo={song.halo}
               eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
               songId={song.musicdb?.song_id ?? song.song_id}
+              onClick={onSongClick ? () => onSongClick(song) : undefined}
             />
           ))}
         </div>
@@ -76,6 +78,7 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
                 halo={null}
                 eamuseId={song.eamuse_id}
                 songId={song.song_id}
+                onClick={onSongClick ? () => onSongClick(song) : undefined}
               />
             </div>
           ))}

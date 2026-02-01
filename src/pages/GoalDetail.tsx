@@ -1,18 +1,33 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGoal, useGoals } from '@/hooks/useGoals';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
 import { useMusicDbCount } from '@/hooks/useMusicDbCount';
 import { useUserScores } from '@/hooks/useUserScores';
 import { useAllChartsCache, filterChartsByCriteria } from '@/hooks/useAllChartsCache';
+import { useSongChartsCache } from '@/hooks/useSongChartsCache';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { GoalDetailHeader } from '@/components/goals/GoalDetailHeader';
 import { GoalCard } from '@/components/home/GoalCard';
 import { GoalSongTabs } from '@/components/goals/GoalSongTabs';
+import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import type { FilterRule } from '@/components/filters/filterTypes';
 import type { ScoreWithSong } from '@/hooks/useGoalProgress';
+import type { PreloadedChart } from '@/types/scores';
+
+// Difficulty order for display (highest to lowest)
+const DIFFICULTY_ORDER = ['CHALLENGE', 'EXPERT', 'DIFFICULT', 'BASIC', 'BEGINNER'];
+
+interface SelectedSong {
+  songId: number;
+  songName: string;
+  artist: string | null;
+  eamuseId: string | null;
+  era: number | null;
+  preloadedCharts?: PreloadedChart[];
+}
 
 export default function GoalDetail() {
   const { goalId } = useParams<{ goalId: string }>();
@@ -21,6 +36,10 @@ export default function GoalDetail() {
   const { reverseTransformHalo } = use12MSMode();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Modal state
+  const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Fetch the goal
   const { data: goal, isLoading: goalLoading } = useGoal(goalId);
@@ -47,6 +66,8 @@ export default function GoalDetail() {
   // This eliminates redundant musicdb queries - the cache is shared across all goals
   const { data: allCharts = [] } = useAllChartsCache();
   
+  // Pre-cached all SP charts by song_id (for modal preloading)
+  const { data: songChartsCache } = useSongChartsCache();
   // Extract rules for filtering
   const levelRule = criteriaRules.find(r => r.type === 'level');
   const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
@@ -97,6 +118,58 @@ export default function GoalDetail() {
     [...progress.remainingSongs, ...unplayedCharts],
     [progress.remainingSongs, unplayedCharts]
   );
+
+  // Handler for song card clicks - mirrors Scores.tsx handleSongClick
+  const handleSongClick = useCallback((song: ScoreWithSong) => {
+    const songId = song.musicdb?.song_id ?? song.song_id;
+    if (!songId) return;
+    
+    // Get ALL charts for this song from the pre-cached data
+    const allChartsForSong = songChartsCache?.get(songId) ?? [];
+    
+    let preloadedCharts: PreloadedChart[] | undefined;
+    
+    // Only preload if we have charts from the cache
+    if (allChartsForSong.length > 0) {
+      // Build score lookup from all scores for this goal
+      const scoreMap = new Map(
+        scores
+          .filter(s => (s.musicdb?.song_id ?? s.song_id) === songId)
+          .map(s => [s.difficulty_name?.toUpperCase(), s])
+      );
+      
+      // Merge: all charts + user scores for instant, complete modal data
+      preloadedCharts = allChartsForSong
+        .map(chart => {
+          const userScore = scoreMap.get(chart.difficulty_name);
+          return {
+            id: chart.id,
+            difficulty_name: chart.difficulty_name,
+            difficulty_level: chart.difficulty_level,
+            score: userScore?.score ?? null,
+            rank: userScore?.rank ?? null,
+            flare: userScore?.flare ?? null,
+            halo: userScore?.halo ?? null,
+            source_type: null,
+          };
+        })
+        .sort((a, b) => {
+          const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
+          const bIndex = DIFFICULTY_ORDER.indexOf(b.difficulty_name);
+          return aIndex - bIndex;
+        });
+    }
+    
+    setSelectedSong({
+      songId,
+      songName: song.musicdb?.name ?? song.name ?? 'Unknown Song',
+      artist: song.musicdb?.artist ?? song.artist ?? null,
+      eamuseId: song.musicdb?.eamuse_id ?? song.eamuse_id ?? null,
+      era: song.musicdb?.era ?? null,
+      preloadedCharts,
+    });
+    setIsDetailModalOpen(true);
+  }, [scores, songChartsCache]);
 
   const handleBack = () => {
     navigate('/home');
@@ -179,9 +252,22 @@ export default function GoalDetail() {
             completedSongs={progress.completedSongs}
             remainingSongs={allRemainingSongs}
             isLoading={scoresLoading}
+            onSongClick={handleSongClick}
           />
         </div>
       </div>
+
+      {/* Song Detail Modal */}
+      <SongDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        songId={selectedSong?.songId ?? null}
+        songName={selectedSong?.songName ?? ''}
+        artist={selectedSong?.artist ?? null}
+        eamuseId={selectedSong?.eamuseId ?? null}
+        era={selectedSong?.era ?? null}
+        preloadedCharts={selectedSong?.preloadedCharts}
+      />
     </div>
   );
 }
