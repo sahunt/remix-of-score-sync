@@ -20,10 +20,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useFilterResults } from '@/hooks/useFilterResults';
 import { useMusicDbCount } from '@/hooks/useMusicDbCount';
+import type { Goal } from '@/hooks/useGoalProgress';
 
 interface CreateGoalSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editingGoal?: Goal | null;
 }
 
 type TargetType = 'lamp' | 'grade' | 'flare' | 'score';
@@ -87,10 +89,12 @@ function formatCriteriaSummary(rules: FilterRule[]): string {
   return `${summaries[0]} + ${summaries.length - 1} more`;
 }
 
-export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
-  const { createGoal } = useGoals();
+export function CreateGoalSheet({ open, onOpenChange, editingGoal }: CreateGoalSheetProps) {
+  const { createGoal, updateGoal } = useGoals();
   const { toast } = useToast();
   const { user } = useAuth();
+  
+  const isEditMode = Boolean(editingGoal);
 
   // Fetch user scores for real-time matching
   // Chart metadata comes from musicdb relation (SINGLE SOURCE OF TRUTH)
@@ -181,26 +185,48 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     value: getDefaultValue('level'),
   };
 
-  // Reset form completely when sheet opens
+  // Reset form or populate with editing goal when sheet opens
   useEffect(() => {
     if (open) {
-      // Reset all form state to initial values
-      setName('');
-      setTargetType(null);
-      setTargetValue(null);
-      setGoalMode('all');
-      setGoalCount(10);
-      setCriteriaRules([{
-        id: generateRuleId(),
-        type: 'level',
-        operator: getDefaultOperator('level'),
-        value: getDefaultValue('level'),
-      }]);
-      setCriteriaMatchMode('all');
-      setScoreMode('target');
-      setExpandedStep(1);
+      if (editingGoal) {
+        // Edit mode: populate from existing goal
+        setName(editingGoal.name);
+        setTargetType(editingGoal.target_type);
+        setTargetValue(editingGoal.target_value);
+        setGoalMode(editingGoal.goal_mode);
+        setGoalCount(editingGoal.goal_count ?? 10);
+        setCriteriaRules(
+          Array.isArray(editingGoal.criteria_rules) && editingGoal.criteria_rules.length > 0
+            ? editingGoal.criteria_rules
+            : [{
+                id: generateRuleId(),
+                type: 'level',
+                operator: getDefaultOperator('level'),
+                value: getDefaultValue('level'),
+              }]
+        );
+        setCriteriaMatchMode(editingGoal.criteria_match_mode);
+        setScoreMode(editingGoal.score_mode ?? 'target');
+        setExpandedStep(1);
+      } else {
+        // Create mode: reset all form state to initial values
+        setName('');
+        setTargetType(null);
+        setTargetValue(null);
+        setGoalMode('all');
+        setGoalCount(10);
+        setCriteriaRules([{
+          id: generateRuleId(),
+          type: 'level',
+          operator: getDefaultOperator('level'),
+          value: getDefaultValue('level'),
+        }]);
+        setCriteriaMatchMode('all');
+        setScoreMode('target');
+        setExpandedStep(1);
+      }
     }
-  }, [open]);
+  }, [open, editingGoal]);
 
   // Completion states
   const isStep1Complete = Boolean(targetType && targetValue);
@@ -346,7 +372,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
     }
 
     try {
-      await createGoal.mutateAsync({
+      const goalData = {
         name: displayName || 'New Goal',
         target_type: targetType,
         target_value: targetValue,
@@ -356,19 +382,31 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
         goal_count: goalMode === 'count' ? goalCount : null,
         score_mode: targetType === 'score' ? scoreMode : 'target',
         score_floor: calculatedScoreFloor,
-      });
+      };
 
-      toast({
-        title: "Goal created!",
-        description: "Your new goal has been saved.",
-      });
+      if (isEditMode && editingGoal) {
+        await updateGoal.mutateAsync({
+          id: editingGoal.id,
+          ...goalData,
+        });
+        toast({
+          title: "Goal updated!",
+          description: "Your goal has been saved.",
+        });
+      } else {
+        await createGoal.mutateAsync(goalData);
+        toast({
+          title: "Goal created!",
+          description: "Your new goal has been saved.",
+        });
+      }
 
       resetForm();
       onOpenChange(false);
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to create goal. Please try again.",
+        description: `Failed to ${isEditMode ? 'update' : 'create'} goal. Please try again.`,
         variant: "destructive",
       });
     }
@@ -451,7 +489,7 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
               >
                 <X className="h-6 w-6" />
               </button>
-              <h2 className="text-lg font-semibold text-white">New Goal</h2>
+              <h2 className="text-lg font-semibold text-white">{isEditMode ? 'Edit Goal' : 'New Goal'}</h2>
               <div className="w-10" /> {/* Spacer for centering */}
             </div>
 
@@ -562,11 +600,13 @@ export function CreateGoalSheet({ open, onOpenChange }: CreateGoalSheetProps) {
           <div className="space-y-3 pt-2">
             <Button
               onClick={handleSave}
-              disabled={!canSave || createGoal.isPending}
+              disabled={!canSave || createGoal.isPending || updateGoal.isPending}
               className="w-full h-11 rounded-[10px]"
               iconLeft="favorite"
             >
-              {createGoal.isPending ? 'Saving...' : 'Save Goal'}
+              {(createGoal.isPending || updateGoal.isPending) 
+                ? 'Saving...' 
+                : (isEditMode ? 'Update Goal' : 'Save Goal')}
             </Button>
           </div>
             </div>

@@ -15,11 +15,12 @@ import {
 
 interface GoalDetailHeaderProps {
   onBack: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   isDeleting?: boolean;
 }
 
-export function GoalDetailHeader({ onBack, onDelete, isDeleting }: GoalDetailHeaderProps) {
+export function GoalDetailHeader({ onBack, onEdit, onDelete, isDeleting }: GoalDetailHeaderProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleDelete = () => {
@@ -39,6 +40,16 @@ export function GoalDetailHeader({ onBack, onDelete, isDeleting }: GoalDetailHea
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="flex-1 text-xl font-semibold text-foreground">Goal Details</h1>
+        {onEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onEdit}
+            className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground"
+          >
+            <Icon name="edit" size={24} />
+          </Button>
+        )}
         {onDelete && (
           <Button
             variant="ghost"
