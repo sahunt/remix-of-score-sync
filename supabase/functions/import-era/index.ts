@@ -22,60 +22,34 @@ function parseCSV(content: string): EraRow[] {
   const lines = content.trim().split("\n");
   const eraRows: EraRow[] = [];
 
-  // Skip header row (song_name,eamuse_id,era)
+  // Skip header row (eamuse_id,era)
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Handle CSV with possible quoted song_name field (first column may contain commas)
-    // Format: "Song Name, With Comma",eamuse_id,era OR Song Name,eamuse_id,era
-    let eamuse_id: string;
-    let era: string;
-
-    if (line.startsWith('"')) {
-      // Quoted song name - find the closing quote
-      const closingQuoteIndex = line.indexOf('",', 1);
-      if (closingQuoteIndex === -1) {
-        console.warn(`Skipping malformed quoted line ${i + 1}: ${line}`);
-        continue;
-      }
-      // Rest after the quoted field and comma
-      const rest = line.substring(closingQuoteIndex + 2);
-      const parts = rest.split(",");
-      if (parts.length < 2) {
-        console.warn(`Skipping line ${i + 1} with missing fields: ${line}`);
-        continue;
-      }
-      eamuse_id = parts[0].trim();
-      era = parts[1].trim();
-    } else {
-      // No quoted song name - simple split, take last two fields
-      const parts = line.split(",");
-      if (parts.length < 3) {
-        console.warn(`Skipping line ${i + 1} with insufficient fields: ${line}`);
-        continue;
-      }
-      // eamuse_id is second-to-last, era is last
-      eamuse_id = parts[parts.length - 2].trim();
-      era = parts[parts.length - 1].trim();
-    }
-
-    // Strip -d7 suffix if present, then validate eamuse_id is 32 characters
-    let cleanId = eamuse_id;
-    if (cleanId.endsWith('-d7')) {
-      cleanId = cleanId.slice(0, -3);
-    }
-    
-    if (!cleanId || cleanId.length !== 32) {
-      console.warn(`Invalid eamuse_id on line ${i + 1}: ${cleanId} (length: ${cleanId.length})`);
+    const parts = line.split(",");
+    if (parts.length < 2) {
+      console.warn(`[v3] Skipping line ${i + 1} with insufficient fields: ${line}`);
       continue;
     }
-    eamuse_id = cleanId;
+
+    let eamuse_id = parts[0].trim();
+    const era = parts[1].trim();
+
+    // Strip -d7 suffix if present
+    if (eamuse_id.endsWith('-d7')) {
+      eamuse_id = eamuse_id.slice(0, -3);
+    }
+    
+    if (!eamuse_id || eamuse_id.length !== 32) {
+      console.warn(`[v3] Invalid eamuse_id on line ${i + 1}: ${eamuse_id} (length: ${eamuse_id.length})`);
+      continue;
+    }
 
     // Parse era as integer
     const eraNum = parseInt(era, 10);
     if (isNaN(eraNum) || eraNum < 0 || eraNum > 2) {
-      console.warn(`Invalid era value on line ${i + 1}: ${era}`);
+      console.warn(`[v3] Invalid era value on line ${i + 1}: ${era}`);
       continue;
     }
 
@@ -102,7 +76,7 @@ Deno.serve(async (req) => {
       throw new Error("Missing csvContent in request body");
     }
 
-    console.log(`[v2] CSV content length: ${csvContent.length} characters`);
+    console.log(`[v3] CSV content length: ${csvContent.length} characters`);
 
     // Parse all CSV lines
     const eraRows = parseCSV(csvContent);
