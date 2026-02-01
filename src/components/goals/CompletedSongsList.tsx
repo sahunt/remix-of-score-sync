@@ -5,9 +5,10 @@ import type { ScoreWithSong } from '@/hooks/useGoalProgress';
 interface CompletedSongsListProps {
   songs: ScoreWithSong[];
   isLoading: boolean;
+  onSongClick?: (song: ScoreWithSong) => void;
 }
 
-export function CompletedSongsList({ songs, isLoading }: CompletedSongsListProps) {
+export function CompletedSongsList({ songs, isLoading, onSongClick }: CompletedSongsListProps) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -43,6 +44,7 @@ export function CompletedSongsList({ songs, isLoading }: CompletedSongsListProps
           halo={song.halo}
           eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
           songId={song.musicdb?.song_id ?? song.song_id}
+          onClick={onSongClick ? () => onSongClick(song) : undefined}
         />
       ))}
     </div>
