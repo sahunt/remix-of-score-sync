@@ -46,7 +46,10 @@ export function useUserScores(options?: {
         // ARCHITECTURE: Chart metadata comes from musicdb (SINGLE SOURCE OF TRUTH)
         // - difficulty_level, difficulty_name, playstyle from musicdb relation
         // - score, rank, flare, halo from user_scores (user achievements)
-        // The redundant columns in user_scores are ignored
+        // 
+        // CRITICAL: Use !inner to ensure INNER JOIN behavior. Without it, PostgREST
+        // performs a LEFT JOIN that returns ALL parent rows with musicdb: null for
+        // non-matching relations, breaking pagination when filtering by level/difficulty.
         let query = supabase
           .from('user_scores')
           .select(`
@@ -58,7 +61,7 @@ export function useUserScores(options?: {
             halo,
             source_type,
             musicdb_id,
-            musicdb(
+            musicdb!inner(
               name, artist, eamuse_id, song_id, deleted, era, name_romanized,
               difficulty_name, difficulty_level, playstyle
             )
