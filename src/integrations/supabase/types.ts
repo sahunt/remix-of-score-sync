@@ -288,14 +288,11 @@ export type Database = {
         Row: {
           chart_id: number | null
           created_at: string
-          difficulty_level: number | null
-          difficulty_name: string | null
           flare: number | null
           halo: string | null
           id: string
           judgement_offset: number | null
           musicdb_id: number | null
-          playstyle: string | null
           rank: string | null
           score: number | null
           song_id: number
@@ -308,14 +305,11 @@ export type Database = {
         Insert: {
           chart_id?: number | null
           created_at?: string
-          difficulty_level?: number | null
-          difficulty_name?: string | null
           flare?: number | null
           halo?: string | null
           id?: string
           judgement_offset?: number | null
           musicdb_id?: number | null
-          playstyle?: string | null
           rank?: string | null
           score?: number | null
           song_id: number
@@ -328,14 +322,11 @@ export type Database = {
         Update: {
           chart_id?: number | null
           created_at?: string
-          difficulty_level?: number | null
-          difficulty_name?: string | null
           flare?: number | null
           halo?: string | null
           id?: string
           judgement_offset?: number | null
           musicdb_id?: number | null
-          playstyle?: string | null
           rank?: string | null
           score?: number | null
           song_id?: number
