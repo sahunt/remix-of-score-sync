@@ -99,6 +99,7 @@ export function useGoals() {
           goal_mode: updates.goal_mode,
           goal_count: updates.goal_count,
           score_mode: updates.score_mode,
+          score_floor: updates.score_floor,
         })
         .eq('id', id)
         .eq('user_id', user.id)
@@ -108,8 +109,9 @@ export function useGoals() {
       if (error) throw error;
       return mapRowToGoal(data);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['goal', variables.id] });
     },
   });
 
