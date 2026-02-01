@@ -88,6 +88,7 @@ interface SelectedSong {
   songName: string;
   artist: string | null;
   eamuseId: string | null;
+  era: number | null;
   preloadedCharts?: PreloadedChart[];
 }
 
@@ -263,6 +264,7 @@ export default function Scores() {
       songName: song.name ?? 'Unknown Song',
       artist: song.artist,
       eamuseId: song.eamuse_id,
+      era: song.era,
       preloadedCharts,
     });
     setIsDetailModalOpen(true);
@@ -747,6 +749,7 @@ export default function Scores() {
         songName={selectedSong?.songName ?? ''}
         artist={selectedSong?.artist ?? null}
         eamuseId={selectedSong?.eamuseId ?? null}
+        era={selectedSong?.era ?? null}
         preloadedCharts={selectedSong?.preloadedCharts}
       />
     </div>
