@@ -112,7 +112,7 @@ export default function Auth() {
         <div className="rounded-xl bg-primary/10 p-3 glow-primary">
           <Music2 className="h-10 w-10 text-primary" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">DDR Score Tracker</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Edi</h1>
         <p className="text-sm text-muted-foreground">Track your dance game progress</p>
       </div>
 
