@@ -1,6 +1,23 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/Icon';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { SavedFilter } from './filterTypes';
 
 interface ChooseFilterSheetProps {
@@ -10,6 +27,8 @@ interface ChooseFilterSheetProps {
   onSelectFilter: (id: string) => void;
   onApply: () => void;
   onCreateNew: () => void;
+  onEditFilter: (filter: SavedFilter) => void;
+  onDeleteFilter: (id: string) => void;
   onClose: () => void;
 }
 
@@ -20,8 +39,22 @@ export function ChooseFilterSheet({
   onSelectFilter,
   onApply,
   onCreateNew,
+  onEditFilter,
+  onDeleteFilter,
   onClose,
 }: ChooseFilterSheetProps) {
+  const [editMode, setEditMode] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const handleConfirmDelete = () => {
+    if (deleteConfirmId) {
+      onDeleteFilter(deleteConfirmId);
+      setDeleteConfirmId(null);
+    }
+  };
+
+  const filterToDelete = filters.find((f) => f.id === deleteConfirmId);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -32,7 +65,7 @@ export function ChooseFilterSheet({
 
   return (
     <div className="space-y-6">
-      {/* Header with close, title, and kebab */}
+      {/* Header with close, title, and menu/done */}
       <div className="flex items-center justify-between -mx-7 -mt-4 px-5 py-4 border-b border-[#4A4E61]">
         <button
           onClick={onClose}
@@ -41,13 +74,38 @@ export function ChooseFilterSheet({
         >
           <Icon name="close" size={24} />
         </button>
-        <h2 className="text-lg font-semibold text-white">Filters</h2>
-        <button
-          className="p-2 text-white hover:text-muted-foreground transition-colors"
-          aria-label="More options"
-        >
-          <Icon name="more_vert" size={24} />
-        </button>
+        <h2 className="text-lg font-semibold text-white">
+          {editMode ? 'Manage Filters' : 'Filters'}
+        </h2>
+        {editMode ? (
+          <button
+            onClick={() => setEditMode(false)}
+            className="p-2 text-primary font-medium text-sm hover:text-primary/80 transition-colors"
+          >
+            Done
+          </button>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="p-2 text-white hover:text-muted-foreground transition-colors"
+                aria-label="More options"
+              >
+                <Icon name="more_vert" size={24} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-[#3B3F51] border-[#4A4E61]">
+              <DropdownMenuItem
+                onClick={() => setEditMode(true)}
+                disabled={filters.length === 0}
+                className="text-white focus:bg-[#4A4E61] focus:text-white"
+              >
+                <Icon name="edit" size={20} className="mr-2" />
+                Manage Filters
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {filters.length === 0 ? (
@@ -61,6 +119,34 @@ export function ChooseFilterSheet({
           <div className="flex flex-wrap gap-2">
             {filters.map((filter) => {
               const isSelected = selectedIds.includes(filter.id);
+
+              if (editMode) {
+                // Edit mode: show chip with edit/delete icons
+                return (
+                  <div
+                    key={filter.id}
+                    className="flex items-center gap-1 rounded-[10px] bg-[#4A4E61] pl-4 pr-2 py-2.5 text-sm font-medium text-white"
+                  >
+                    <span>{filter.name}</span>
+                    <button
+                      onClick={() => onEditFilter(filter)}
+                      className="p-1 hover:bg-white/10 rounded transition-colors"
+                      aria-label={`Edit ${filter.name}`}
+                    >
+                      <Icon name="edit" size={16} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirmId(filter.id)}
+                      className="p-1 hover:bg-destructive/20 rounded transition-colors text-destructive"
+                      aria-label={`Delete ${filter.name}`}
+                    >
+                      <Icon name="delete" size={16} />
+                    </button>
+                  </div>
+                );
+              }
+
+              // Normal mode: selectable chip
               return (
                 <button
                   key={filter.id}
@@ -83,23 +169,48 @@ export function ChooseFilterSheet({
         </div>
       )}
 
-      {/* Action buttons - Apply first, Create second */}
-      <div className="flex gap-3 pt-4">
-        <Button
-          className="flex-1"
-          onClick={onApply}
-          disabled={selectedIds.length === 0}
-        >
-          Apply
-        </Button>
-        <Button
-          className="flex-1"
-          onClick={onCreateNew}
-          iconRight="add_circle"
-        >
-          Create
-        </Button>
-      </div>
+      {/* Action buttons - only show when not in edit mode */}
+      {!editMode && (
+        <div className="flex gap-3 pt-4">
+          <Button
+            className="flex-1"
+            onClick={onApply}
+            disabled={selectedIds.length === 0}
+          >
+            Apply
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={onCreateNew}
+            iconRight="add_circle"
+          >
+            Create
+          </Button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent className="bg-[#3B3F51] border-[#4A4E61]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Delete Filter</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Are you sure you want to delete "{filterToDelete?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-[#4A4E61] text-white border-0 hover:bg-[#555970]">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
