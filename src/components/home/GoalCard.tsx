@@ -13,6 +13,7 @@ interface GoalCardProps {
   className?: string;
   scoreMode?: 'target' | 'average';
   scoreFloor?: number | null;
+  isLoading?: boolean;
 }
 
 // Get progress bar color based on target type and value
@@ -59,6 +60,7 @@ export function GoalCard({
   className,
   scoreMode,
   scoreFloor,
+  isLoading = false,
 }: GoalCardProps) {
   const navigate = useNavigate();
   const isAverageMode = targetType === 'score' && scoreMode === 'average';
@@ -103,20 +105,28 @@ export function GoalCard({
       {/* Title */}
       <h3 className="font-semibold text-foreground text-lg">{title}</h3>
       
-      {/* Progress text */}
-      <p className="text-xs text-muted-foreground uppercase tracking-wide">
-        {isAverageMode 
-          ? `Avg. ${formatScore(current)} / ${formatScore(total)}`
-          : `${current}/${total} completed`
-        }
-      </p>
+      {/* Progress text - with shimmer when loading */}
+      {isLoading ? (
+        <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+      ) : (
+        <p className="text-xs text-muted-foreground uppercase tracking-wide">
+          {isAverageMode 
+            ? `Avg. ${formatScore(current)} / ${formatScore(total)}`
+            : `${current}/${total} completed`
+          }
+        </p>
+      )}
       
-      {/* Progress bar */}
+      {/* Progress bar - shimmer when loading */}
       <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-        <div 
-          className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
-          style={{ width: `${progressPercent}%` }}
-        />
+        {isLoading ? (
+          <div className="h-full w-full animate-shimmer bg-gradient-to-r from-muted via-muted-foreground/20 to-muted bg-[length:200%_100%]" />
+        ) : (
+          <div 
+            className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+            style={{ width: `${progressPercent}%` }}
+          />
+        )}
       </div>
     </div>
   );
