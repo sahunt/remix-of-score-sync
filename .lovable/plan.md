@@ -1,101 +1,159 @@
 
-# Song Card Era Chip Implementation
+# Bug Fix: Era Chip Display and Modal Score Synchronization
 
-## Overview
-Add era chips (Classic, White, Gold) to the SongCard component. The chips will display below the song title, center-aligned. This lays the groundwork for future icons to be added in the same row.
+## Problem Summary
 
-## Data Flow Changes
+Two critical bugs were identified on the Scores page:
 
-### 1. Add Era to Database Queries
-The `era` field already exists in the `musicdb` table. Need to add it to all queries that fetch song data:
+1. **Era chip not displaying for `era=0` songs** - Songs with `era=0` (Classic era) don't show the era chip, even though the database correctly stores `era=0`
+2. **Modal shows no scores** - When clicking a song card with visible scores, the modal shows "No play" for all difficulties
 
-- **src/pages/Scores.tsx**: Add `era` to the musicdb selection in the user_scores query
-- **src/hooks/useUserScores.ts**: Add `era` to the musicdb selection
-- **src/hooks/useSongChartsCache.ts**: Check if era is fetched for modal display
+## Root Cause Analysis
 
-### 2. Update Type Definitions
-Update interfaces to include era:
-- **src/pages/Scores.tsx**: Add `era` to `ScoreWithSong`, `MusicDbChart`, and `DisplaySong` interfaces
-- **src/hooks/useGoalProgress.ts**: Add `era` to `ScoreWithSong` interface
+### Bug 1: Era Display Issue
 
-## Component Changes
+The database correctly stores `era=0` for Classic era songs. The `EraChip` component handles this correctly with explicit null checks:
 
-### 3. Create Era Assets
-Copy the uploaded SVG files to `src/assets/eras/`:
-- `era_classic.svg` (from classicerachip.svg)
-- `era_white.svg` (from whiteerachip.svg)  
-- `era_gold.svg` (from golderachip.svg)
-
-### 4. Create EraChip Component
-New file: `src/components/ui/EraChip.tsx`
-- Props: `era: 0 | 1 | 2 | null`
-- Map: 0 = Classic, 1 = White, 2 = Gold
-- Returns null if era is null/undefined
-- Follows FlareChip pattern: imports SVGs and renders as img
-
-### 5. Update SongCard Component
-File: `src/components/scores/SongCard.tsx`
-
-Changes:
-- Add `era?: number | null` prop
-- Add new icon row below the title row (between title and score)
-- Center-align icons with `justify-center`
-- Use 4px gap between icons
-- Only render the icon row if there's at least one icon to show
-
-Layout update:
-```
-[Album Art] [Song Info Section]              [Rank]
-            [14] SONG TITLE
-            [Era Icon] ← new row, center-aligned
-            999,999 [Flare]
+```typescript
+if (era === null || era === undefined) return null;
 ```
 
-### 6. Update Consumers of SongCard
-Pass era through in all places using SongCard:
+**However**, the issue is on **line 752 of Scores.tsx**:
 
-- **src/components/scores/VirtualizedSongList.tsx**: Add era to SongRow and SongCard props
-- **src/components/goals/CompletedSongsList.tsx**: Add era prop
-- **src/components/goals/RemainingSongsList.tsx**: Check and add era prop
-- **src/components/goals/SuggestionsList.tsx**: Check and add era prop
+```typescript
+era={selectedSong?.era ?? null}
+```
 
-### 7. Update VirtualizedSongList Height Estimate
-Since we're adding a new row, the card height increases. Update the `estimateSize` from 70px to approximately 88px to account for the new icon row.
+The `??` operator is correct, but the problem is upstream. When `selectedSong` is set in `handleSongClick`, it uses `song.era` from the `DisplaySong`. If `era` is `0` and gets passed through multiple layers, TypeScript's optional chaining can coerce it.
 
-## UX Spacing Guidelines
-- Icon row: 4px gap between icons (gap-1)
-- Icon row margin: 2px above (mt-0.5)
-- Icons center-aligned with `justify-center`
-- Only render row if icons exist to prevent empty space
+But the **actual culprit** is likely that `era` is being treated as "falsy" somewhere in the data chain. The `MusicDbChart` interface has `era: number | null`, but when the query returns, Supabase may return `0` as a primitive that gets coerced.
+
+Let me trace more carefully:
+- Line 493 creates noPlay songs with `era: chart.era` (chart comes from `musicDbCharts`)
+- `musicDbCharts` is fetched with `era` in the select
+- The interface `MusicDbChart` has `era: number | null`
+
+The actual fix needed: ensure explicit typing and avoid any implicit falsy checks.
+
+### Bug 2: Modal Score Mismatch (Critical)
+
+The `handleSongClick` function uses **two different data sources** that are NOT synchronized:
+
+**Source 1 - Song List Display (local `scores` state)**:
+- Fetched via `useEffect` on line 293-375
+- Filtered by `selectedLevel` and `levelsToFetch`
+- Cached in local `scores` state
+
+**Source 2 - Modal Preloading (global `globalScores` context)**:
+- Fetched via `useUserScores` hook through `ScoresProvider`
+- NO level filtering - fetches ALL scores
+- Cached in React Query with key `['user-scores', user?.id, 'global', ...]`
+
+**The Mismatch**: When a user clicks on a song card, the card displays data from `scores` (local state), but the modal's `preloadedCharts` is built using `globalScores` (context). If these two haven't synchronized (due to different cache timing, loading states, or query parameters), the modal shows stale or missing data.
+
+**Example scenario**:
+1. User uploads new scores
+2. Local `scores` refetches and shows updated data in list
+3. `globalScores` cache (5 minute staleTime) hasn't invalidated yet
+4. User clicks a song with new CHAOS score
+5. Modal uses old `globalScores` which doesn't have the CHAOS score
+6. Modal shows "No play" for all difficulties
+
+## Implementation Plan
+
+### Step 1: Fix Modal Data Source to Use Local Scores
+
+**File**: `src/pages/Scores.tsx`
+
+Change `handleSongClick` to use the local `scores` state (which matches what's displayed) instead of `globalScores`:
+
+```typescript
+// BEFORE (lines 235-239):
+const scoreMap = new Map(
+  globalScores
+    .filter(s => s.musicdb?.song_id === song.song_id)
+    .map(s => [s.difficulty_name?.toUpperCase(), s])
+);
+
+// AFTER:
+// Use local scores state - this matches what's displayed in the list
+const scoreMap = new Map(
+  scores
+    .filter(s => s.musicdb?.song_id === song.song_id)
+    .map(s => [s.difficulty_name?.toUpperCase(), s])
+);
+```
+
+Also update the `useCallback` dependencies:
+```typescript
+// BEFORE:
+}, [globalScores, songChartsCache]);
+
+// AFTER:
+}, [scores, songChartsCache]);
+```
+
+### Step 2: Remove Unused globalScores Import (Optional Cleanup)
+
+If `globalScores` is no longer needed in Scores.tsx after the fix, remove the import:
+
+```typescript
+// Line 204 - can be removed if not used elsewhere:
+const { scores: globalScores } = useScores();
+```
+
+**Note**: Check if `globalScores` is used elsewhere in the component before removing.
+
+### Step 3: Fix Era Display for Value `0`
+
+The era display issue is subtle. The fix is to ensure that anywhere era is conditionally rendered, we use explicit null/undefined checks rather than truthy checks.
+
+**File**: `src/components/scores/SongDetailModal.tsx`
+
+The current check (lines 241-245) is correct:
+```typescript
+{era !== null && era !== undefined && (
+  <div className="flex justify-center mt-2">
+    <EraChip era={era} />
+  </div>
+)}
+```
+
+**However**, if `era` is coming through as `undefined` from the data chain, this would fail to render. Verify the data is being passed correctly by checking:
+
+1. `DisplaySong` interface includes `era: number | null`
+2. `SelectedSong` interface includes `era: number | null`
+3. Data mapping uses `??` not `||`
+
+All these appear correct in the current code. The remaining possibility is that the `musicdb` join returns `null` for some rows, making `s.musicdb?.era` become `undefined`.
+
+**Additional fix in `handleSongClick`** to ensure era is explicitly passed:
+```typescript
+// Line 267:
+era: song.era ?? null, // Explicitly coerce undefined to null
+```
 
 ## Technical Details
 
-### Era Mapping
-```typescript
-type EraType = 'classic' | 'white' | 'gold';
-
-const eraNumberToType = (era: number | null): EraType | null => {
-  if (era === null || era === undefined) return null;
-  const mapping: Record<number, EraType> = {
-    0: 'classic',
-    1: 'white',
-    2: 'gold'
-  };
-  return mapping[era] ?? null;
-};
-```
-
 ### Files to Modify
-1. `src/assets/eras/` - new folder with 3 SVGs
-2. `src/components/ui/EraChip.tsx` - new component
-3. `src/components/scores/SongCard.tsx` - add era prop and icon row
-4. `src/components/scores/VirtualizedSongList.tsx` - pass era, update height
-5. `src/pages/Scores.tsx` - add era to types and query
-6. `src/hooks/useUserScores.ts` - add era to query
-7. `src/hooks/useGoalProgress.ts` - add era to type
-8. `src/components/goals/CompletedSongsList.tsx` - pass era
-9. `src/components/goals/RemainingSongsList.tsx` - pass era
-10. `src/components/goals/SuggestionsList.tsx` - pass era
 
-## Future Extensibility
-The icon row structure allows easily adding more chips in the future by simply adding more components to the flex container. The center alignment and gap spacing will automatically accommodate additional icons.
+1. **`src/pages/Scores.tsx`**
+   - Line 235-239: Change `globalScores` to `scores` in `scoreMap` construction
+   - Line 271: Update `useCallback` dependencies from `globalScores` to `scores`
+   - Line 267: Ensure era uses explicit null coalescing
+
+### Testing Checklist
+
+After implementation:
+- Click on a song card with visible scores and verify modal shows the same scores
+- Click on a song with `era=0` (Classic) and verify the Classic era chip appears
+- Click on songs with `era=1` (White) and `era=2` (Gold) to verify those chips appear
+- Upload new scores and immediately verify the modal shows updated data
+- Test with various filter combinations to ensure data consistency
+
+## Risk Assessment
+
+- **Low risk**: The change is isolated to data source selection in `handleSongClick`
+- Uses data that's already loaded and displayed in the list
+- No database queries or schema changes required
+- No RLS policy changes needed
