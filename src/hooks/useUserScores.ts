@@ -29,9 +29,8 @@ export function useUserScores(options?: {
   const difficultyRule = filterRules.find(r => r.type === 'difficulty');
 
   return useQuery({
-    // v2: Uses !inner join for correct pagination - cache key changed to force refetch
-    queryKey: ['user-scores-v2', user?.id, queryKeySuffix, levelRule, difficultyRule],
-    staleTime: 5 * 60 * 1000, // 5 minutes - leverage caching
+    queryKey: ['user-scores', user?.id, queryKeySuffix, levelRule, difficultyRule],
+    staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     queryFn: async (): Promise<ScoreWithSong[]> => {
       if (!user?.id) return [];
