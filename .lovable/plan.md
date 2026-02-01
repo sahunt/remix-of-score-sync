@@ -1,229 +1,237 @@
 
 
-# Add Goal Editing Functionality
+# Fix Average Score Goals on Home Screen + Add Shimmer Loading
 
-## Overview
+## Problems Identified
 
-This plan adds the ability to edit existing goals by reusing the existing `CreateGoalSheet` component with minimal modifications. The edit flow will be nearly identical to the creation flow, with only the CTA button text changing from "Save Goal" to "Update Goal".
+### 1. Average Score Goals Show "AVG. 0"
+The Home page uses the server-side RPC `calculate_goal_progress` which only returns completed counts, not average scores. The code explicitly hardcodes `current = 0` for average mode goals because "not supported by RPC yet."
 
-## UX Considerations & Best Practices
+**Root cause in `Home.tsx`:**
+```typescript
+const current = isAverageMode
+  ? 0 // Average mode needs special handling - not supported by RPC yet
+  : (progress?.completed ?? 0);
+```
 
-### 1. **Reuse Existing UI Pattern**
-- Users are already familiar with the goal creation flow
-- Using the same sheet ensures consistency and reduces cognitive load
-- No new patterns to learn - edit looks exactly like create
+Meanwhile, `GoalDetail.tsx` calculates averages correctly using client-side logic via `useGoalProgress`.
 
-### 2. **Edit Icon Placement**
-- Add edit icon to the LEFT of the delete icon (following action grouping convention)
-- Both actions are secondary actions, grouped together in the header
-- Edit is less destructive than delete, so it comes first (left-to-right reading order)
+### 2. No Loading Indicator for Progress Values
+When navigating to Home, goal cards immediately show values like "0/253" before the RPC returns, then update without any visual transition. There's no shimmer to indicate loading state.
 
-### 3. **Form Pre-population**
-- When editing, the sheet opens with ALL existing goal values pre-filled
-- User can modify any field - name, target type, target value, criteria, goal mode
-- Preview card updates in real-time (existing behavior)
+---
 
-### 4. **Clear Feedback on Update**
-- CTA button changes to "Update Goal" (vs "Save Goal" for create)
-- Success toast confirms "Goal updated!" 
-- Sheet closes and user returns to goal detail view with updated data
+## Solution
 
-### 5. **Cache Invalidation**
-- After update, invalidate both goals list AND the individual goal query
-- This ensures Home page cards AND the Goal Detail page both reflect changes immediately
+### Part 1: Add Average Calculation to RPC
 
-## Technical Approach
+Extend the `calculate_goal_progress` PostgreSQL function to return `average_score` alongside the existing counts. This enables the Home page to display accurate average progress without client-side score fetching.
 
-### Component Changes
+**New RPC return type:**
+| Column | Type | Purpose |
+|--------|------|---------|
+| completed_count | bigint | Existing - songs meeting target |
+| total_count | bigint | Existing - total matching charts |
+| **average_score** | bigint | **New** - rounded average of all matching scores |
 
-**1. `CreateGoalSheet.tsx` → Modified to support edit mode**
+**SQL changes:**
+- Add `average_score` to the return table
+- Calculate `ROUND(AVG(us.score) / 10) * 10` for matching scores
+- Return this value regardless of target_type (null if no scores)
 
-Add optional props to receive an existing goal for editing:
+### Part 2: Update Home Page to Use Average
+
+Modify `GoalCardWithProgress` in `Home.tsx` to:
+1. Use the new `average_score` from RPC for average mode goals
+2. Pass `isLoading` state to `GoalCard`
+
+### Part 3: Add Shimmer to GoalCard
+
+Add a `isLoading` prop to `GoalCard` that shows:
+- A shimmer animation on the progress text ("AVG. -- / --")
+- A pulsing/shimmer effect on the progress bar
+
+The shimmer should use Tailwind's existing `animate-pulse` class or a custom shimmer animation for a more polished look.
+
+---
+
+## Technical Implementation
+
+### Database Migration
+
+```sql
+CREATE OR REPLACE FUNCTION public.calculate_goal_progress(
+  p_user_id UUID,
+  p_level_values INTEGER[] DEFAULT NULL,
+  p_level_operator TEXT DEFAULT 'is',
+  p_difficulty_values TEXT[] DEFAULT NULL,
+  p_difficulty_operator TEXT DEFAULT 'is',
+  p_target_type TEXT DEFAULT 'lamp',
+  p_target_value TEXT DEFAULT 'clear'
+)
+RETURNS TABLE(
+  completed_count BIGINT,
+  total_count BIGINT,
+  average_score BIGINT  -- NEW
+) AS $$
+-- ... existing logic ...
+-- Add: SELECT COALESCE((ROUND(AVG(us.score) / 10) * 10)::BIGINT, 0) INTO average_score
+$$ LANGUAGE plpgsql;
+```
+
+### Hook Update (`useServerGoalProgress.ts`)
 
 ```typescript
-interface CreateGoalSheetProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  // New: optional goal to edit
-  editingGoal?: Goal | null;
+interface GoalProgressResult {
+  completed: number;
+  total: number;
+  averageScore: number;  // NEW
+}
+
+// Update query to extract average_score from RPC result
+return {
+  completed: Number(result?.completed_count ?? 0),
+  total: Number(result?.total_count ?? 0),
+  averageScore: Number(result?.average_score ?? 0),  // NEW
+};
+```
+
+### Home.tsx Changes
+
+```typescript
+function GoalCardWithProgress({ goal }: { goal: Goal }) {
+  const { data: progress, isLoading } = useServerGoalProgress(...);
+  
+  const isAverageMode = goal.target_type === 'score' && goal.score_mode === 'average';
+  
+  const current = isAverageMode
+    ? (progress?.averageScore ?? 0)  // USE RPC VALUE
+    : goal.goal_mode === 'count' 
+      ? Math.min(progress?.completed ?? 0, goal.goal_count ?? 0)
+      : (progress?.completed ?? 0);
+  
+  const total = isAverageMode
+    ? parseInt(goal.target_value, 10)
+    : goal.goal_mode === 'count' 
+      ? (goal.goal_count ?? 0) 
+      : (progress?.total ?? 0);
+
+  return (
+    <GoalCard
+      id={goal.id}
+      title={goal.name}
+      // ... other props
+      current={current}
+      total={total}
+      isLoading={isLoading}  // PASS LOADING STATE
+    />
+  );
 }
 ```
 
-Key modifications:
-- Accept `editingGoal` prop with existing goal data
-- Initialize form state from `editingGoal` values when provided
-- Change header text: "New Goal" → "Edit Goal"
-- Change CTA text: "Save Goal" → "Update Goal"
-- Call `updateGoal.mutateAsync()` instead of `createGoal.mutateAsync()` when editing
-
-**2. `GoalDetailHeader.tsx` → Add edit button**
-
-Add edit icon button to the left of delete:
+### GoalCard.tsx Shimmer
 
 ```typescript
-interface GoalDetailHeaderProps {
-  onBack: () => void;
-  onEdit?: () => void;  // New
-  onDelete?: () => void;
-  isDeleting?: boolean;
+interface GoalCardProps {
+  // ... existing props
+  isLoading?: boolean;  // NEW
+}
+
+export function GoalCard({ 
+  // ... 
+  isLoading = false,
+}: GoalCardProps) {
+  
+  return (
+    <div className="card-base w-full ...">
+      {/* Badge */}
+      <GoalBadge ... />
+      
+      {/* Title */}
+      <h3 className="...">{title}</h3>
+      
+      {/* Progress text - with shimmer when loading */}
+      {isLoading ? (
+        <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+      ) : (
+        <p className="text-xs text-muted-foreground ...">
+          {isAverageMode 
+            ? `Avg. ${formatScore(current)} / ${formatScore(total)}`
+            : `${current}/${total} completed`
+          }
+        </p>
+      )}
+      
+      {/* Progress bar - shimmer when loading */}
+      <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+        {isLoading ? (
+          <div className="h-full w-full bg-gradient-to-r from-muted via-muted-foreground/20 to-muted animate-shimmer" />
+        ) : (
+          <div 
+            className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+            style={{ width: `${progressPercent}%` }}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
 ```
 
-Render order: back button | flex-1 title | edit button | delete button
+### Tailwind Shimmer Animation
 
-**3. `GoalDetail.tsx` → Wire up edit sheet**
-
-- Add state for edit sheet open/close
-- Pass `goal` data to `CreateGoalSheet` when editing
-- After successful update, sheet closes and goal data refetches automatically
-
-**4. `useGoals.ts` → Fix updateGoal mutation**
-
-The current `updateGoal` mutation is missing `score_floor` in the update payload. This needs to be added for complete goal updates:
+Add to `tailwind.config.ts`:
 
 ```typescript
-.update({
-  // ... existing fields
-  score_floor: updates.score_floor,  // Add this
-})
-```
-
-Also need to invalidate the individual goal query key:
-
-```typescript
-onSuccess: (_, variables) => {
-  queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
-  queryClient.invalidateQueries({ queryKey: ['goal', variables.id] });
+keyframes: {
+  shimmer: {
+    '0%': { transform: 'translateX(-100%)' },
+    '100%': { transform: 'translateX(100%)' },
+  },
 },
+animation: {
+  shimmer: 'shimmer 1.5s infinite',
+}
 ```
+
+---
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/goals/CreateGoalSheet.tsx` | Add `editingGoal` prop, conditional form initialization, update mode handling |
-| `src/components/goals/GoalDetailHeader.tsx` | Add `onEdit` prop and edit icon button |
-| `src/pages/GoalDetail.tsx` | Add edit sheet state, pass goal to sheet |
-| `src/hooks/useGoals.ts` | Add `score_floor` to update payload, invalidate individual goal query |
+| **New Migration** | Extend `calculate_goal_progress` to return `average_score` |
+| `src/hooks/useServerGoalProgress.ts` | Add `averageScore` to result type and parsing |
+| `src/pages/Home.tsx` | Use `averageScore` for average mode, pass `isLoading` |
+| `src/components/home/GoalCard.tsx` | Add `isLoading` prop with shimmer UI |
+| `tailwind.config.ts` | Add shimmer keyframe animation |
 
-## Implementation Details
+---
 
-### CreateGoalSheet Modifications
-
-```typescript
-// Props interface update
-interface CreateGoalSheetProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  editingGoal?: Goal | null;
-}
-
-// Inside component
-const isEditMode = Boolean(editingGoal);
-
-// Form reset logic - use editing goal values when provided
-useEffect(() => {
-  if (open) {
-    if (editingGoal) {
-      // Edit mode: populate from existing goal
-      setName(editingGoal.name);
-      setTargetType(editingGoal.target_type);
-      setTargetValue(editingGoal.target_value);
-      // ... etc
-    } else {
-      // Create mode: reset to defaults
-      setName('');
-      setTargetType(null);
-      // ... etc
-    }
-  }
-}, [open, editingGoal]);
-
-// Handle save - call different mutation based on mode
-const handleSave = async () => {
-  if (isEditMode) {
-    await updateGoal.mutateAsync({
-      id: editingGoal.id,
-      name: displayName,
-      target_type: targetType,
-      // ... all fields
-    });
-    toast({ title: "Goal updated!" });
-  } else {
-    await createGoal.mutateAsync({ ... });
-    toast({ title: "Goal created!" });
-  }
-};
-
-// UI conditionals
-<h2>{isEditMode ? 'Edit Goal' : 'New Goal'}</h2>
-<Button>{isEditMode ? 'Update Goal' : 'Save Goal'}</Button>
-```
-
-### GoalDetailHeader Edit Button
-
-```typescript
-// Add edit button before delete
-{onEdit && (
-  <Button
-    variant="ghost"
-    size="icon"
-    onClick={onEdit}
-    className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground"
-  >
-    <Icon name="edit" size={24} />
-  </Button>
-)}
-{onDelete && ( /* existing delete button */ )}
-```
-
-### GoalDetail Page Integration
-
-```typescript
-// State
-const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
-
-// Header
-<GoalDetailHeader 
-  onBack={handleBack}
-  onEdit={() => setIsEditSheetOpen(true)}  // New
-  onDelete={handleDelete}
-  isDeleting={isDeleting}
-/>
-
-// Sheet (add at bottom of page)
-<CreateGoalSheet
-  open={isEditSheetOpen}
-  onOpenChange={setIsEditSheetOpen}
-  editingGoal={goal}
-/>
-```
-
-## Data Flow After Update
+## Data Flow After Fix
 
 ```text
-User clicks "Update Goal"
+Home page loads
     ↓
-updateGoal.mutateAsync() called
+RPC: calculate_goal_progress
     ↓
-Database updated
+Returns: { completed_count, total_count, average_score }
     ↓
-onSuccess invalidates:
-  - ['goals', user.id] → Home page cards refresh
-  - ['goal', goalId] → Current goal detail refreshes
+GoalCard shows shimmer while isLoading=true
     ↓
-Sheet closes, user sees updated goal
+Data arrives → smooth transition to real values
+    ↓
+Average mode: displays "AVG. 999,200 / 999,910"
 ```
+
+---
 
 ## Testing Checklist
 
-1. Tap edit icon on goal detail page - verify sheet opens with all values pre-populated
-2. Verify header shows "Edit Goal" not "New Goal"
-3. Verify CTA shows "Update Goal" not "Save Goal"
-4. Modify goal name and save - verify toast shows "Goal updated!"
-5. Verify goal detail page shows new name immediately
-6. Navigate to Home - verify goal card shows updated name
-7. Edit goal to change target type - verify preview card updates in real-time
-8. Cancel edit (tap X or outside) - verify no changes saved
-9. Create a new goal - verify form still resets to defaults (not old edit values)
+1. Create a score-based goal with "Average" mode targeting 999,910
+2. Navigate to Home - verify shimmer shows while loading
+3. Verify average score displays correctly (should match GoalDetail page)
+4. Navigate to GoalDetail - verify progress matches Home
+5. Edit goal and change target - verify Home updates immediately
+6. Test lamp/grade/flare goals still work correctly with shimmer
 
