@@ -193,8 +193,26 @@ function matchesRule(score: ScoreWithSong, rule: FilterRule): boolean {
     case 'difficulty': return compareStringMulti(score.difficulty_name, value as string | string[]);
     case 'title': return compareStringMulti(score.musicdb?.name ?? '', value as string);
     case 'version':
-    case 'era':
       return true; // Placeholder
+    case 'era': {
+      const songEra = score.musicdb?.era;
+      // Multi-select array comparison
+      if (Array.isArray(value)) {
+        if (value.length === 0) return true; // Empty = no filter
+        if (songEra === null || songEra === undefined) return false;
+        const matches = (value as number[]).includes(songEra);
+        return operator === 'is' ? matches : !matches;
+      }
+      // Single value
+      if (songEra === null || songEra === undefined) return false;
+      const singleValue = typeof value === 'number' ? value : parseInt(String(value), 10);
+      if (isNaN(singleValue)) return true;
+      switch (operator) {
+        case 'is': return songEra === singleValue;
+        case 'is_not': return songEra !== singleValue;
+        default: return true;
+      }
+    }
     default:
       return true;
   }
