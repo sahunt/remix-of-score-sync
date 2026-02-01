@@ -1367,16 +1367,13 @@ async function smartUpsertScores(
     const existing = existingScores.get(score.musicdb_id!);
     
     if (!existing) {
-      // New score
+      // New score - only write user achievements + musicdb_id reference
+      // Chart metadata (difficulty_level, difficulty_name, playstyle, song_id, chart_id)
+      // is NOT written here - it comes from musicdb via the relation (SINGLE SOURCE OF TRUTH)
       toInsert.push({
         user_id: userId,
         upload_id: uploadId,
         musicdb_id: score.musicdb_id,
-        chart_id: score.chart_id,
-        song_id: score.song_id,
-        playstyle: score.playstyle,
-        difficulty_name: score.difficulty_name,
-        difficulty_level: score.difficulty_level,
         score: score.score,
         timestamp: score.timestamp,
         username: score.username,
