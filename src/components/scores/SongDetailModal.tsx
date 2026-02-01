@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
 import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
 import { SourceIcon } from '@/components/ui/SourceIcon';
+import { EraChip } from '@/components/ui/EraChip';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +29,7 @@ interface SongDetailModalProps {
   songName: string;
   artist: string | null;
   eamuseId: string | null;
+  era: number | null;
   /** Pre-loaded chart data to avoid API calls when opening from Scores page */
   preloadedCharts?: ChartWithScore[];
 }
@@ -77,6 +79,7 @@ export function SongDetailModal({
   songName,
   artist,
   eamuseId,
+  era,
   preloadedCharts,
 }: SongDetailModalProps) {
   const { user } = useAuth();
@@ -233,6 +236,13 @@ export function SongDetailModal({
           <p className="text-base font-bold text-white leading-normal">
             {songName}
           </p>
+
+          {/* Era Chip - centered below title */}
+          {era !== null && era !== undefined && (
+            <div className="flex justify-center mt-2">
+              <EraChip era={era} />
+            </div>
+          )}
         </div>
 
         {/* Difficulty Rows */}
