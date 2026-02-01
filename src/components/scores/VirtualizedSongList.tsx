@@ -14,6 +14,7 @@ interface DisplaySong {
   artist: string | null;
   eamuse_id: string | null;
   song_id: number | null;
+  era: number | null;
   isNoPlay: boolean;
 }
 
@@ -41,6 +42,7 @@ const SongRow = memo(function SongRow({
       halo={song.halo}
       eamuseId={song.eamuse_id}
       songId={song.song_id}
+      era={song.era}
       onClick={onClick}
     />
   );
@@ -55,7 +57,7 @@ export function VirtualizedSongList({ songs, onSongClick }: VirtualizedSongListP
   
   const virtualizer = useWindowVirtualizer({
     count: songs.length,
-    estimateSize: () => 70, // SongCard height (~66px) + gap (4px)
+    estimateSize: () => 88, // SongCard height (~84px with icon row) + gap (4px)
     overscan: 8, // Render extra items for smoother scrolling
     scrollMargin: listRef.current?.offsetTop ?? 0,
   });

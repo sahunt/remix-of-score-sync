@@ -53,6 +53,7 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
               halo={song.halo}
               eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
               songId={song.musicdb?.song_id ?? song.song_id}
+              era={song.musicdb?.era ?? song.era}
             />
           ))}
         </div>
@@ -76,6 +77,7 @@ export function RemainingSongsList({ songs, goal, isLoading }: RemainingSongsLis
                 halo={null}
                 eamuseId={song.eamuse_id}
                 songId={song.song_id}
+                era={song.era}
               />
             </div>
           ))}

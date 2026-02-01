@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
 import { HaloSparkle, type HaloType } from '@/components/ui/HaloSparkle';
+import { EraChip } from '@/components/ui/EraChip';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { getJacketUrl, getJacketFallbackUrl } from '@/lib/jacketUrl';
 
@@ -15,6 +16,7 @@ interface SongCardProps {
   halo: string | null;
   eamuseId?: string | null;
   songId?: number | null;
+  era?: number | null;
   className?: string;
   onClick?: () => void;
 }
@@ -123,6 +125,7 @@ export function SongCard({
   halo,
   eamuseId,
   songId,
+  era,
   className,
   onClick
 }: SongCardProps) {
@@ -207,6 +210,13 @@ export function SongCard({
             )}
             <p className="text-[10px] font-medium text-[#96A7AF] uppercase tracking-[1px] leading-normal truncate">{name}</p>
           </div>
+
+          {/* Icon row - center-aligned, only render if there are icons */}
+          {era !== null && era !== undefined && (
+            <div className="flex justify-center gap-1 mt-0.5">
+              <EraChip era={era} />
+            </div>
+          )}
 
           {/* Score row with flare badge */}
           <div className="flex items-center gap-1">
