@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FilterChip } from './FilterChip';
 import { FilterModal } from '@/components/filters/FilterModal';
 import type { SavedFilter } from '@/components/filters/filterTypes';
+import type { ScoreForFiltering } from '@/types/scores';
 
 export interface ActiveFilter {
   id: string;
@@ -13,20 +14,7 @@ interface FiltersSectionProps {
   activeFilters: ActiveFilter[];
   onRemoveFilter: (id: string) => void;
   onApplyFilters: (filters: SavedFilter[]) => void;
-  scores: Array<{
-    score: number | null;
-    difficulty_level: number | null;
-    difficulty_name: string | null;
-    rank: string | null;
-    halo: string | null;
-    flare: number | null;
-    musicdb: { 
-      name: string | null; 
-      artist: string | null;
-      eamuse_id: string | null;
-      song_id: number | null;
-    } | null;
-  }>;
+  scores: ScoreForFiltering[];
 }
 
 export function FiltersSection({ 
