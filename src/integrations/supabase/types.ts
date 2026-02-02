@@ -58,7 +58,7 @@ export type Database = {
           eventno?: number | null
           flare?: number | null
           halo?: string | null
-          id?: never
+          id: number
           judgement_offset?: number | null
           name?: string | null
           name_romanized?: string | null
@@ -87,7 +87,7 @@ export type Database = {
           eventno?: number | null
           flare?: number | null
           halo?: string | null
-          id?: never
+          id?: number
           judgement_offset?: number | null
           name?: string | null
           name_romanized?: string | null
