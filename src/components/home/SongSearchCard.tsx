@@ -40,7 +40,7 @@ export function SongSearchCard({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 w-full p-3 rounded-[10px] bg-[#3B3F51] hover:bg-[#454A5E] transition-colors text-left"
+      className="flex items-center gap-3 w-full p-3 rounded-[10px] bg-[#3B3F51] hover:bg-[#454A5E] active:scale-[0.98] transition-all duration-100 text-left"
     >
       {/* Jacket image */}
       <div className="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0 flex items-center justify-center">

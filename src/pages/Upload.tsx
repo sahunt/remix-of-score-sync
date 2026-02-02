@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ChangesSummary } from '@/components/upload/ChangesSummary';
+import { UploadSteps } from '@/components/upload/UploadSteps';
 import type { ScoreChange } from '@/components/upload/ScoreChangeRow';
 
 type UploadState = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
@@ -284,18 +285,22 @@ export default function UploadPage() {
             )}
 
             {state === 'uploading' && (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Icon name="cloud_upload" size={40} className="mb-3 animate-pulse text-primary" />
-                <p className="font-medium">Uploading file...</p>
-                <p className="text-sm text-muted-foreground">Please wait</p>
+              <div className="flex flex-col items-center justify-center py-12 gap-6">
+                <UploadSteps currentStep="uploading" />
+                <div>
+                  <p className="font-medium text-center">Uploading file...</p>
+                  <p className="text-sm text-muted-foreground text-center">Please wait</p>
+                </div>
               </div>
             )}
 
             {state === 'processing' && (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Icon name="sync" size={40} className="mb-3 animate-spin text-primary" />
-                <p className="font-medium">Processing your scores...</p>
-                <p className="text-sm text-muted-foreground">Matching songs to catalog. This may take a moment.</p>
+              <div className="flex flex-col items-center justify-center py-12 gap-6">
+                <UploadSteps currentStep="matching" />
+                <div>
+                  <p className="font-medium text-center">Processing your scores...</p>
+                  <p className="text-sm text-muted-foreground text-center">Matching songs to catalog</p>
+                </div>
               </div>
             )}
 

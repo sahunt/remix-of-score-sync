@@ -15,6 +15,7 @@ import { VirtualizedSongList } from '@/components/scores/VirtualizedSongList';
 import { SongDetailModal } from '@/components/scores/SongDetailModal';
 import { Icon } from '@/components/ui/Icon';
 import { Card, CardContent } from '@/components/ui/card';
+import { BackToTopButton } from '@/components/ui/BackToTopButton';
 import rinonFilter from '@/assets/rinon-filter.png';
 import type { SavedFilter } from '@/components/filters/filterTypes';
 import type { 
@@ -467,6 +468,9 @@ export default function Scores() {
         era={selectedSong?.era ?? null}
         preloadedCharts={selectedSong?.preloadedCharts}
       />
+      
+      {/* Back to Top Button */}
+      {shouldShowScores && <BackToTopButton />}
     </div>
   );
 }

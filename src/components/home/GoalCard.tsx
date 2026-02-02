@@ -87,7 +87,7 @@ export function GoalCard({
     <div 
       className={cn(
         "card-base w-full",
-        clickable && id && "cursor-pointer hover:bg-[#454959] transition-colors",
+        clickable && id && "cursor-pointer hover:bg-[#454959] active:scale-[0.98] transition-all duration-100",
         className
       )}
       onClick={handleClick}
@@ -117,13 +117,13 @@ export function GoalCard({
         </p>
       )}
       
-      {/* Progress bar - shimmer when loading */}
+      {/* Progress bar - shimmer when loading, animated fill on load */}
       <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
         {isLoading ? (
           <div className="h-full w-full animate-shimmer bg-gradient-to-r from-muted via-muted-foreground/20 to-muted bg-[length:200%_100%]" />
         ) : (
           <div 
-            className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+            className={`h-full rounded-full animate-progress-fill ${progressColor}`}
             style={{ width: `${progressPercent}%` }}
           />
         )}
