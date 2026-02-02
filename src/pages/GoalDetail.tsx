@@ -152,7 +152,7 @@ export default function GoalDetail() {
             rank: userScore?.rank ?? null,
             flare: userScore?.flare ?? null,
             halo: userScore?.halo ?? null,
-            source_type: null,
+            source_type: userScore?.source_type ?? null,
           };
         })
         .sort((a, b) => {
