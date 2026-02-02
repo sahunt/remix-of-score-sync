@@ -231,8 +231,8 @@ export default function Scores() {
           artist: chart.artist,
           eamuse_id: chart.eamuse_id,
           song_id: chart.song_id,
-          name_romanized: null, // Not in cache
-          era: null, // Not in cache
+          name_romanized: chart.name_romanized,
+          era: chart.era,
           isNoPlay: true,
         }));
     }

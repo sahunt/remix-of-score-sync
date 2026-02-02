@@ -111,6 +111,7 @@ export default function GoalDetail() {
         artist: chart.artist,
         eamuse_id: chart.eamuse_id,
         song_id: chart.song_id,
+        era: chart.era,
         isUnplayed: true,
       })),
     [matchingCharts, playedChartIds]

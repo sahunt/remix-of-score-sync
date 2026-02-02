@@ -109,7 +109,7 @@ export default function Home() {
   const { data: songChartsCache } = useSongChartsCache();
   const { scores: globalScores } = useScores();
   
-  const handleSongClick = useCallback((song: { songId: number; name: string; artist: string | null; eamuseId: string | null }) => {
+  const handleSongClick = useCallback((song: { songId: number; name: string; artist: string | null; eamuseId: string | null; era: number | null }) => {
     // Get ALL charts for this song from the pre-cached data
     const allChartsForSong = songChartsCache?.get(song.songId) ?? [];
     
@@ -151,7 +151,7 @@ export default function Home() {
       songName: song.name,
       artist: song.artist,
       eamuseId: song.eamuseId,
-      era: null, // Not available in search results, modal will fetch if needed
+      era: song.era,
       preloadedCharts,
     });
     setIsDetailModalOpen(true);

@@ -15,6 +15,7 @@ export interface FullChartInfo extends ChartInfo {
   difficulty_level: number | null;
   playstyle: string | null;
   name_romanized: string | null;
+  era: number | null;
 }
 
 /**
@@ -38,7 +39,7 @@ export function useAllChartsCache() {
       while (hasMore) {
         const { data, error } = await supabase
           .from('musicdb')
-          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle, name_romanized')
+          .select('id, song_id, name, artist, eamuse_id, difficulty_name, difficulty_level, playstyle, name_romanized, era')
           .eq('playstyle', 'SP')
           .eq('deleted', false)
           .not('difficulty_level', 'is', null)

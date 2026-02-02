@@ -6,6 +6,7 @@ export interface SongSearchResult {
   name: string;
   artist: string | null;
   eamuseId: string | null;
+  era: number | null;
 }
 
 /**
@@ -45,6 +46,7 @@ export function useSongCatalogSearch(query: string): {
           name: chart.name ?? 'Unknown Song',
           artist: chart.artist,
           eamuseId: chart.eamuse_id,
+          era: chart.era,
         });
       }
     }
