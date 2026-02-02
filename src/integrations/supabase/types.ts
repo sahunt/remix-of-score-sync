@@ -344,13 +344,6 @@ export type Database = {
             referencedRelation: "musicdb"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "user_scores_upload_id_fkey"
-            columns: ["upload_id"]
-            isOneToOne: false
-            referencedRelation: "uploads"
-            referencedColumns: ["id"]
-          },
         ]
       }
       user_song_offsets: {
