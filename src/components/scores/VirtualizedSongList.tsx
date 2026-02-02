@@ -25,10 +25,12 @@ interface VirtualizedSongListProps {
 // Memoized row component to prevent unnecessary re-renders
 const SongRow = memo(function SongRow({ 
   song, 
-  onClick 
+  onClick,
+  eagerLoad = false,
 }: { 
   song: DisplaySong; 
   onClick: () => void;
+  eagerLoad?: boolean;
 }) {
   return (
     <SongCard
@@ -42,6 +44,7 @@ const SongRow = memo(function SongRow({
       eamuseId={song.eamuse_id}
       songId={song.song_id}
       onClick={onClick}
+      eagerLoad={eagerLoad}
     />
   );
 });
@@ -73,6 +76,7 @@ export function VirtualizedSongList({ songs, onSongClick }: VirtualizedSongListP
       >
         {items.map((virtualItem) => {
           const song = songs[virtualItem.index];
+          const isFirstFive = virtualItem.index < 5;
           return (
             <div
               key={virtualItem.key}
@@ -87,7 +91,8 @@ export function VirtualizedSongList({ songs, onSongClick }: VirtualizedSongListP
               <div className="pb-2">
                 <SongRow 
                   song={song} 
-                  onClick={() => onSongClick(song)} 
+                  onClick={() => onSongClick(song)}
+                  eagerLoad={isFirstFive}
                 />
               </div>
             </div>

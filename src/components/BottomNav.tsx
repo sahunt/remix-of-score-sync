@@ -9,6 +9,14 @@ export function BottomNav() {
   
   // Home page has its own rainbow fade effect, so skip the dark fade there
   const isHomePage = location.pathname === '/home' || location.pathname === '/';
+  
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetPath: string) => {
+    // If already on this route, scroll to top
+    if (location.pathname === targetPath) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <>
@@ -37,7 +45,13 @@ export function BottomNav() {
         {/* Home - Circle button, anchored left */}
         <NavLink
           to="/home"
-          className="flex h-11 w-11 items-center justify-center rounded-full transition-all bg-secondary/90 backdrop-blur-md text-foreground"
+          onClick={(e) => handleNavClick(e, '/home')}
+          className={({ isActive }) => cn(
+            "flex h-11 w-11 items-center justify-center rounded-full transition-all duration-100 active:scale-95",
+            isActive 
+              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+              : "bg-secondary/90 backdrop-blur-md text-foreground"
+          )}
         >
           <Icon name="home" size={24} />
         </NavLink>
@@ -45,7 +59,13 @@ export function BottomNav() {
         {/* Scores - Wide pill button, centered */}
         <NavLink
           to="/scores"
-          className="flex h-11 items-center justify-center gap-2.5 rounded-full px-[22px] transition-all bg-secondary/90 backdrop-blur-md text-foreground"
+          onClick={(e) => handleNavClick(e, '/scores')}
+          className={({ isActive }) => cn(
+            "flex h-11 items-center justify-center gap-2.5 rounded-full px-[22px] transition-all duration-100 active:scale-95",
+            isActive 
+              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+              : "bg-secondary/90 backdrop-blur-md text-foreground"
+          )}
         >
           <Icon name="star_shine" size={24} />
           <span className="font-medium">Scores</span>
@@ -54,7 +74,13 @@ export function BottomNav() {
         {/* Upload - Circle button, anchored right */}
         <NavLink
           to="/upload"
-          className="flex h-11 w-11 items-center justify-center rounded-full transition-all bg-secondary/90 backdrop-blur-md text-foreground"
+          onClick={(e) => handleNavClick(e, '/upload')}
+          className={({ isActive }) => cn(
+            "flex h-11 w-11 items-center justify-center rounded-full transition-all duration-100 active:scale-95",
+            isActive 
+              ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+              : "bg-secondary/90 backdrop-blur-md text-foreground"
+          )}
         >
           <Icon name="upload" size={24} />
         </NavLink>

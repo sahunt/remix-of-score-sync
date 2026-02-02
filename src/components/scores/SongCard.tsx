@@ -17,6 +17,7 @@ interface SongCardProps {
   songId?: number | null;
   className?: string;
   onClick?: () => void;
+  eagerLoad?: boolean;
 }
 
 // Get halo bar background style
@@ -124,7 +125,8 @@ export function SongCard({
   eamuseId,
   songId,
   className,
-  onClick
+  onClick,
+  eagerLoad = false,
 }: SongCardProps) {
   const { transformHalo } = use12MSMode();
   const flareType = flareNumberToType(flare);
@@ -156,7 +158,7 @@ export function SongCard({
     <div
       className={cn(
         'w-full rounded-[10px] bg-[#3B3F51] overflow-hidden relative',
-        onClick && 'cursor-pointer active:opacity-90 transition-opacity',
+        onClick && 'cursor-pointer active:scale-[0.98] transition-transform duration-100',
         className
       )}
       onClick={onClick}
@@ -185,7 +187,7 @@ export function SongCard({
             <img
                 src={currentImgUrl!}
                 alt=""
-                loading="lazy"
+                loading={eagerLoad ? "eager" : "lazy"}
                 decoding="async"
                 className="w-full h-full object-cover"
                 onError={handleImageError}

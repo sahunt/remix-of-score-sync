@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useUsername } from '@/hooks/useUsername';
 import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
@@ -20,6 +20,7 @@ import { CreateGoalSheet } from '@/components/goals/CreateGoalSheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import rainbowBg from '@/assets/rainbow-bg.png';
+import rinonFilter from '@/assets/rinon-filter.png';
 import type { FilterRule } from '@/components/filters/filterTypes';
 import type { PreloadedChart } from '@/types/scores';
 
@@ -96,9 +97,19 @@ export default function Home() {
   const { goals, isLoading: goalsLoading } = useGoals();
   const [createGoalOpen, setCreateGoalOpen] = useState(false);
   
-  // Search state
+  // Debounced search state
   const [searchQuery, setSearchQuery] = useState('');
-  const { results: searchResults, isLoading: searchLoading } = useSongCatalogSearch(searchQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  
+  // Debounce search input (200ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+  
+  const { results: searchResults, isLoading: searchLoading } = useSongCatalogSearch(debouncedQuery);
   const isSearching = searchQuery.trim().length > 0;
   
   // Modal state
@@ -224,23 +235,34 @@ export default function Home() {
                 <Skeleton className="h-16 w-full rounded-[10px]" />
               </>
             ) : searchResults.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <p className="text-muted-foreground">No songs found for "{searchQuery}"</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center animate-fade-in">
+                <img 
+                  src={rinonFilter} 
+                  alt="No results" 
+                  className="w-[80px] h-auto object-contain mb-4 opacity-70"
+                />
+                <p className="text-foreground font-medium mb-1">No songs found</p>
+                <p className="text-muted-foreground text-sm">Try a different search term</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-muted-foreground mb-2">
                   {searchResults.length} song{searchResults.length !== 1 ? 's' : ''} found
                 </p>
-                {searchResults.map((song) => (
-                  <SongSearchCard
+                {searchResults.map((song, index) => (
+                  <div
                     key={song.songId}
-                    songId={song.songId}
-                    name={song.name}
-                    artist={song.artist}
-                    eamuseId={song.eamuseId}
-                    onClick={() => handleSongClick(song)}
-                  />
+                    className="animate-stagger-fade-in"
+                    style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
+                  >
+                    <SongSearchCard
+                      songId={song.songId}
+                      name={song.name}
+                      artist={song.artist}
+                      eamuseId={song.eamuseId}
+                      onClick={() => handleSongClick(song)}
+                    />
+                  </div>
                 ))}
               </div>
             )
