@@ -34,11 +34,12 @@ export function useSongCatalogSearch(query: string): {
       // Skip if we've already added this song
       if (songMap.has(chart.song_id)) continue;
 
-      // Match against name, artist (name_romanized not in current cache, but we can extend)
+      // Match against name, artist, and name_romanized (same as Scores page)
       const name = chart.name?.toLowerCase() ?? '';
       const artist = chart.artist?.toLowerCase() ?? '';
+      const nameRomanized = chart.name_romanized?.toLowerCase() ?? '';
       
-      if (name.includes(trimmed) || artist.includes(trimmed)) {
+      if (name.includes(trimmed) || artist.includes(trimmed) || nameRomanized.includes(trimmed)) {
         songMap.set(chart.song_id, {
           songId: chart.song_id,
           name: chart.name ?? 'Unknown Song',
