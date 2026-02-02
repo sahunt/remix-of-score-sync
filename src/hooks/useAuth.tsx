@@ -58,41 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
-    const hostname = window.location.hostname;
     const origin = window.location.origin;
-    const isCustomDomain =
-      !hostname.includes("lovable.app") && !hostname.includes("lovableproject.com");
-
-    console.info("[auth] google oauth start", { hostname, origin, isCustomDomain });
-
-    if (isCustomDomain) {
-      // Bypass auth-bridge for custom domains to avoid desktop 403 and /~oauth/* SPA fallbacks
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: origin,
-          skipBrowserRedirect: true,
-        },
-      });
-
-      if (error) return { error: error as Error };
-
-      const url = data?.url;
-      console.info("[auth] google oauth url", { url });
-      if (!url) return { error: new Error("OAuth did not return a redirect URL") };
-
-      // Security: only allow redirects to our auth host (prevents open-redirect issues)
-      const allowedHost = new URL(import.meta.env.VITE_SUPABASE_URL).hostname;
-      const oauthHost = new URL(url).hostname;
-      if (oauthHost !== allowedHost) {
-        return { error: new Error("Invalid OAuth redirect URL") };
-      }
-
-      window.location.assign(url);
-      return { error: null };
-    }
-
-    // lovable.app / lovableproject.com: use the managed broker
+    
+    // Always use the Lovable auth broker for managed OAuth credentials
     const { error } = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: origin,
     });
