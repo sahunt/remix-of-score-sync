@@ -19,6 +19,11 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: "autoUpdate",
       workbox: {
+        // IMPORTANT: do not intercept Lovable OAuth broker routes with the SPA app-shell.
+        // If Workbox serves `index.html` for these paths, the app can appear as a blank screen
+        // during Google sign-in.
+        navigateFallbackDenylist: [/^\/~oauth\//],
+
         // Precache built assets
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         

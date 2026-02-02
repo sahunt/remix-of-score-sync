@@ -16,6 +16,7 @@ import Upload from "./pages/Upload";
 import GoalDetail from "./pages/GoalDetail";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import OAuthFallback from "./pages/OAuthFallback";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +41,8 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/auth" element={<Auth />} />
+                {/* OAuth broker routes should never render the SPA, but if they do, show a safe fallback */}
+                <Route path="/~oauth/*" element={<OAuthFallback />} />
                 <Route
                   element={
                     <ProtectedRoute>
