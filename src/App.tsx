@@ -20,10 +20,9 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30 * 60 * 1000, // 30 minutes - data only changes on upload
-      gcTime: 60 * 60 * 1000,    // 60 minutes garbage collection
+      staleTime: 0,              // Check freshness on mount
+      gcTime: 5 * 60 * 1000,     // 5 minutes garbage collection
       refetchOnWindowFocus: false,
-      refetchOnMount: false,     // Don't refetch if data exists
       retry: 1,
     },
   },

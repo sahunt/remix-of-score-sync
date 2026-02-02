@@ -32,34 +32,59 @@ import { matchesFilterRule, filterScoresByRules } from '@/lib/filterMatcher';
 
 ---
 
-## 3. Data Fetching: Use Global Caches
+## 3. Data Fetching: Three Core Caches Only
 
-### Scores
-- **Context:** `useScores()` from `src/contexts/ScoresContext.tsx`
-- **Hook:** `useUserScores()` from `src/hooks/useUserScores.ts`
-- **Rule:** Consume from context/hook. No direct Supabase queries for user scores.
+The app uses exactly **3 React Query caches** to ensure consistent data:
 
-### Charts (MusicDB)
-- **All charts:** `useAllChartsCache()` - flat array for filtering
-- **By song:** `useSongChartsCache()` - grouped by song_id for modals
-- **Rule:** Never query musicdb directly for chart lookups.
+### User Scores
+- **Hook:** `useScores()` from `src/contexts/ScoresContext.tsx`
+- **Query Key:** `['user-scores']`
+- **Rule:** Single source for all user achievement data
 
-### Stats
-- **Rule:** Derive from `displayedScores` (already filtered). Never re-filter raw data for stats.
+### Goals
+- **Hook:** `useGoals()` from `src/hooks/useGoals.ts`
+- **Query Key:** `['goals']`
+- **Rule:** Single source for goal definitions
+
+### MusicDB (Chart Catalog)
+- **Hook:** `useMusicDb()` from `src/hooks/useMusicDb.ts`
+- **Query Key:** `['musicdb']`
+- **Returns:**
+  - `charts`: Flat array for filtering and goal calculations
+  - `bySongId`: Map for instant modal population
+- **Rule:** `staleTime: Infinity` - catalog only changes on admin import
+
+### What NOT to Create
+- ❌ `useUserStats` - Calculate from scores array
+- ❌ `useServerGoalProgress` - Calculate from scores + musicdb
+- ❌ `useMusicDbCount` - Use `musicdb.charts.length`
+- ❌ Separate chart caches - Use unified `useMusicDb()`
 
 ---
 
-## 4. Goal Progress: Server-Side First
+## 4. Stats & Counts: Derive Client-Side
 
-**RPC:** `calculate_goal_progress` in PostgreSQL
+All statistics and counts must be calculated from the three core caches:
 
-**Hook:** `useServerGoalProgress()` from `src/hooks/useServerGoalProgress.ts`
+```typescript
+// Example: Calculate stats from scores
+const stats = useMemo(() => {
+  const levelScores = scores.filter(s => s.difficulty_level === selectedLevel);
+  const catalogCount = musicDb.charts.filter(c => c.difficulty_level === selectedLevel).length;
+  
+  return {
+    total: levelScores.length,
+    noPlay: catalogCount - levelScores.length,
+    mfc: levelScores.filter(s => s.halo === 'MFC').length,
+  };
+}, [scores, musicDb, selectedLevel]);
+```
 
-**Rule:** Use RPC for completed/total counts. Client-side filtering only for display lists (Remaining, Completed tabs).
+**Rule:** Never create server-side RPCs for counts that can be derived from cached data.
 
 ---
 
-## 5. Cache Invalidation: Centralized
+## 5. Cache Invalidation: Simplified
 
 **Location:** `src/hooks/useUploadInvalidation.ts`
 
@@ -67,7 +92,13 @@ import { matchesFilterRule, filterScoresByRules } from '@/lib/filterMatcher';
 const { invalidateAfterUpload } = useUploadInvalidation();
 ```
 
-**Rule:** Only call `invalidateAfterUpload()` after successful uploads. Never manually invalidate score caches elsewhere.
+After uploads, only 2 caches need invalidation:
+- `['user-scores']` - User's played scores
+- `['goals']` - Goal definitions
+
+Everything else (stats, progress, counts) is derived and updates automatically.
+
+**Rule:** Never manually invalidate caches elsewhere. Only call `invalidateAfterUpload()` after successful uploads.
 
 ---
 
@@ -107,7 +138,7 @@ while (hasMore) {
 | `song_id` | `musicdb` | Never use user_scores.song_id |
 | `score`, `rank`, `flare`, `halo` | `user_scores` | User achievements |
 
-**Rule:** All queries must pull chart metadata from the `musicdb` relation, not from redundant columns in `user_scores`. The redundant columns are preserved for backward compatibility but ignored by the application.
+**Rule:** All queries must pull chart metadata from the `musicdb` relation, not from redundant columns in `user_scores`.
 
 ---
 
@@ -116,10 +147,11 @@ while (hasMore) {
 | If you need... | Check first... |
 |----------------|----------------|
 | Filter/matching logic | `src/lib/filterMatcher.ts` |
-| Score data | `useScores()` or `useUserScores()` |
-| Chart lookups | `useAllChartsCache()` or `useSongChartsCache()` |
-| Goal counts | `useServerGoalProgress()` |
+| User scores | `useScores()` from context |
+| Chart catalog | `useMusicDb()` |
+| Goal definitions | `useGoals()` |
 | Type definitions | `src/types/scores.ts` |
+| Stats/counts | Derive from scores + musicdb |
 
 ---
 
@@ -135,3 +167,32 @@ while (hasMore) {
 | Page components | `src/pages/*.tsx` |
 
 **Rule:** Keep files focused. Extract when a component exceeds ~300 lines or a hook handles multiple concerns.
+
+---
+
+## 11. Cache Architecture Summary
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    React Query Caches                       │
+├─────────────────┬─────────────────┬─────────────────────────┤
+│   user-scores   │     goals       │       musicdb           │
+│   (dynamic)     │   (dynamic)     │    (static/Infinity)    │
+├─────────────────┴─────────────────┴─────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            Client-Side Derived Data                  │   │
+│  │  - Stats (MFC/PFC/AAA counts)                       │   │
+│  │  - Goal progress (completed/total)                   │   │
+│  │  - "No Play" counts                                  │   │
+│  │  - Average scores                                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+1. Single source of truth - no cache conflicts
+2. Consistent counts across all pages
+3. Only 2 invalidations after upload
+4. Simpler debugging - check one array

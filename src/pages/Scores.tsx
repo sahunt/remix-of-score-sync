@@ -1,10 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useScoresFilterState } from '@/hooks/useScoresFilterState';
-import { useUserStats } from '@/hooks/useUserStats';
 import { useScores } from '@/contexts/ScoresContext';
-import { useSongChartsCache } from '@/hooks/useSongChartsCache';
-import { useAllChartsCache, filterChartsByCriteria } from '@/hooks/useAllChartsCache';
+import { useMusicDb, filterChartsByCriteria } from '@/hooks/useMusicDb';
 import { matchesFilterRule } from '@/lib/filterMatcher';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
@@ -42,11 +40,10 @@ export default function Scores() {
   // Use global scores cache - eliminates redundant fetching between pages
   const { scores: globalScores, isLoading: scoresLoading } = useScores();
   
-  // Pre-cached all SP charts by song_id (for modal preloading)
-  const { data: songChartsCache } = useSongChartsCache();
-  
-  // Pre-cached all SP charts flat (for "no play" songs)
-  const { data: allCharts = [] } = useAllChartsCache();
+  // Unified MusicDB cache for both chart lookups and "no play" songs
+  const { data: musicDb } = useMusicDb();
+  const allCharts = musicDb?.charts ?? [];
+  const songChartsCache = musicDb?.bySongId;
   
   // Persistent filter state
   const {
@@ -291,12 +288,8 @@ export default function Scores() {
     return { displayedScores: result, noPlayCount: noPlaySongs.length };
   }, [filteredScores, selectedLevel, activeFilters, searchQuery, sortBy, sortDirection, musicDbChartsForLevel]);
 
-  // Server-side stats from get_user_stats RPC - only fetch when a single level is selected
-  const { data: serverStats } = useUserStats(
-    selectedLevel !== null && activeFilters.length === 0 ? selectedLevel : null
-  );
-
-  // Calculate stats - use server-side when available, fall back to client-side for filtered views
+  // Calculate ALL stats client-side from the displayed scores
+  // This ensures consistency - one source of truth
   const { stats, averageScore } = useMemo(() => {
     // Return empty stats if no level is selected
     if (!shouldShowScores) {
@@ -314,25 +307,7 @@ export default function Scores() {
       };
     }
     
-    // Use server-side stats when available (single level, no filters)
-    if (serverStats && selectedLevel !== null && activeFilters.length === 0) {
-      const clearCount = serverStats.total_count - serverStats.mfc_count - serverStats.pfc_count - serverStats.aaa_count - serverStats.fail_count;
-      
-      return {
-        stats: [
-          { label: 'Total', value: serverStats.total_count },
-          { label: transformHaloLabel('MFC') || 'MFC', value: serverStats.mfc_count },
-          { label: transformHaloLabel('PFC') || 'PFC', value: serverStats.pfc_count },
-          { label: 'AAA', value: serverStats.aaa_count },
-          { label: 'Clear', value: Math.max(0, clearCount) },
-          { label: 'Fail', value: serverStats.fail_count },
-          { label: '', value: noPlayCount, isIcon: true, iconName: 'do_not_disturb_on_total_silence' },
-        ],
-        averageScore: serverStats.avg_score,
-      };
-    }
-    
-    // Fall back to client-side calculation from displayedScores
+    // Calculate stats from played songs only
     const playedSongs = displayedScores.filter(s => !s.isNoPlay);
 
     const total = playedSongs.length;
@@ -370,7 +345,7 @@ export default function Scores() {
       ],
       averageScore: avgScore,
     };
-  }, [displayedScores, selectedLevel, activeFilters, transformHaloLabel, shouldShowScores, noPlayCount, serverStats]);
+  }, [displayedScores, selectedLevel, activeFilters, transformHaloLabel, shouldShowScores, noPlayCount]);
 
   const handleRemoveFilter = useCallback((id: string) => {
     setActiveFilters(prev => prev.filter(f => f.id !== id));
@@ -468,9 +443,9 @@ export default function Scores() {
         era={selectedSong?.era ?? null}
         preloadedCharts={selectedSong?.preloadedCharts}
       />
-      
+
       {/* Back to Top Button */}
-      {shouldShowScores && <BackToTopButton />}
+      <BackToTopButton />
     </div>
   );
 }

@@ -3,11 +3,12 @@ import { useUsername } from '@/hooks/useUsername';
 import { useSessionCharacter } from '@/hooks/useSessionCharacter';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useGoals } from '@/hooks/useGoals';
-import { useServerGoalProgress } from '@/hooks/useServerGoalProgress';
+import { useGoalProgress, meetsTarget } from '@/hooks/useGoalProgress';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useSongCatalogSearch } from '@/hooks/useSongCatalogSearch';
-import { useSongChartsCache } from '@/hooks/useSongChartsCache';
+import { useMusicDb, filterChartsByCriteria } from '@/hooks/useMusicDb';
 import { useScores } from '@/contexts/ScoresContext';
+import { filterScoresByRules } from '@/lib/filterMatcher';
 import { UserAvatar } from '@/components/home/UserAvatar';
 import { SearchBar } from '@/components/home/SearchBar';
 import { SongSearchCard } from '@/components/home/SongSearchCard';
@@ -22,7 +23,7 @@ import { cn } from '@/lib/utils';
 import rainbowBg from '@/assets/rainbow-bg.png';
 import rinonFilter from '@/assets/rinon-filter.png';
 import type { FilterRule } from '@/components/filters/filterTypes';
-import type { PreloadedChart } from '@/types/scores';
+import type { PreloadedChart, ScoreWithSong } from '@/types/scores';
 
 interface Goal {
   id: string;
@@ -37,31 +38,79 @@ interface Goal {
   score_floor?: number | null;
 }
 
-// Component to render a goal card with server-calculated progress
-function GoalCardWithProgress({ goal }: { goal: Goal }) {
-  // Use server-side RPC for progress calculation
-  // This replaces both useMusicDbCount and useGoalProgress with a single query
-  const { data: progress, isLoading } = useServerGoalProgress(
-    goal.id,
-    goal.criteria_rules as FilterRule[],
-    goal.target_type as 'lamp' | 'grade' | 'flare' | 'score',
-    goal.target_value,
-    true
-  );
+// Component to render a goal card with client-calculated progress
+function GoalCardWithProgress({ 
+  goal, 
+  scores, 
+  allCharts, 
+  isLoading,
+  reverseTransformHalo,
+}: { 
+  goal: Goal; 
+  scores: ScoreWithSong[];
+  allCharts: ReturnType<typeof useMusicDb>['data'];
+  isLoading: boolean;
+  reverseTransformHalo: (target: string | null) => string | null;
+}) {
+  // Calculate progress client-side from scores and musicdb cache
+  const progress = useMemo(() => {
+    if (isLoading || !allCharts) {
+      return { completed: 0, total: 0, averageScore: 0 };
+    }
 
-  // For "count" mode, use goal_count as the denominator
-  // For "all" mode, use server-calculated total
-  const isAverageMode = goal.target_type === 'score' && goal.score_mode === 'average';
-  
-  const total = isAverageMode
-    ? parseInt(goal.target_value, 10) // For average mode, total is the target average
-    : goal.goal_mode === 'count' 
+    const criteriaRules = goal.criteria_rules as FilterRule[];
+    const targetType = goal.target_type as 'lamp' | 'grade' | 'flare' | 'score';
+    const targetValue = goal.target_value;
+    
+    // Filter musicdb charts by goal criteria to get total
+    const levelRule = criteriaRules.find(r => r.type === 'level');
+    const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
+    
+    const matchingCharts = filterChartsByCriteria(
+      allCharts.charts,
+      levelRule ? { operator: levelRule.operator, value: levelRule.value as number[] | [number, number] } : null,
+      difficultyRule ? { operator: difficultyRule.operator, value: difficultyRule.value as string[] } : null
+    );
+    
+    const total = goal.goal_mode === 'count' 
       ? (goal.goal_count ?? 0) 
-      : (progress?.total ?? 0);
+      : matchingCharts.length;
+    
+    // Filter user scores by goal criteria
+    const matchingScores = filterScoresByRules(
+      scores, 
+      criteriaRules, 
+      goal.criteria_match_mode as 'all' | 'any'
+    );
+    
+    // Handle average score mode
+    if (targetType === 'score' && goal.score_mode === 'average') {
+      const playedWithScores = matchingScores.filter(s => s.score !== null);
+      const avg = playedWithScores.length > 0
+        ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length / 10) * 10
+        : 0;
+      return {
+        completed: avg,
+        total: parseInt(targetValue, 10),
+        averageScore: avg,
+      };
+    }
+    
+    // Count completed scores
+    const completedCount = matchingScores.filter(s => 
+      meetsTarget(s, targetType, targetValue, reverseTransformHalo)
+    ).length;
+    
+    return {
+      completed: goal.goal_mode === 'count' 
+        ? Math.min(completedCount, goal.goal_count ?? completedCount)
+        : completedCount,
+      total,
+      averageScore: 0,
+    };
+  }, [goal, scores, allCharts, isLoading, reverseTransformHalo]);
 
-  const current = isAverageMode
-    ? (progress?.averageScore ?? 0) // Use average from RPC
-    : (progress?.completed ?? 0);
+  const isAverageMode = goal.target_type === 'score' && goal.score_mode === 'average';
 
   return (
     <GoalCard
@@ -69,8 +118,8 @@ function GoalCardWithProgress({ goal }: { goal: Goal }) {
       title={goal.name}
       targetType={goal.target_type as 'lamp' | 'grade' | 'flare' | 'score'}
       targetValue={goal.target_value}
-      current={current}
-      total={total}
+      current={progress.completed}
+      total={progress.total}
       scoreMode={goal.score_mode as 'target' | 'average' | undefined}
       scoreFloor={goal.score_floor}
       isLoading={isLoading}
@@ -95,6 +144,7 @@ export default function Home() {
   const characterImage = useSessionCharacter();
   const { isVisible } = useScrollDirection({ threshold: 15 });
   const { goals, isLoading: goalsLoading } = useGoals();
+  const { reverseTransformHalo } = use12MSMode();
   const [createGoalOpen, setCreateGoalOpen] = useState(false);
   
   // Debounced search state
@@ -116,13 +166,13 @@ export default function Home() {
   const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   
-  // Caches for modal preloading
-  const { data: songChartsCache } = useSongChartsCache();
-  const { scores: globalScores } = useScores();
+  // Unified caches for goal progress calculation and modal preloading
+  const { data: musicDb, isLoading: musicDbLoading } = useMusicDb();
+  const { scores: globalScores, isLoading: scoresLoading } = useScores();
   
   const handleSongClick = useCallback((song: { songId: number; name: string; artist: string | null; eamuseId: string | null; era: number | null }) => {
     // Get ALL charts for this song from the pre-cached data
-    const allChartsForSong = songChartsCache?.get(song.songId) ?? [];
+    const allChartsForSong = musicDb?.bySongId?.get(song.songId) ?? [];
     
     let preloadedCharts: PreloadedChart[] | undefined;
     
@@ -166,11 +216,14 @@ export default function Home() {
       preloadedCharts,
     });
     setIsDetailModalOpen(true);
-  }, [globalScores, songChartsCache]);
+  }, [globalScores, musicDb]);
 
   const handleCloseModal = useCallback(() => {
     setIsDetailModalOpen(false);
   }, []);
+
+  // Combined loading state for goals
+  const isGoalDataLoading = scoresLoading || musicDbLoading;
 
   return (
     <div className="relative min-h-screen">
@@ -280,6 +333,10 @@ export default function Home() {
                 <GoalCardWithProgress
                   key={goal.id}
                   goal={goal}
+                  scores={globalScores}
+                  allCharts={musicDb}
+                  isLoading={isGoalDataLoading}
+                  reverseTransformHalo={reverseTransformHalo}
                 />
               ))
             )

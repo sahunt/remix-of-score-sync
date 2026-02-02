@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useAllChartsCache, type FullChartInfo } from '@/hooks/useAllChartsCache';
+import { useMusicDb, type MusicDbChart } from '@/hooks/useMusicDb';
 
 export interface SongSearchResult {
   songId: number;
@@ -18,7 +18,8 @@ export function useSongCatalogSearch(query: string): {
   results: SongSearchResult[];
   isLoading: boolean;
 } {
-  const { data: allCharts = [], isLoading } = useAllChartsCache();
+  const { data: musicDb, isLoading } = useMusicDb();
+  const allCharts = musicDb?.charts ?? [];
 
   const results = useMemo(() => {
     const trimmed = query.trim().toLowerCase();

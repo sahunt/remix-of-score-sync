@@ -2,12 +2,10 @@ import { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGoal, useGoals } from '@/hooks/useGoals';
 import { useGoalProgress } from '@/hooks/useGoalProgress';
-import { useMusicDbCount } from '@/hooks/useMusicDbCount';
-import { useUserScores } from '@/hooks/useUserScores';
 import { useScores } from '@/contexts/ScoresContext';
-import { useAllChartsCache, filterChartsByCriteria } from '@/hooks/useAllChartsCache';
-import { useSongChartsCache } from '@/hooks/useSongChartsCache';
+import { useMusicDb, filterChartsByCriteria } from '@/hooks/useMusicDb';
 import { use12MSMode } from '@/hooks/use12MSMode';
+import { filterScoresByRules } from '@/lib/filterMatcher';
 import { GoalDetailHeader } from '@/components/goals/GoalDetailHeader';
 import { GoalCard } from '@/components/home/GoalCard';
 import { GoalSongTabs } from '@/components/goals/GoalSongTabs';
@@ -47,34 +45,28 @@ export default function GoalDetail() {
   // Fetch the goal
   const { data: goal, isLoading: goalLoading } = useGoal(goalId);
 
-  // Extract criteria for queries
+  // Extract criteria for filtering
   const criteriaRules = (goal?.criteria_rules as FilterRule[]) ?? [];
 
-  // Get total from musicdb based on goal criteria
-  const { data: musicDbData } = useMusicDbCount(
-    criteriaRules,
-    goal?.criteria_match_mode ?? 'all',
-    !!goal
-  );
-  const musicDbTotal = musicDbData?.total ?? 0;
+  // Use unified musicdb cache
+  const { data: musicDb } = useMusicDb();
+  const allCharts = musicDb?.charts ?? [];
+  const songChartsCache = musicDb?.bySongId;
 
-  // Use shared hook for consistent score data - pass filter rules for DB-level optimization
-  const { data: scores = [], isLoading: scoresLoading } = useUserScores({
-    filterRules: criteriaRules,
-    enabled: !!goal,
-    queryKeySuffix: `goal-${goal?.id}`,
-  });
+  // Use global scores cache - single source of truth
+  const { scores: globalScores, isLoading: scoresLoading } = useScores();
 
-  // Use the cached all-charts data instead of a separate query per goal
-  // This eliminates redundant musicdb queries - the cache is shared across all goals
-  const { data: allCharts = [] } = useAllChartsCache();
-  
-  // Use global scores cache for modal preloading (all difficulties for any song)
-  const { scores: globalScores } = useScores();
-  
-  // Pre-cached all SP charts by song_id (for modal preloading)
-  const { data: songChartsCache } = useSongChartsCache();
-  // Extract rules for filtering
+  // Filter scores to match goal criteria
+  const matchingScores = useMemo(() => {
+    if (!goal) return [];
+    return filterScoresByRules(
+      globalScores,
+      criteriaRules,
+      goal.criteria_match_mode as 'all' | 'any'
+    );
+  }, [globalScores, goal, criteriaRules]);
+
+  // Extract rules for filtering charts
   const levelRule = criteriaRules.find(r => r.type === 'level');
   const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
 
@@ -88,10 +80,13 @@ export default function GoalDetail() {
     );
   }, [allCharts, goal, levelRule, difficultyRule]);
 
+  // Total count from musicdb
+  const musicDbTotal = matchingCharts.length;
+
   // Create set of played chart IDs (musicdb.id) for quick lookup
   const playedChartIds = useMemo(() => 
-    new Set(scores.map(s => s.musicdb_id).filter(Boolean)),
-    [scores]
+    new Set(matchingScores.map(s => s.musicdb_id).filter(Boolean)),
+    [matchingScores]
   );
 
   // Identify unplayed charts and convert to ScoreWithSong format
@@ -118,7 +113,7 @@ export default function GoalDetail() {
   );
 
   // Calculate progress with 12MS mode transformation
-  const progress = useGoalProgress(goal ?? null, scores, [], scoresLoading, reverseTransformHalo);
+  const progress = useGoalProgress(goal ?? null, matchingScores, [], scoresLoading, reverseTransformHalo);
 
   // Combine remaining songs with unplayed charts for the tabs
   const allRemainingSongs = useMemo(() => 
@@ -126,7 +121,7 @@ export default function GoalDetail() {
     [progress.remainingSongs, unplayedCharts]
   );
 
-  // Handler for song card clicks - mirrors Scores.tsx handleSongClick
+  // Handler for song card clicks
   const handleSongClick = useCallback((song: ScoreWithSong) => {
     const songId = song.musicdb?.song_id ?? song.song_id;
     if (!songId) return;
