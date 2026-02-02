@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useFilterResults } from '@/hooks/useFilterResults';
-import { useMusicDbCount } from '@/hooks/useMusicDbCount';
+import { useMusicDb, filterChartsByCriteria } from '@/hooks/useMusicDb';
 import type { Goal } from '@/hooks/useGoalProgress';
 
 interface CreateGoalSheetProps {
@@ -231,9 +231,24 @@ export function CreateGoalSheet({ open, onOpenChange, editingGoal }: CreateGoalS
   // Completion states
   const isStep1Complete = Boolean(targetType && targetValue);
 
-  // Get total from musicdb based on criteria rules
-  const { data: musicDbData } = useMusicDbCount(criteriaRules, criteriaMatchMode, open);
-  const musicDbTotal = musicDbData?.total ?? 0;
+  // Get total from musicdb based on criteria rules (using unified cache)
+  const { data: musicDb } = useMusicDb();
+  const musicDbTotal = useMemo(() => {
+    if (!musicDb || !open) return 0;
+    
+    // Extract level and difficulty rules
+    const levelRule = criteriaRules.find(r => r.type === 'level');
+    const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
+    
+    // Filter charts by criteria
+    const matchingCharts = filterChartsByCriteria(
+      musicDb.charts,
+      levelRule ? { operator: levelRule.operator, value: levelRule.value as number[] | [number, number] } : null,
+      difficultyRule ? { operator: difficultyRule.operator, value: difficultyRule.value as string[] } : null
+    );
+    
+    return matchingCharts.length;
+  }, [musicDb, criteriaRules, open]);
 
   // Calculate matching scores based on criteria rules (for current progress)
   const { filteredScores } = useFilterResults(
