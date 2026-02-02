@@ -1,94 +1,114 @@
 
 
-# Fix Data Integrity: Replace Composite Key with ID-Based Matching
+# Fix: Persist Search Field Visibility Across Navigation
 
-## Problem Summary
+## Problem
 
-**Scores.tsx is using a buggy composite key approach that causes incorrect counts:**
-- Level 14 shows: Total 234, No Play 37 (should be Total 248, No Play 5)
-- Level 11 shows: Total 372, No Play 44 (should be Total 381, No Play 1)
-
-The database confirms:
-- Level 14: 253 catalog charts, 248 unique played, 5 unplayed
-- Level 11: 382 catalog charts, 381 unique played, 1 unplayed
+When a search is active on the Scores page and the user navigates away and back:
+- The results are correctly filtered by the persisted search query
+- BUT the search input is collapsed/hidden
+- No visual feedback shows that a search is active
 
 ## Root Cause
 
-Lines 211-219 in Scores.tsx use unreliable string-based composite keys:
+`SearchSortBar.tsx` manages its own local state that resets on every mount:
+
 ```typescript
-// CURRENT BUGGY CODE
-const playedChartKeys = new Set(
-  playedSongs.map(s => `${s.song_id}|${s.difficulty_name}`)
-);
-noPlaySongs = musicDbChartsForLevel
-  .filter(chart => !playedChartKeys.has(`${chart.song_id}|${chart.difficulty_name}`))
+// Lines 17-18 - these reset to false/empty on navigation
+const [searchExpanded, setSearchExpanded] = useState(false);
+const [searchQuery, setSearchQuery] = useState('');
 ```
 
-This fails because `song_id` or `difficulty_name` can be null/inconsistent, causing played songs to not match their catalog entry.
+Meanwhile, `useScoresFilterState` correctly persists the `searchQuery` to localStorage, but `SearchSortBar` never receives it.
 
 ## Solution
 
-Replace with ID-based matching (same approach that works correctly in GoalDetail.tsx):
+Make `SearchSortBar` a controlled component:
 
-```typescript
-// FIXED CODE - Use database foreign key
-const playedMusicDbIds = new Set(
-  filteredScores.map(s => s.musicdb_id).filter((id): id is number => id != null)
-);
-noPlaySongs = musicDbChartsForLevel
-  .filter(chart => !playedMusicDbIds.has(chart.id))
-```
+1. Pass the persisted `searchQuery` value as a prop
+2. Derive `searchExpanded` state from whether `searchQuery` has content
+3. On mount, if `searchQuery` is non-empty, show the expanded search field
 
 ## Changes Required
 
-**File: `src/pages/Scores.tsx`**
+### File: `src/components/scores/SearchSortBar.tsx`
 
-### Change 1: Build ID-based set from filteredScores
-
-Replace lines 210-213 (the composite key set creation) with:
+**Update props interface:**
 ```typescript
-// Build set of played chart IDs (musicdb primary keys)
-const playedMusicDbIds = new Set(
-  filteredScores.map(s => s.musicdb_id).filter((id): id is number => id != null)
-);
+interface SearchSortBarProps {
+  searchQuery: string;                    // NEW: Controlled value
+  onSearchChange: (query: string) => void;
+  sortBy: SortOption;
+  sortDirection: SortDirection;
+  onSortChange: (sort: SortOption, direction: SortDirection) => void;
+}
 ```
 
-### Change 2: Filter using chart.id instead of composite key
-
-Replace line 219 (the filter logic) with:
+**Update component logic:**
 ```typescript
-.filter(chart => !playedMusicDbIds.has(chart.id))
+export function SearchSortBar({ 
+  searchQuery,        // NEW: Receive persisted value
+  onSearchChange, 
+  sortBy, 
+  sortDirection, 
+  onSortChange 
+}: SearchSortBarProps) {
+  // Derive expanded state from whether query has content
+  const [searchExpanded, setSearchExpanded] = useState(searchQuery.length > 0);
+  const [sortOpen, setSortOpen] = useState(false);
+
+  // Keep expanded state in sync if query changes externally
+  useEffect(() => {
+    if (searchQuery.length > 0 && !searchExpanded) {
+      setSearchExpanded(true);
+    }
+  }, [searchQuery]);
+
+  const handleSearchToggle = () => {
+    if (searchExpanded) {
+      onSearchChange('');  // Clear via callback
+    }
+    setSearchExpanded(!searchExpanded);
+  };
+
+  const handleSearchInput = (value: string) => {
+    onSearchChange(value);  // Pass to parent, no local state
+  };
+
+  // In the JSX, use searchQuery prop instead of local state:
+  <Input
+    value={searchQuery}  // Was: value={local searchQuery state}
+    onChange={(e) => handleSearchInput(e.target.value)}
+    // ...
+  />
+}
 ```
 
-### Change 3: Fix Total stat calculation
+### File: `src/pages/Scores.tsx`
 
-The `Total` stat (line 313) should use `filteredScores.length` directly instead of calculating from `playedSongs` after converting to DisplaySong format. This ensures consistency.
+**Update SearchSortBar usage (around line 389):**
+```typescript
+<SearchSortBar
+  searchQuery={searchQuery}    // NEW: Pass persisted value
+  onSearchChange={setSearchQuery}
+  sortBy={sortBy}
+  sortDirection={sortDirection}
+  onSortChange={setSortOptions}
+/>
+```
 
-## Verification
+## Expected Behavior After Fix
 
-After fix:
-- Level 14: Total 248, No Play 5 (matches database)
-- Level 11: Total 381, No Play 1 (matches database)
-- Math check: catalog_count = Total + No_Play (must always be true)
+1. User types "butterfly" in search → results filter
+2. User navigates to Home page
+3. User returns to Scores page
+4. Search field is **expanded and shows "butterfly"**
+5. Results remain filtered by "butterfly"
 
-## Technical Details
+## Files to Modify
 
-### Why ID-Based Matching Works
-
-1. **musicdb_id** on user_scores is a foreign key to musicdb.id
-2. **chart.id** is the primary key of musicdb
-3. These are database-enforced, never null, always consistent
-
-### Why Composite Keys Fail
-
-1. `song_id` might be null if musicdb relation didn't load properly
-2. `difficulty_name` case sensitivity issues (EXPERT vs expert)
-3. String concatenation creates false negatives when any part is null
-
-### Code Location Reference
-
-| Location | Current (Buggy) | Fixed |
-|----------|-----------------|-------|
-| Line 211-213 | `${s.song_id}\|${s.difficulty_name}` | `s.musicdb_id` |
-| Line 219 | `playedChartKeys.has(...)` | `playedMusicDbIds.has(chart.id)` |
+| File | Changes |
+|------|---------|
+| `src/components/scores/SearchSortBar.tsx` | Add `searchQuery` prop, derive expanded state from it, use controlled value |
+| `src/pages/Scores.tsx` | Pass `searchQuery` to SearchSortBar |
 
