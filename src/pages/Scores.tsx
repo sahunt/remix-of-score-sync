@@ -387,6 +387,7 @@ export default function Scores() {
 
         {/* Search and sort bar */}
         <SearchSortBar
+          searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           sortBy={sortBy}
           sortDirection={sortDirection}
