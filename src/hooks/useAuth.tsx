@@ -1,7 +1,7 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
+import { signInWithGooglePopup } from '@/lib/oauthPopup';
 
 interface AuthContextType {
   user: User | null;
@@ -57,14 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
+  /**
+   * Force a popup-based Google OAuth flow so it works in all contexts
+   * (Lovable inline preview, standalone browser, custom domains, etc.)
+   */
   const signInWithGoogle = async () => {
     const origin = window.location.origin;
-    
-    // Always use the Lovable auth broker for managed OAuth credentials
-    const { error } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: origin,
-    });
-    return { error: error as Error | null };
+    return signInWithGooglePopup(origin);
   };
 
   const signOut = async () => {
