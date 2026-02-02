@@ -34,11 +34,8 @@ const NotFound = () => {
         </p>
         
         {/* CTA Button */}
-        <Button asChild size="lg" className="rounded-full px-8">
-          <Link to="/home">
-            Return Home
-          </Link>
-        </Button>
+        {/* NOTE: keep a single React element child when using `asChild` (Radix Slot) */}
+        <Button asChild size="lg" className="rounded-full px-8"><Link to="/home">Return Home</Link></Button>
       </div>
     </div>
   );
