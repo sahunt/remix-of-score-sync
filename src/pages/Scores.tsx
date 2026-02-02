@@ -207,16 +207,16 @@ export default function Scores() {
       });
     }
 
-    // Build set of played chart keys to identify unplayed songs
-    const playedChartKeys = new Set(
-      playedSongs.map(s => `${s.song_id}|${s.difficulty_name}`)
+    // Build set of played chart IDs (musicdb primary keys) - reliable ID-based matching
+    const playedMusicDbIds = new Set(
+      filteredScores.map(s => s.musicdb_id).filter((id): id is number => id != null)
     );
 
     // Add "no play" songs from musicdb (only when a level is selected and no active filters)
     let noPlaySongs: DisplaySong[] = [];
     if (selectedLevel !== null && musicDbChartsForLevel.length > 0 && activeFilters.length === 0) {
       noPlaySongs = musicDbChartsForLevel
-        .filter(chart => !playedChartKeys.has(`${chart.song_id}|${chart.difficulty_name}`))
+        .filter(chart => !playedMusicDbIds.has(chart.id))
         .map(chart => ({
           id: `noplay-${chart.id}`,
           score: null,

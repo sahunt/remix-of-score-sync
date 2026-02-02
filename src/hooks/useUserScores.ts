@@ -29,7 +29,9 @@ export function useUserScores(options?: {
   const difficultyRule = filterRules.find(r => r.type === 'difficulty');
 
   return useQuery({
-    queryKey: ['user-scores', user?.id, queryKeySuffix, levelRule, difficultyRule],
+    // CACHE VERSION: Increment when query logic changes significantly
+    // v3: Fixed pagination ordering to prevent duplicates from null timestamps
+    queryKey: ['user-scores', 'v3', user?.id, queryKeySuffix, levelRule, difficultyRule],
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     queryFn: async (): Promise<ScoreWithSong[]> => {
@@ -97,7 +99,10 @@ export function useUserScores(options?: {
         }
         
         const { data, error } = await query
+          // CRITICAL: Order by timestamp first, then by id to ensure consistent pagination
+          // Without secondary sort, null timestamps can appear in random order across pages
           .order('timestamp', { ascending: false, nullsFirst: false })
+          .order('id', { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
 
         if (error) throw error;
@@ -131,7 +136,19 @@ export function useUserScores(options?: {
         }
       }
       
-      return allScores;
+      // CRITICAL: Deduplicate by musicdb_id, keeping the latest score for each chart
+      // This ensures accurate counts even if somehow duplicates exist in the data
+      const uniqueByMusicDbId = new Map<number, ScoreWithSong>();
+      for (const score of allScores) {
+        if (score.musicdb_id != null) {
+          // Since we order by timestamp DESC, the first occurrence is the latest
+          if (!uniqueByMusicDbId.has(score.musicdb_id)) {
+            uniqueByMusicDbId.set(score.musicdb_id, score);
+          }
+        }
+      }
+      
+      return Array.from(uniqueByMusicDbId.values());
     },
     enabled: enabled && !!user?.id,
   });
