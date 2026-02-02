@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Icon } from '@/components/ui/Icon';
 import { Input } from '@/components/ui/input';
@@ -7,15 +7,22 @@ export type SortOption = 'name' | 'difficulty' | 'score' | 'flare' | 'rank';
 export type SortDirection = 'asc' | 'desc';
 
 interface SearchSortBarProps {
+  searchQuery: string;
   onSearchChange: (query: string) => void;
   sortBy: SortOption;
   sortDirection: SortDirection;
   onSortChange: (sort: SortOption, direction: SortDirection) => void;
 }
 
-export function SearchSortBar({ onSearchChange, sortBy, sortDirection, onSortChange }: SearchSortBarProps) {
-  const [searchExpanded, setSearchExpanded] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+export function SearchSortBar({ searchQuery, onSearchChange, sortBy, sortDirection, onSortChange }: SearchSortBarProps) {
+  const [searchExpanded, setSearchExpanded] = useState(searchQuery.length > 0);
+
+  // Keep expanded state in sync if query changes externally
+  useEffect(() => {
+    if (searchQuery.length > 0 && !searchExpanded) {
+      setSearchExpanded(true);
+    }
+  }, [searchQuery]);
   const [sortOpen, setSortOpen] = useState(false);
 
   const sortOptions: { value: SortOption; label: string }[] = [
@@ -28,14 +35,12 @@ export function SearchSortBar({ onSearchChange, sortBy, sortDirection, onSortCha
 
   const handleSearchToggle = () => {
     if (searchExpanded) {
-      setSearchQuery('');
       onSearchChange('');
     }
     setSearchExpanded(!searchExpanded);
   };
 
   const handleSearchInput = (value: string) => {
-    setSearchQuery(value);
     onSearchChange(value);
   };
 
