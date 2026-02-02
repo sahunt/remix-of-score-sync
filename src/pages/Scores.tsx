@@ -4,6 +4,7 @@ import { useScoresFilterState } from '@/hooks/useScoresFilterState';
 import { useScores } from '@/contexts/ScoresContext';
 import { useMusicDb, filterChartsByCriteria } from '@/hooks/useMusicDb';
 import { matchesFilterRule } from '@/lib/filterMatcher';
+import { assertCountIntegrity } from '@/lib/dataIntegrity';
 import { ScoresHeader } from '@/components/scores/ScoresHeader';
 import { DifficultyGrid } from '@/components/scores/DifficultyGrid';
 import { FiltersSection, type ActiveFilter } from '@/components/scores/FiltersSection';
@@ -333,6 +334,16 @@ export default function Scores() {
       ? Math.round(playedWithScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / playedWithScores.length / 10) * 10
       : 0;
 
+    // DEV-MODE: Assert data integrity when level is selected and no filters applied
+    if (selectedLevel !== null && activeFilters.length === 0) {
+      assertCountIntegrity(
+        `Scores Page (Level ${selectedLevel})`,
+        musicDbChartsForLevel.length,
+        playedSongs.length,
+        noPlayCount
+      );
+    }
+
     return {
       stats: [
         { label: 'Total', value: total },
@@ -345,7 +356,7 @@ export default function Scores() {
       ],
       averageScore: avgScore,
     };
-  }, [displayedScores, selectedLevel, activeFilters, transformHaloLabel, shouldShowScores, noPlayCount]);
+  }, [displayedScores, selectedLevel, activeFilters, transformHaloLabel, shouldShowScores, noPlayCount, musicDbChartsForLevel]);
 
   const handleRemoveFilter = useCallback((id: string) => {
     setActiveFilters(prev => prev.filter(f => f.id !== id));

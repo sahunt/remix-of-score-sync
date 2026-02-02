@@ -196,3 +196,27 @@ while (hasMore) {
 2. Consistent counts across all pages
 3. Only 2 invalidations after upload
 4. Simpler debugging - check one array
+
+---
+
+## 12. Data Integrity Rules
+
+See `docs/data-integrity-checklist.md` for the complete checklist.
+
+**Critical rules:**
+1. Use `musicdb_id` ↔ `chart.id` for all matching (never composite string keys)
+2. Paginated queries must have deterministic ordering (timestamp + id)
+3. Use `!inner` join modifier when filtering by relations
+4. Add dev-mode assertions for count invariants
+
+**Example assertion:**
+```typescript
+import { assertCountIntegrity } from '@/lib/dataIntegrity';
+
+assertCountIntegrity(
+  `Scores Page (Level ${level})`,
+  musicDbChartsForLevel.length,
+  playedSongs.length,
+  noPlaySongs.length
+);
+```
