@@ -292,7 +292,7 @@ export type Database = {
           halo: string | null
           id: string
           judgement_offset: number | null
-          musicdb_id: number | null
+          musicdb_id: number
           rank: string | null
           score: number | null
           song_id: number
@@ -309,7 +309,7 @@ export type Database = {
           halo?: string | null
           id?: string
           judgement_offset?: number | null
-          musicdb_id?: number | null
+          musicdb_id: number
           rank?: string | null
           score?: number | null
           song_id: number
@@ -326,7 +326,7 @@ export type Database = {
           halo?: string | null
           id?: string
           judgement_offset?: number | null
-          musicdb_id?: number | null
+          musicdb_id?: number
           rank?: string | null
           score?: number | null
           song_id?: number
