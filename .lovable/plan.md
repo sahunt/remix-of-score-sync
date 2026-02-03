@@ -1,60 +1,55 @@
 
-# Fix Edi Chat Interface Layout
+# Plan: Fix Edi's Recommendation Variety
 
-## Problem Analysis
-The Edi page is currently rendered inside `AppLayout`, which:
-- Always shows the `BottomNav` component
-- Adds `pb-[120px]` padding to accommodate the nav
-- Conflicts with Edi's own `h-[100dvh]` full-height layout
+## Problem
+Charts are sorted deterministically (by difficulty, then title) so the AI sees the same ordered list every request. This causes repetitive recommendations.
 
-The result: the bottom nav overlaps/appears below the chat, and there's a large empty gap under the chat input.
+## Solution: Two-Pronged Approach
 
-## Solution
+### 1. Shuffle Charts Within Each Difficulty Level
+Before building the system prompt, randomize the order of charts within each difficulty level. This ensures:
+- Different charts appear "first" in each request
+- AI naturally discovers different songs when scanning the catalog
 
-Move the Edi route **outside** of the `AppLayout` wrapper so it gets its own isolated layout without the bottom nav or extra padding.
+### 2. Add Random Session Seed
+Generate a random number (1-1000) each request and include it in the prompt to encourage the AI to vary starting points.
 
-### Changes Required
+---
 
-**1. Modify `src/App.tsx`**
-- Move the `/edi` route outside of the `AppLayout` wrapper
-- Keep it as a protected route, but wrap it with just `ScoresProvider` (needed for score data access)
+## Technical Changes
 
-```text
-Before:
-  <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-    <Route path="/home" ... />
-    <Route path="/edi" ... />  <-- Inside AppLayout
-    ...
-  </Route>
+**File: `supabase/functions/edi-chat/index.ts`**
 
-After:
-  <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-    <Route path="/home" ... />
-    ...
-  </Route>
-  <Route 
-    path="/edi" 
-    element={
-      <ProtectedRoute>
-        <ScoresProvider>
-          <Edi />
-        </ScoresProvider>
-      </ProtectedRoute>
-    } 
-  />  <-- Standalone, no BottomNav
+### A. Add Shuffle Helper Function
+```typescript
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 ```
 
-**2. Update `src/pages/Edi.tsx` (minor cleanup)**
-- Remove the `border-t` from the ChatInput wrapper since it already has its own border
-- Ensure the input stays pinned to the actual bottom of the viewport
+### B. Modify `buildSystemPrompt` to Shuffle Charts per Level
+Currently, charts are sorted by difficulty then title (deterministic). Change to:
+1. Group charts by difficulty level
+2. Shuffle within each group
+3. Rebuild the list with shuffled groups
 
-## Visual Result
-- Chat input will be anchored directly to the bottom of the screen
-- No bottom navigation bar on the Edi page
-- Hamburger menu remains for navigation to other pages
-- Full-height chat experience
+### C. Add Session Seed to Prompt
+Generate `Math.floor(Math.random() * 1000) + 1` and add to the VARIETY REQUIREMENT section:
 
-## Technical Notes
-- The Edi page already has its own hamburger menu with navigation links (Home, Scores, Upload, Profile)
-- `ScoresProvider` is required for the `useScores` hook used in Edi
-- No other files need changes - ChatInput styling is already correct
+```
+SESSION VARIETY SEED: [random number]
+Use this seed to vary your starting point when scanning the catalog.
+Don't always recommend the same songs - surprise the player!
+```
+
+---
+
+## Expected Outcome
+- Each conversation surfaces different songs from the catalog
+- The AI explores beyond the alphabetically-first songs at each level
+- Recommendations feel fresh and varied
