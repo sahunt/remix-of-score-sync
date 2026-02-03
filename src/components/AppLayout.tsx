@@ -5,7 +5,7 @@ import { ScoresProvider } from '@/contexts/ScoresContext';
 export function AppLayout() {
   return (
     <ScoresProvider>
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-screen flex-col bg-background w-full max-w-[720px] mx-auto">
         <main className="flex-1 pb-[120px]">
           <Outlet />
         </main>
