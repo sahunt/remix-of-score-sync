@@ -108,8 +108,9 @@ export default function Auth() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <div className="mb-8 flex items-center justify-center">
+      <div className="mb-8 flex flex-col items-center gap-2">
         <img src={ediLogo} alt="Edi" className="h-20 w-auto" />
+        <p className="text-sm text-muted-foreground">Each step is a story</p>
       </div>
 
       <Card className="w-full max-w-sm border-border bg-card shadow-card">
