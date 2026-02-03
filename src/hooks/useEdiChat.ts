@@ -62,7 +62,15 @@ export function useEdiChat() {
       content,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, userMessage]);
+    
+    // Create assistant message placeholder immediately (shows loading state)
+    const assistantId = crypto.randomUUID();
+    setMessages(prev => [...prev, userMessage, {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+    }]);
 
     // Prepare messages for API (exclude IDs and timestamps)
     const apiMessages = [...messages, userMessage].map(m => ({
@@ -95,15 +103,6 @@ export function useEdiChat() {
       const decoder = new TextDecoder();
       let textBuffer = '';
       let streamDone = false;
-
-      // Create assistant message placeholder
-      const assistantId = crypto.randomUUID();
-      setMessages(prev => [...prev, {
-        id: assistantId,
-        role: 'assistant',
-        content: '',
-        timestamp: new Date(),
-      }]);
 
       while (!streamDone) {
         const { done, value } = await reader.read();
