@@ -83,6 +83,16 @@ interface UserScore {
   } | null;
 }
 
+// Fisher-Yates shuffle for randomizing chart order
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function calculateStdDev(scores: number[]): number {
   if (scores.length < 2) return 0;
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
@@ -417,14 +427,22 @@ function buildSystemPrompt(profile: PlayerProfile, chartAnalysis: ChartAnalysis[
     songMap.set(chart.song_id, existing);
   }
 
-  const sortedSongs = Array.from(songMap.entries()).sort((a, b) => {
-    const maxA = Math.max(...a[1].map(c => c.difficulty_level));
-    const maxB = Math.max(...b[1].map(c => c.difficulty_level));
-    if (maxB !== maxA) return maxB - maxA;
-    const titleA = a[1][0]?.title || '';
-    const titleB = b[1][0]?.title || '';
-    return titleA.localeCompare(titleB);
-  });
+  // Group songs by max difficulty level, then shuffle within each group for variety
+  const songsByLevel = new Map<number, [number, ChartAnalysis[]][]>();
+  for (const entry of songMap.entries()) {
+    const maxLevel = Math.max(...entry[1].map(c => c.difficulty_level));
+    const existing = songsByLevel.get(maxLevel) || [];
+    existing.push(entry);
+    songsByLevel.set(maxLevel, existing);
+  }
+  
+  // Shuffle songs within each level group, then combine in descending level order
+  const sortedSongs: [number, ChartAnalysis[]][] = [];
+  const levels = Array.from(songsByLevel.keys()).sort((a, b) => b - a);
+  for (const level of levels) {
+    const songsAtLevel = songsByLevel.get(level) || [];
+    sortedSongs.push(...shuffleArray(songsAtLevel));
+  }
 
   const userScoreMap = new Map<string, { score: number; halo: string; rank: string; flare: number | null }>();
   for (const score of userScores) {
@@ -602,11 +620,14 @@ ERA PRIORITIZATION (CRITICAL):
 - Era values: 0=Classic, 1=White, 2=Gold, 3+=Modern/newer
 
 VARIETY REQUIREMENT (CRITICAL):
+SESSION VARIETY SEED: ${Math.floor(Math.random() * 1000) + 1}
+Use this seed to vary your starting point when scanning the catalog. Start from different parts of each level.
 - NEVER repeat the same song recommendations across multiple responses in a conversation
 - Each recommendation set should include DIFFERENT songs than previous responses
 - Draw from the ENTIRE catalog - there are ${totalCharts} SP charts available
 - If recommending for a specific skill (crossovers, footswitches, etc.), pick from multiple different songs with that pattern
 - Surprise the player with lesser-known songs they may have overlooked
+- The chart list order is randomized each session - explore different songs than last time!
 
 FOLLOW-UP SUGGESTIONS (REQUIRED):
 At the END of EVERY response, include 2-3 follow-up suggestions that make sense as natural next steps.
