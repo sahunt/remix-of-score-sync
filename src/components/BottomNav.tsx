@@ -55,7 +55,7 @@ function NavItem({
   };
   return <NavLink to={to} onClick={handleClick} className={cn("flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95", isActive ? "bg-[#595E73]/90 rounded-full px-4 py-2" : "px-3 py-2")}>
       <span className="text-[#E3E3E3]">{icon}</span>
-      {isActive && <span className="text-[#E3E3E3] font-medium text-sm">
+      {isActive && <span className="text-[#E3E3E3] font-medium text-sm px-[2px] pr-0 pl-[3px]">
           {label}
         </span>}
     </NavLink>;
