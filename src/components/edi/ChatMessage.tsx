@@ -148,6 +148,10 @@ export function ChatMessage({
       >
         {parsedContent.map((part, index) => {
           if (part.type === 'text') {
+            // Filter out sanbai rating markers like [sb:16.60]
+            const cleanedText = part.value.replace(/\[sb:[\d.]+\]/gi, '').trim();
+            if (!cleanedText) return null;
+            
             return (
               <div key={index} className="prose prose-sm prose-invert max-w-none">
                 <ReactMarkdown
@@ -179,7 +183,7 @@ export function ChatMessage({
                     ),
                   }}
                 >
-                  {part.value}
+                  {cleanedText}
                 </ReactMarkdown>
               </div>
             );
