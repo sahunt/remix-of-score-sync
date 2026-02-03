@@ -98,6 +98,8 @@ export default function Scores() {
       );
       
       // Merge: all charts + user scores for instant, complete modal data
+      // Deduplicate by difficulty_name to prevent duplicate rows
+      const seenDifficulties = new Set<string>();
       preloadedCharts = allChartsForSong
         .map(chart => {
           const userScore = scoreMap.get(chart.difficulty_name);
@@ -111,6 +113,11 @@ export default function Scores() {
             halo: userScore?.halo ?? null,
             source_type: userScore?.source_type ?? null,
           };
+        })
+        .filter(chart => {
+          if (seenDifficulties.has(chart.difficulty_name)) return false;
+          seenDifficulties.add(chart.difficulty_name);
+          return true;
         })
         .sort((a, b) => {
           const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name);
