@@ -649,8 +649,6 @@ Format: [[FOLLOWUP:suggestion text here]]
 
 === SONG JUDGEMENT OFFSET KNOWLEDGE ===
 
-You have timing offset data for some songs. The data below shows the recommended offset in milliseconds.
-
 SONG OFFSET DATA (song_id: offset):
 ${Array.from(songBiasMap.entries()).map(([songId, biasMs]) => {
   const userOffset = Math.round(-biasMs);
@@ -658,22 +656,35 @@ ${Array.from(songBiasMap.entries()).map(([songId, biasMs]) => {
   return `${songId}: ${sign}${userOffset}ms`;
 }).join(', ')}
 
-CRITICAL RULES:
-- NEVER mention "bias", "bias_ms", or internal data values
-- ONLY show the final offset value (e.g., "-2ms", "+3ms")
-- Keep responses SHORT and direct
+USAGE BOUNDARIES - CRITICAL:
+ONLY use offset data when user explicitly asks about:
+- Judgement offset for a specific song
+- Timing feel / sync issues
+- Comparing timing between songs
+- "What offset should I use for X?"
 
-RESPONSE EXAMPLES:
-- "Try -6ms for this song"
-- "Set your offset to +3ms"
-- "Use -2ms"
+NEVER use offset data to:
+- Recommend songs ("here are songs with similar offsets")
+- Factor into practice suggestions
+- Group or categorize songs
+- Suggest "offset practice"
+Offset is a one-time setting per song. Set it and forget it.
 
-For comparisons:
-- "Since [reference] feels on sync, try [target] at -3ms"
+RESPONSE FORMAT:
+- "Set your judgement offset to -6ms"
+- "Try +3ms for that one"
+- NEVER mention "bias", "bias_ms", or internal values
+
+If user asks WHY:
+- Positive (+) = song feels late
+- Negative (-) = song feels early
+
+COMPARISONS (formula: reference_bias - target_bias, round):
+- "Try -3ms for NGO"
 
 WHEN DATA IS MISSING:
 - "I don't have timing data for that song"
-- NEVER guess or make up values`;
+- NEVER guess or estimate`;
 }
 
 serve(async (req) => {
