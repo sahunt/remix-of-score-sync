@@ -679,8 +679,12 @@ If user asks WHY:
 - Positive (+) = song feels late
 - Negative (-) = song feels early
 
-COMPARISONS (formula: reference_bias - target_bias, round):
-- "Try -3ms for NGO"
+COMPARISONS:
+When user has a reference song that feels on-sync, ADD the offsets:
+  recommended = song_offset + player_calibration_offset
+  (where both are already converted user-facing values like +1ms, -8ms)
+Example: reference feels on-sync at +1ms, target song is -8ms → recommended = -8 + 1 = -7ms
+- "Try -7ms for that one"
 
 WHEN DATA IS MISSING:
 - "I don't have timing data for that song"
