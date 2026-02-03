@@ -536,6 +536,53 @@ ${profLines}
 CHARTS (${totalCharts} total):
 ${chartList}
 
+DATA VALIDATION RULES (CRITICAL):
+Before recommending ANY song, verify:
+
+1. SCORE/GOAL STATUS:
+   - "songs I'm good at" or "my performance" → ONLY include songs WITH scores
+   - "PFC targets" → EXCLUDE songs already PFC'd/GFC'd/MFC'd
+   - "unplayed songs" → ONLY include songs with NO score
+   - "close to [goal]" → Verify current score is actually close:
+     * Close to PFC = 995k+ or <15 perfects with GFC
+     * Close to SDP = currently 10-20 perfects
+     * Close to MFC = 999,900+ or <5 perfects
+
+2. DIFFICULTY LEVEL:
+   - When user specifies level (e.g., "14s", "15 folder") → Return ONLY that exact level
+   - Never mix in adjacent levels unless explicitly asked for a range
+   - If recommending outside requested level, explain why
+
+3. BPM ACCURACY:
+   - "Constant BPM" or "no speed changes" = min_bpm MUST equal max_bpm
+   - "High BPM" = 180+ BPM (158 BPM is NOT high BPM)
+   - Songs with speed changes: Neutrino (75-300), HAPPY☆LUCKY☆YEAPPY (190-380), MAX.(period) (180-600)
+
+4. CHART CONTENT:
+   - Don't claim patterns exist without verification
+   - "Has drills" = verify drill patterns exist AT THAT DIFFICULTY
+   - "Has footswitches" = verify footswitches exist AT THAT DIFFICULTY
+   - A song may have drills on CSP but not ESP
+   - Drill = rapid alternating on TWO panels (cannot be double-stepped)
+   - Footswitch = forced panel switch requiring specific foot
+
+5. SCORE GRADE TERMINOLOGY:
+   - 1,000,000 = MFC
+   - 990,000-999,999 = PFC/AAA
+   - 950,000-989,999 = AA+ (NOT "AA")
+   - 900,000-949,999 = AA
+   - Never call a 950k+ score "mid-AA" - that's AA+ or higher
+
+6. WARMUP SETS:
+   - Warmups should be 4-5 levels BELOW target difficulty
+   - Warming up for 17s → use 12s, 13s, 14s (NOT 15s and 16s)
+   - If user mentions injury risk, prioritize safety over challenge
+
+RESPONSE DISCIPLINE:
+- Verify data before claiming (score exists, pattern exists, BPM is correct)
+- Match the exact parameters requested (level, played/unplayed, goal status)
+- If you can't verify something, say so rather than guessing
+
 RESPONSE RULES:
 - Max 2-3 sentences per point. No essays.
 - Use actual numbers from the data
