@@ -69,6 +69,12 @@ interface ChartAnalysis {
   hasPatternData: boolean;
 }
 
+interface SongBias {
+  song_id: number;
+  bias_ms: number;
+  eamuse_id: string | null;
+}
+
 interface UserScore {
   musicdb_id: number;
   score: number;
@@ -409,7 +415,7 @@ function stageDescription(stage: PlayerStage): string {
   return descriptions[stage];
 }
 
-function buildSystemPrompt(profile: PlayerProfile, chartAnalysis: ChartAnalysis[], userScores: UserScore[]): string {
+function buildSystemPrompt(profile: PlayerProfile, chartAnalysis: ChartAnalysis[], userScores: UserScore[], songBiasMap: Map<number, number>): string {
   const masteryLines = profile.levelMastery
     .filter(lm => lm.level >= 14)
     .map(lm => {
@@ -639,7 +645,66 @@ Format: [[FOLLOWUP:suggestion text here]]
   * After analysis: "What should I practice?", "Show my weaknesses", "Best PFC targets"
   * After warmup sets: "Ready for main session", "Easier warmups please"
 - Make suggestions conversational and actionable
-- ALWAYS include exactly 2-3 [[FOLLOWUP:...]] markers at the very end`;
+- ALWAYS include exactly 2-3 [[FOLLOWUP:...]] markers at the very end
+
+=== SONG JUDGEMENT OFFSET KNOWLEDGE ===
+
+You have access to timing calibration data for songs. Not all songs have bias data available.
+
+SONG OFFSET DATA (song_id: offset_ms):
+${Array.from(songBiasMap.entries()).map(([songId, biasMs]) => {
+  // Convert bias_ms to user-facing offset: invert sign, round to nearest whole number
+  const userOffset = Math.round(-biasMs);
+  const sign = userOffset >= 0 ? '+' : '';
+  return `${songId}: ${sign}${userOffset}ms`;
+}).join(', ')}
+
+HOW TO INTERPRET AND COMMUNICATE OFFSETS:
+- The stored bias_ms is inverted for the user: positive bias → negative offset, negative bias → positive offset
+- Round to nearest whole number
+
+RESPONSE FORMAT:
+When data exists:
+- "Set your judgement offset to -6ms for this song"
+- "This song runs a bit late, try +3ms"
+- "Add a judgement offset of -2ms"
+
+When data does NOT exist:
+- "I don't have timing data for that song"
+- "No offset data available for [song name]"
+- NEVER guess or hallucinate a value
+
+NATURAL LANGUAGE FRAMING:
+Explain the "why" when helpful:
+- Positive offset (+) = song feels late, you have to step a bit later than normal
+- Negative offset (-) = song feels early, you have to step a bit earlier than normal
+
+Example responses:
+- "The World Ends Now runs a bit late, so try a judgement offset of +1ms"
+- "Pluto tends to feel early — set your offset to -3ms"
+- "For MAX 300, I'd recommend -5ms since it runs early"
+
+SCOPE:
+- Offset applies to the song, not individual charts
+- All difficulties (BSP, DSP, ESP, CSP) share the same offset
+
+COMPARATIVE OFFSET CALCULATIONS:
+Users may have a personal timing feel that differs from "true" sync. They can use a reference song that feels correct to them, then ask for offsets relative to that song.
+
+Formula: relative_offset = round(-(target_bias - reference_bias))
+
+Example Calculation:
+User asks: "City Never Sleeps feels on sync to me. What should I set for NGO?"
+1. Look up both songs in the bias data
+2. Calculate: -(target_bias - reference_bias)
+3. Round to nearest whole number
+4. Response: "Since City Never Sleeps feels on sync to you, try setting NGO to [offset]ms"
+
+WHEN DATA IS MISSING:
+If either song lacks bias data:
+- "I have offset data for [song A] but not [song B], so I can't calculate a comparison"
+- "I don't have timing data for either of those songs"
+- NEVER estimate or interpolate. Only provide comparisons when both songs have data.`;
 }
 
 serve(async (req) => {
@@ -828,10 +893,27 @@ serve(async (req) => {
     
     console.log(`Built complete chart catalog with ${chartAnalysis.length} charts`);
 
+    // Fetch song_bias data for judgement offset knowledge
+    const { data: songBiasData, error: songBiasError } = await supabaseServiceRole
+      .from("song_bias")
+      .select("song_id, bias_ms, eamuse_id");
+    
+    if (songBiasError) {
+      console.error("Error fetching song_bias:", songBiasError);
+    }
+    
+    const songBiasMap = new Map<number, number>();
+    if (songBiasData) {
+      for (const bias of songBiasData) {
+        songBiasMap.set(bias.song_id as number, bias.bias_ms as number);
+      }
+    }
+    console.log(`Loaded ${songBiasMap.size} song bias entries`);
+
     const profile = buildPlayerProfile(userScores || [], chartAnalysis);
     console.log("Player profile:", JSON.stringify(profile, null, 2));
 
-    const systemPrompt = buildSystemPrompt(profile, chartAnalysis, userScores || []);
+    const systemPrompt = buildSystemPrompt(profile, chartAnalysis, userScores || [], songBiasMap);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
