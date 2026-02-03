@@ -1,0 +1,11 @@
+-- Fix chart_analysis columns to accept decimal values
+ALTER TABLE public.chart_analysis 
+  ALTER COLUMN stream TYPE NUMERIC USING stream::NUMERIC,
+  ALTER COLUMN voltage TYPE NUMERIC USING voltage::NUMERIC,
+  ALTER COLUMN air TYPE NUMERIC USING air::NUMERIC,
+  ALTER COLUMN chaos TYPE NUMERIC USING chaos::NUMERIC,
+  ALTER COLUMN peak_nps TYPE NUMERIC USING peak_nps::NUMERIC,
+  ALTER COLUMN mean_nps TYPE NUMERIC USING mean_nps::NUMERIC,
+  ALTER COLUMN median_nps TYPE NUMERIC USING median_nps::NUMERIC,
+  ALTER COLUMN min_nps TYPE NUMERIC USING min_nps::NUMERIC,
+  ALTER COLUMN stdev_nps TYPE NUMERIC USING stdev_nps::NUMERIC;
