@@ -22,7 +22,7 @@ export function SearchBar({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="flex-1 bg-transparent text-white text-[13px] font-normal leading-[21px] tracking-[0.3px] placeholder:text-white/60 focus:outline-none"
+          className="flex-1 bg-transparent text-white text-[16px] font-normal leading-[21px] tracking-[0.3px] placeholder:text-white/60 focus:outline-none"
         />
         {value ? (
           <button
