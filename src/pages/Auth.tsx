@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
-import { Music2 } from 'lucide-react';
+import ediLogo from '@/assets/edi-logo.svg';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -108,12 +108,8 @@ export default function Auth() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <div className="mb-8 flex flex-col items-center gap-2">
-        <div className="rounded-xl bg-primary/10 p-3 glow-primary">
-          <Music2 className="h-10 w-10 text-primary" />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight">Edi</h1>
-        <p className="text-sm text-muted-foreground">Track your dance game progress</p>
+      <div className="mb-8 flex items-center justify-center">
+        <img src={ediLogo} alt="Edi" className="h-20 w-auto" />
       </div>
 
       <Card className="w-full max-w-sm border-border bg-card shadow-card">
