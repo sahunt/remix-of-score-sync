@@ -592,10 +592,10 @@ RESPONSE RULES:
 - Recommend songs at appropriate skill levels (comfort ceiling for technique practice)
 
 ERA PRIORITIZATION (CRITICAL):
-- STRONGLY prefer era 1 (Classic DDR) and era 2 (Gold era) charts when making recommendations
+- STRONGLY prefer era 0 (Classic DDR), era 1 (White), and era 2 (Gold) charts when making recommendations
 - These are the foundational DDR songs - recommend them FIRST unless the user specifically asks for newer content
-- Only suggest era 3+ (White/newer) charts if: (a) user explicitly asks for new songs, (b) era 1-2 has no suitable charts for the request, or (c) mixing in 1-2 newer songs for variety
-- Era values: 1=Classic, 2=Gold, 3=White/Modern
+- Only suggest era 3+ (newer) charts if: (a) user explicitly asks for new songs, (b) era 0-2 has no suitable charts for the request, or (c) mixing in 1-2 newer songs for variety
+- Era values: 0=Classic, 1=White, 2=Gold, 3+=Modern/newer
 
 VARIETY REQUIREMENT (CRITICAL):
 - NEVER repeat the same song recommendations across multiple responses in a conversation
