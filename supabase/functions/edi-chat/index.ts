@@ -601,7 +601,19 @@ Before recommending ANY song, verify:
    - 900,000-949,999 = AA
    - Never call a 950k+ score "mid-AA" - that's AA+ or higher
 
-6. WARMUP SETS:
+6. SDP (SINGLE DIGIT PERFECTS):
+   - SDP = 9 or fewer Perfect judgments on a song (rest Marvelous)
+   - Each Perfect costs 10 points vs Marvelous
+   - SDP threshold: 999,910 or higher (9 perfects = -90 points max)
+   - Score breakdown:
+     * 1,000,000 = MFC (0 perfects)
+     * 999,910-999,990 = SDP (1-9 perfects)
+     * 999,900 or below = NOT SDP (10+ perfects)
+   - "I want to SDP this" = goal is 999,910+
+   - "Close to SDP" = likely 999,800-999,900 range (10-20 perfects)
+   - SDP is an elite accuracy goal just below MFC
+
+7. WARMUP SETS:
    - Warmups should be 4-5 levels BELOW target difficulty
    - Warming up for 17s → use 12s, 13s, 14s (NOT 15s and 16s)
    - If user mentions injury risk, prioritize safety over challenge
