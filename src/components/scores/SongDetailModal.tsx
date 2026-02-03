@@ -164,12 +164,13 @@ export function SongDetailModal({
 
         if (scoreError) throw scoreError;
 
-        // Create a map of scores by musicdb_id
+        // Create a map of scores by musicdb_id (deduplicate by keeping first/best)
         const scoreMap = new Map(
           (scoreData || []).map(s => [s.musicdb_id, s])
         );
 
-        // Build complete chart list
+        // Build complete chart list - deduplicate by difficulty_name
+        const seenDifficulties = new Set<string>();
         const mergedCharts: ChartWithScore[] = chartData
           .map(chart => {
             const userScore = scoreMap.get(chart.id);
@@ -183,6 +184,12 @@ export function SongDetailModal({
               halo: userScore?.halo ?? null,
               source_type: userScore?.source_type ?? null,
             };
+          })
+          .filter(chart => {
+            const key = chart.difficulty_name.toUpperCase();
+            if (seenDifficulties.has(key)) return false;
+            seenDifficulties.add(key);
+            return true;
           })
           .sort((a, b) => {
             const aIndex = DIFFICULTY_ORDER.indexOf(a.difficulty_name.toUpperCase());

@@ -57,6 +57,8 @@ export function useMusicDb() {
           .eq('playstyle', 'SP')
           .eq('deleted', false)
           .not('difficulty_level', 'is', null)
+          // CRITICAL: Order by id for deterministic pagination - prevents duplicates across pages
+          .order('id', { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
 
         if (error) throw error;
@@ -71,19 +73,25 @@ export function useMusicDb() {
       }
 
       // Build song_id -> charts map for modal display
+      // Deduplicate by difficulty_name to ensure only one entry per difficulty per song
       const bySongId = new Map<number, CachedChart[]>();
       for (const chart of allCharts) {
         if (chart.difficulty_level === null || chart.difficulty_name === null) continue;
         
+        const normalizedDifficulty = chart.difficulty_name.toUpperCase();
         const cachedChart: CachedChart = {
           id: chart.id,
-          difficulty_name: chart.difficulty_name.toUpperCase(),
+          difficulty_name: normalizedDifficulty,
           difficulty_level: chart.difficulty_level,
         };
         
         const existing = bySongId.get(chart.song_id);
         if (existing) {
-          existing.push(cachedChart);
+          // Check for duplicate difficulty_name before adding
+          const hasDuplicate = existing.some(c => c.difficulty_name === normalizedDifficulty);
+          if (!hasDuplicate) {
+            existing.push(cachedChart);
+          }
         } else {
           bySongId.set(chart.song_id, [cachedChart]);
         }
