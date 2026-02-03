@@ -161,10 +161,10 @@ export function ChatMessage({
                       <strong className="font-semibold text-primary">{children}</strong>
                     ),
                     ul: ({ children }) => (
-                      <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>
+                      <ul className="list-none mb-2 space-y-1">{children}</ul>
                     ),
                     ol: ({ children }) => (
-                      <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>
+                      <ol className="list-none mb-2 space-y-1">{children}</ol>
                     ),
                     li: ({ children }) => <li className="text-sm">{children}</li>,
                     h1: ({ children }) => (
