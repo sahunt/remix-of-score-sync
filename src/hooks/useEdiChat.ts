@@ -62,15 +62,22 @@ export function useEdiChat() {
       content,
       timestamp: new Date(),
     };
+    setMessages(prev => [...prev, userMessage]);
     
-    // Create assistant message placeholder immediately (shows loading state)
+    // Create assistant message placeholder after a brief delay
     const assistantId = crypto.randomUUID();
-    setMessages(prev => [...prev, userMessage, {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-    }]);
+    setTimeout(() => {
+      setMessages(prev => {
+        // Only add if not already present (in case response came back fast)
+        if (prev.some(m => m.id === assistantId)) return prev;
+        return [...prev, {
+          id: assistantId,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(),
+        }];
+      });
+    }, 500);
 
     // Prepare messages for API (exclude IDs and timestamps)
     const apiMessages = [...messages, userMessage].map(m => ({
