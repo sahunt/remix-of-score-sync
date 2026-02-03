@@ -48,6 +48,10 @@ export default function Profile() {
   // Delete songs state
   const [deletingSongs, setDeletingSongs] = useState(false);
 
+  // Check if user is OAuth (Google) user - they can't change password
+  const isOAuthUser = user?.app_metadata?.provider === 'google' || 
+    user?.identities?.some(identity => identity.provider === 'google');
+
   // Initialize display name when loaded
   useState(() => {
     if (username && !displayName) {
@@ -209,37 +213,39 @@ export default function Profile() {
           </div>
         </ProfileSection>
 
-        {/* Change Password Section */}
-        <ProfileSection title="Change Password">
-          <div className="space-y-3">
-            <Input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Current password"
-            />
-            <Input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="New password"
-            />
-            <Input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password"
-              error={passwordError}
-            />
-            <Button
-              onClick={handleChangePassword}
-              disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}
-              className="w-full"
-            >
-              {savingPassword ? 'Updating...' : 'Update Password'}
-            </Button>
-          </div>
-        </ProfileSection>
+        {/* Change Password Section - only for email/password users */}
+        {!isOAuthUser && (
+          <ProfileSection title="Change Password">
+            <div className="space-y-3">
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Current password"
+              />
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="New password"
+              />
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                error={passwordError}
+              />
+              <Button
+                onClick={handleChangePassword}
+                disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}
+                className="w-full"
+              >
+                {savingPassword ? 'Updating...' : 'Update Password'}
+              </Button>
+            </div>
+          </ProfileSection>
+        )}
 
         {/* Danger Zone Section */}
         <ProfileSection title="Danger Zone" variant="danger">
