@@ -180,7 +180,7 @@ export default function Edi() {
   const level12PlusCount = scores.filter(s => s.musicdb?.difficulty_level && s.musicdb.difficulty_level >= 12).length;
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-background">
+    <div className="flex flex-col h-[100dvh] bg-background w-full max-w-[720px] mx-auto">
       {/* Header */}
       <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <DropdownMenu>
