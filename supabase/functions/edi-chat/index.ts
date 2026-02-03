@@ -589,7 +589,20 @@ RESPONSE RULES:
 - When recommending songs, output EXACTLY 3-5 songs using the [[SONG:...]] format
 - COPY the [[SONG:...]] markers EXACTLY as shown above
 - For goal requests (PFC, MFC, etc.), filter out songs that already meet that goal
-- Recommend songs at appropriate skill levels (comfort ceiling for technique practice)`;
+- Recommend songs at appropriate skill levels (comfort ceiling for technique practice)
+
+ERA PRIORITIZATION (CRITICAL):
+- STRONGLY prefer era 1 (Classic DDR) and era 2 (Gold era) charts when making recommendations
+- These are the foundational DDR songs - recommend them FIRST unless the user specifically asks for newer content
+- Only suggest era 3+ (White/newer) charts if: (a) user explicitly asks for new songs, (b) era 1-2 has no suitable charts for the request, or (c) mixing in 1-2 newer songs for variety
+- Era values: 1=Classic, 2=Gold, 3=White/Modern
+
+VARIETY REQUIREMENT (CRITICAL):
+- NEVER repeat the same song recommendations across multiple responses in a conversation
+- Each recommendation set should include DIFFERENT songs than previous responses
+- Draw from the ENTIRE catalog - there are ${totalCharts} SP charts available
+- If recommending for a specific skill (crossovers, footswitches, etc.), pick from multiple different songs with that pattern
+- Surprise the player with lesser-known songs they may have overlooked`;
 }
 
 serve(async (req) => {
