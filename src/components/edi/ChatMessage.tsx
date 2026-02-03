@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import type { Message } from '@/hooks/useEdiChat';
 import { EdiSongCard } from './EdiSongCard';
 import { FeedbackButtons } from './FeedbackButtons';
+import { FollowUpChips } from './FollowUpChips';
 
 interface ParsedSong {
   song_id: number;
@@ -24,6 +25,9 @@ interface ChatMessageProps {
   onSongClick?: (song: ParsedSong) => void;
   userPrompt?: string;
   conversationContext?: { role: string; content: string }[];
+  onFollowUpSelect?: (suggestion: string) => void;
+  isLastMessage?: boolean;
+  isLoading?: boolean;
 }
 
 type ParsedPart = { type: 'text'; value: string } | { type: 'song'; value: ParsedSong };
@@ -71,6 +75,27 @@ function parseMessageContent(content: string): ParsedPart[] {
 }
 
 /**
+ * Parse [[FOLLOWUP:...]] markers from content
+ */
+function parseFollowUps(content: string): { cleanContent: string; followUps: string[] } {
+  const followUps: string[] = [];
+  const regex = /\[\[FOLLOWUP:(.*?)\]\]/g;
+  let match;
+
+  while ((match = regex.exec(content)) !== null) {
+    const suggestion = match[1].trim();
+    if (suggestion) {
+      followUps.push(suggestion);
+    }
+  }
+
+  // Remove follow-up markers from content
+  const cleanContent = content.replace(/\[\[FOLLOWUP:.*?\]\]/g, '').trim();
+
+  return { cleanContent, followUps };
+}
+
+/**
  * Check if content contains incomplete song markers (for streaming)
  */
 function hasIncompleteMarker(content: string): boolean {
@@ -86,6 +111,9 @@ export function ChatMessage({
   onSongClick,
   userPrompt,
   conversationContext,
+  onFollowUpSelect,
+  isLastMessage,
+  isLoading,
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
@@ -102,16 +130,17 @@ export function ChatMessage({
     );
   }
 
-  // For assistant messages, parse for song cards
-  const content = message.content;
+  // For assistant messages, parse for song cards and follow-ups
+  const rawContent = message.content;
+  const { cleanContent: contentWithoutFollowups, followUps } = parseFollowUps(rawContent);
   
   // During streaming with incomplete marker, show raw content
-  if (isStreaming && hasIncompleteMarker(content)) {
+  if (isStreaming && hasIncompleteMarker(rawContent)) {
     return (
       <div className="flex w-full justify-start px-4">
         <div className="max-w-[85%] rounded-2xl px-4 py-3 bg-secondary text-foreground rounded-bl-md">
           <div className="prose prose-sm prose-invert max-w-none">
-            <p className="mb-0 text-sm">{content}</p>
+            <p className="mb-0 text-sm">{rawContent}</p>
             <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
           </div>
         </div>
@@ -134,8 +163,9 @@ export function ChatMessage({
     );
   }
 
-  const parsedContent = parseMessageContent(content);
+  const parsedContent = parseMessageContent(contentWithoutFollowups);
   const hasSongs = parsedContent.some(p => p.type === 'song');
+  const showFollowUps = isLastMessage && !isStreaming && followUps.length > 0 && onFollowUpSelect;
 
   return (
     <div className="flex w-full justify-start px-4">
@@ -206,7 +236,7 @@ export function ChatMessage({
         })}
         
         {/* Streaming cursor */}
-        {isStreaming && content && !hasIncompleteMarker(content) && (
+        {isStreaming && rawContent && !hasIncompleteMarker(rawContent) && (
           <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
         )}
 
@@ -216,6 +246,15 @@ export function ChatMessage({
             messageContent={message.content}
             userPrompt={userPrompt}
             conversationContext={conversationContext}
+          />
+        )}
+
+        {/* Follow-up suggestions for last assistant message */}
+        {showFollowUps && (
+          <FollowUpChips
+            suggestions={followUps}
+            onSelect={onFollowUpSelect}
+            disabled={isLoading}
           />
         )}
       </div>

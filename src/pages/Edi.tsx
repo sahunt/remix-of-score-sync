@@ -280,15 +280,20 @@ export default function Edi() {
               .slice(0, index + 1)
               .map(m => ({ role: m.role, content: m.content }));
 
+            const isLastMessage = index === messages.length - 1;
+
             return (
               <ChatMessage
                 key={message.id}
                 message={message}
-                isStreaming={isLoading && index === messages.length - 1 && message.role === 'assistant'}
+                isStreaming={isLoading && isLastMessage && message.role === 'assistant'}
                 getUserScore={getUserScore}
                 onSongClick={handleSongClick}
                 userPrompt={userPrompt}
                 conversationContext={conversationContext}
+                onFollowUpSelect={sendMessage}
+                isLastMessage={isLastMessage}
+                isLoading={isLoading}
               />
             );
           })}

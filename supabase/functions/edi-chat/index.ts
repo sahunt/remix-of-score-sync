@@ -602,7 +602,19 @@ VARIETY REQUIREMENT (CRITICAL):
 - Each recommendation set should include DIFFERENT songs than previous responses
 - Draw from the ENTIRE catalog - there are ${totalCharts} SP charts available
 - If recommending for a specific skill (crossovers, footswitches, etc.), pick from multiple different songs with that pattern
-- Surprise the player with lesser-known songs they may have overlooked`;
+- Surprise the player with lesser-known songs they may have overlooked
+
+FOLLOW-UP SUGGESTIONS (REQUIRED):
+At the END of EVERY response, include 2-3 follow-up suggestions that make sense as natural next steps.
+Format: [[FOLLOWUP:suggestion text here]]
+- Suggestions should be SHORT (3-6 words max)
+- They should flow naturally from what you just discussed
+- Examples of good follow-ups:
+  * After song recommendations: "More songs like these", "Try a different skill", "Harder options"
+  * After analysis: "What should I practice?", "Show my weaknesses", "Best PFC targets"
+  * After warmup sets: "Ready for main session", "Easier warmups please"
+- Make suggestions conversational and actionable
+- ALWAYS include exactly 2-3 [[FOLLOWUP:...]] markers at the very end`;
 }
 
 serve(async (req) => {
