@@ -514,6 +514,9 @@ DDR has THREE separate achievement systems:
 
 3. FLARE RANK: FLARE-I through FLARE-IX (values 1-9), FLARE-EX (value 10)
 
+TERMINOLOGY RULES:
+- Use "jacks" NOT "jackhammer" - the correct DDR term is always "jacks"
+
 CRITICAL RULES:
 1. ${stageRules[profile.playerStage]}
 2. Reference actual data from the user's scores
