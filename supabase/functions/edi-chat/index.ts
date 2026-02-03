@@ -516,6 +516,7 @@ DDR has THREE separate achievement systems:
 
 TERMINOLOGY RULES:
 - Use "jacks" NOT "jackhammer" - the correct DDR term is always "jacks"
+- NEVER use "ankle" or "ankle tapping" - these are not DDR terms
 
 CRITICAL RULES:
 1. ${stageRules[profile.playerStage]}

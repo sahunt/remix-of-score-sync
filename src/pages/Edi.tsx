@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { parseFollowUps } from '@/lib/parseFollowUps';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -291,12 +292,38 @@ export default function Edi() {
                 onSongClick={handleSongClick}
                 userPrompt={userPrompt}
                 conversationContext={conversationContext}
-                onFollowUpSelect={sendMessage}
-                isLastMessage={isLastMessage}
-                isLoading={isLoading}
               />
             );
           })}
+
+          {/* Follow-up suggestions - rendered outside messages with QuickPrompts style */}
+          {(() => {
+            const lastMessage = messages[messages.length - 1];
+            if (!lastMessage || lastMessage.role !== 'assistant' || isLoading) return null;
+            
+            const { followUps } = parseFollowUps(lastMessage.content);
+            if (followUps.length === 0) return null;
+
+            return (
+              <div className="flex flex-wrap gap-2 px-4 py-3">
+                {followUps.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => sendMessage(suggestion)}
+                    disabled={isLoading}
+                    className={cn(
+                      'px-3 py-2 rounded-full text-sm font-medium transition-all',
+                      'bg-secondary text-foreground',
+                      'hover:bg-secondary/80 active:scale-95',
+                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Error message */}
           {error && (
