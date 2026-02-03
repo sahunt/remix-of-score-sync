@@ -308,7 +308,7 @@ export default function Edi() {
       </div>
 
       {/* Input - fixed at bottom */}
-      <div className="flex-shrink-0 border-t border-border bg-background pb-[max(env(safe-area-inset-bottom),16px)]">
+      <div className="flex-shrink-0 bg-background pb-[max(env(safe-area-inset-bottom),16px)]">
         <ChatInput
           onSend={sendMessage}
           disabled={isLoading || scoresLoading || !hasEnoughData || !hasChartData}

@@ -8,6 +8,7 @@ import { LastUploadProvider } from "@/hooks/useLastUpload";
 import { TwelveMSModeProvider } from "@/hooks/use12MSMode";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
+import { ScoresProvider } from "@/contexts/ScoresContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Home from "./pages/Home";
@@ -56,8 +57,17 @@ const App = () => (
                   <Route path="/upload" element={<Upload />} />
                   <Route path="/goal/:goalId" element={<GoalDetail />} />
                   <Route path="/profile" element={<Profile />} />
-                  <Route path="/edi" element={<Edi />} />
                 </Route>
+                <Route
+                  path="/edi"
+                  element={
+                    <ProtectedRoute>
+                      <ScoresProvider>
+                        <Edi />
+                      </ScoresProvider>
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </TwelveMSModeProvider>
