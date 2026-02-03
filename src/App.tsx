@@ -17,6 +17,7 @@ import GoalDetail from "./pages/GoalDetail";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import OAuthFallback from "./pages/OAuthFallback";
+import Edi from "./pages/Edi";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,6 +56,7 @@ const App = () => (
                   <Route path="/upload" element={<Upload />} />
                   <Route path="/goal/:goalId" element={<GoalDetail />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/edi" element={<Edi />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

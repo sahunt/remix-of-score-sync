@@ -14,6 +14,159 @@ export type Database = {
   }
   public: {
     Tables: {
+      chart_analysis: {
+        Row: {
+          air: number | null
+          artist: string | null
+          bpm: number | null
+          brackets: number | null
+          chaos: number | null
+          chart_length: number | null
+          created_at: string | null
+          crossovers: number | null
+          difficulty_level: number
+          difficulty_name: string
+          doublesteps: number | null
+          down_footswitches: number | null
+          eamuse_id: string | null
+          footswitches: number | null
+          freeze_count: number | null
+          full_crossovers: number | null
+          half_crossovers: number | null
+          holds: number | null
+          id: string
+          jacks: number | null
+          jumps: number | null
+          mean_nps: number | null
+          median_nps: number | null
+          min_nps: number | null
+          music_length: number | null
+          notes: number | null
+          peak_nps: number | null
+          rolls: number | null
+          sideswitches: number | null
+          song_id: number
+          stdev_nps: number | null
+          stop_count: number | null
+          stream: number | null
+          taps_and_holds: number | null
+          title: string | null
+          up_footswitches: number | null
+          voltage: number | null
+        }
+        Insert: {
+          air?: number | null
+          artist?: string | null
+          bpm?: number | null
+          brackets?: number | null
+          chaos?: number | null
+          chart_length?: number | null
+          created_at?: string | null
+          crossovers?: number | null
+          difficulty_level: number
+          difficulty_name: string
+          doublesteps?: number | null
+          down_footswitches?: number | null
+          eamuse_id?: string | null
+          footswitches?: number | null
+          freeze_count?: number | null
+          full_crossovers?: number | null
+          half_crossovers?: number | null
+          holds?: number | null
+          id?: string
+          jacks?: number | null
+          jumps?: number | null
+          mean_nps?: number | null
+          median_nps?: number | null
+          min_nps?: number | null
+          music_length?: number | null
+          notes?: number | null
+          peak_nps?: number | null
+          rolls?: number | null
+          sideswitches?: number | null
+          song_id: number
+          stdev_nps?: number | null
+          stop_count?: number | null
+          stream?: number | null
+          taps_and_holds?: number | null
+          title?: string | null
+          up_footswitches?: number | null
+          voltage?: number | null
+        }
+        Update: {
+          air?: number | null
+          artist?: string | null
+          bpm?: number | null
+          brackets?: number | null
+          chaos?: number | null
+          chart_length?: number | null
+          created_at?: string | null
+          crossovers?: number | null
+          difficulty_level?: number
+          difficulty_name?: string
+          doublesteps?: number | null
+          down_footswitches?: number | null
+          eamuse_id?: string | null
+          footswitches?: number | null
+          freeze_count?: number | null
+          full_crossovers?: number | null
+          half_crossovers?: number | null
+          holds?: number | null
+          id?: string
+          jacks?: number | null
+          jumps?: number | null
+          mean_nps?: number | null
+          median_nps?: number | null
+          min_nps?: number | null
+          music_length?: number | null
+          notes?: number | null
+          peak_nps?: number | null
+          rolls?: number | null
+          sideswitches?: number | null
+          song_id?: number
+          stdev_nps?: number | null
+          stop_count?: number | null
+          stream?: number | null
+          taps_and_holds?: number | null
+          title?: string | null
+          up_footswitches?: number | null
+          voltage?: number | null
+        }
+        Relationships: []
+      }
+      edi_feedback: {
+        Row: {
+          conversation_context: Json | null
+          created_at: string | null
+          expected_response: string | null
+          id: string
+          message_content: string
+          rating: string
+          user_id: string
+          user_prompt: string
+        }
+        Insert: {
+          conversation_context?: Json | null
+          created_at?: string | null
+          expected_response?: string | null
+          id?: string
+          message_content: string
+          rating: string
+          user_id: string
+          user_prompt: string
+        }
+        Update: {
+          conversation_context?: Json | null
+          created_at?: string | null
+          expected_response?: string | null
+          id?: string
+          message_content?: string
+          rating?: string
+          user_id?: string
+          user_prompt?: string
+        }
+        Relationships: []
+      }
       musicdb: {
         Row: {
           artist: string | null

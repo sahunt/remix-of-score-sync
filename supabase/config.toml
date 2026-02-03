@@ -1,1 +1,7 @@
 project_id = "uswkpspuifeslmfxgvpp"
+
+[functions.edi-chat]
+verify_jwt = false
+
+[functions.import-chart-analysis]
+verify_jwt = false
