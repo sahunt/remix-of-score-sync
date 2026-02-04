@@ -90,7 +90,7 @@ export function OffsetEditPopover({
   };
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover open={open} onOpenChange={onOpenChange} modal={false}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-56 p-3 z-[100]" align="center" sideOffset={8}>
         <div className="space-y-3">
