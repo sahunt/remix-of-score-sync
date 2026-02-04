@@ -1,31 +1,49 @@
 
-# Plan: Fix Edi's Recommendation Variety ✅ IMPLEMENTED
+# Fix SDP Definition and Recommendation Logic
 
 ## Problem
-Charts are sorted deterministically (by difficulty, then title) so the AI sees the same ordered list every request. This causes repetitive recommendations.
+Edi is recommending songs without PFCs as SDP targets. This is incorrect because:
+- **SDP is a specific type of PFC** - it requires zero Greats/Goods/Misses
+- A song without a PFC cannot possibly be an SDP target
+- Good SDP targets are songs where the user already has a PFC with 10-20 perfects (score 999,800-999,900)
 
-## Solution: Two-Pronged Approach
+## Solution
+Update the SDP section in `supabase/functions/edi-chat/index.ts` to clarify:
 
-### 1. ✅ Shuffle Charts Within Each Difficulty Level
-Charts within each difficulty level are now randomized using Fisher-Yates shuffle before building the system prompt.
+1. **SDP requires PFC first** - Make explicit that SDP is a subset of PFC
+2. **Valid SDP targets** - Only songs with existing PFC and score 999,800-999,900
+3. **Invalid SDP targets** - Any song without a PFC (GFC, FC, or lower)
 
-### 2. ✅ Add Random Session Seed
-A random "SESSION VARIETY SEED" (1-1000) is now included in every request to encourage the AI to vary starting points.
+## Changes
 
----
+### File: `supabase/functions/edi-chat/index.ts`
 
-## Changes Made
+Update lines 604-614 (SDP section) to:
 
-**File: `supabase/functions/edi-chat/index.ts`**
+```text
+6. SDP (SINGLE DIGIT PERFECTS):
+   CRITICAL: SDP is a TYPE OF PFC - you CANNOT have an SDP without a PFC!
+   - SDP = PFC with 9 or fewer Perfect judgments (score 999,910+)
+   - A song without a PFC (GFC, FC, or lower) can NEVER be an SDP target
+   
+   Score thresholds (PFC required for all):
+   * 1,000,000 = MFC (0 perfects)
+   * 999,910-999,990 = SDP (1-9 perfects)  
+   * 999,800-999,900 = CLOSE to SDP (10-20 perfects) ← Good SDP targets
+   * 999,700 or below with PFC = far from SDP
+   
+   RECOMMENDING SDP TARGETS:
+   - ONLY recommend songs where halo = 'pfc' or 'mfc'
+   - Best targets: PFC with score 999,800-999,900 (10-20 perfects to improve)
+   - Songs with GFC/FC/lower are NOT SDP targets - recommend PFC goal instead
+   
+   User phrases:
+   - "I want to SDP this" = goal is 999,910+ (must already have PFC)
+   - "Close to SDP" = has PFC, score 999,800-999,900
+   - "SDP targets" = songs with PFC at 999,800-999,900
+```
 
-- Added `shuffleArray<T>()` helper function (Fisher-Yates shuffle)
-- Modified chart sorting to group by max difficulty level, then shuffle within each group
-- Added SESSION VARIETY SEED to the VARIETY REQUIREMENT section of the prompt
-- Added instruction that "chart list order is randomized each session"
-
----
-
-## Expected Outcome
-- Each conversation surfaces different songs from the catalog
-- The AI explores beyond the alphabetically-first songs at each level
-- Recommendations feel fresh and varied
+## Technical Details
+- The change updates the system prompt instructions only
+- No calculation logic changes needed - this is about teaching Edi when to recommend SDP targets
+- The key insight: filter by `halo = 'pfc' or 'mfc'` AND `score between 999800-999900` for SDP recommendations
