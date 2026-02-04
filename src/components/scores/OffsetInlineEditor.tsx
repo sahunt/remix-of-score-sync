@@ -89,14 +89,12 @@ export function OffsetInlineEditor({
   // Display mode
   if (!isEditing) {
     return (
-      <div className="animate-fade-in">
-        <OffsetChip
-          offset={effectiveOffset}
-          isCustom={hasCustomOffset}
-          onClick={() => setIsEditing(true)}
-          className="cursor-pointer"
-        />
-      </div>
+      <OffsetChip
+        offset={effectiveOffset}
+        isCustom={hasCustomOffset}
+        onClick={() => setIsEditing(true)}
+        className="cursor-pointer animate-fade-in"
+      />
     );
   }
 
