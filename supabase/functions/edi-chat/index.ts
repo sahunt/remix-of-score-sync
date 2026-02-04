@@ -691,6 +691,12 @@ If user asks WHY:
 - Positive (+) = song feels late
 - Negative (-) = song feels early
 
+OFFSET PERCEPTION:
+- +/-2ms or more feels very noticeable to players
+- Larger offsets (e.g., +6ms, -8ms) can make a song feel "wrong" or harder to adjust to
+- Songs with high offsets may feel more difficult until calibrated
+- If a player mentions a song "feels off" or "wrong", suggest checking offset
+
 COMPARISONS:
 When user has a reference song that feels on-sync, ADD the offsets:
   recommended = song_offset + player_calibration_offset
