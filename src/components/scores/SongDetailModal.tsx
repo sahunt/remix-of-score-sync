@@ -257,15 +257,9 @@ export function SongDetailModal({
             {songName}
           </p>
 
-          {/* Era Chip - centered below title, sized to match halo chips */}
-          {era !== null && era !== undefined && (
-            <div className="flex justify-center mt-2">
-              <EraChip era={era} className="h-5" />
-            </div>
-          )}
-
-          {/* Offset Chip */}
-          <div className="flex justify-center mt-2">
+          {/* Era + Offset Chips - inline row */}
+          <div className="flex items-center justify-center gap-2 mt-2">
+            {/* Offset Chip (left) */}
             <OffsetEditPopover
               effectiveOffset={effectiveOffset}
               globalOffset={globalOffset}
@@ -278,9 +272,13 @@ export function SongDetailModal({
               <OffsetChip
                 offset={effectiveOffset}
                 isCustom={hasCustomOffset}
-                onClick={() => setOffsetPopoverOpen(true)}
               />
             </OffsetEditPopover>
+            
+            {/* Era Chip (right) */}
+            {era !== null && era !== undefined && (
+              <EraChip era={era} className="h-5" />
+            )}
           </div>
         </div>
 
