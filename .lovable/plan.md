@@ -1,132 +1,108 @@
 
-# Add Offset Chip to Song Detail Modal
+# Inline Offset Editor (Replacing Popover)
 
 ## Overview
-Add an interactive offset chip to the Song Detail Modal that displays the song's judgement offset and allows users to set a custom offset. The chip follows the same conversion logic as EDI and uses the existing chip styling patterns.
+Replace the problematic popover with an inline edit mode that transforms the offset chip area. When tapped, the chip smoothly transitions into an input field with save/cancel buttons, then animates back when editing is complete.
 
-## Offset Conversion Logic (Matching EDI)
-
-The offset conversion follows the exact same rules defined in the `edi-chat` edge function:
+## User Flow
 
 ```text
-Database: song_bias.bias_ms (raw timing value)
-User-facing offset: Math.round(-bias_ms)
-
-Examples:
-- bias_ms = 5.81  → User sees "-6ms"
-- bias_ms = -3.08 → User sees "+3ms"
-- bias_ms = 0.73  → User sees "-1ms"
+DISPLAY MODE                    EDIT MODE
+┌─────────────┐                ┌──────────────────────────┐
+│   -6ms      │  ──tap──►      │ [___] ms  ✓  ✗  ↺       │
+└─────────────┘                └──────────────────────────┘
+                   ◄──save/cancel──
 ```
 
-Display format: `+Xms` or `-Xms` (always show sign for clarity)
+## Visual Design
 
-## Data Flow
+**Display Mode:**
+- Current OffsetChip (unchanged)
+- Shows offset value or "Add offset"
 
-```text
-                   ┌─────────────────┐
-                   │   song_bias     │
-                   │ (global offset) │
-                   └────────┬────────┘
-                            │
-                            ▼
-┌─────────────────┐    ┌─────────────────────────┐
-│user_song_offsets│───▶│ Display Logic:          │
-│ (custom offset) │    │ custom > global > none  │
-└─────────────────┘    └─────────────────────────┘
-```
+**Edit Mode:**
+- Compact horizontal layout within the same space
+- Number input (small, ~40px wide)
+- "ms" label
+- Save button (checkmark icon)
+- Cancel button (X icon)  
+- Reset button (only if custom offset exists)
 
-- **Has global, no custom**: Show global offset with chip
-- **Has custom**: Show custom offset (visually distinct - filled style)
-- **No data at all**: Show "Add offset" as tappable chip
+## Animation Strategy
+
+Use CSS transitions for smooth state changes:
+- `animate-fade-in` / `animate-fade-out` for content swap
+- Scale transition on the container to accommodate width change
+- Duration: 200ms for snappy feel
 
 ## Technical Changes
 
-### 1. Create Offset Utility Functions
-**New file: `src/lib/offsetUtils.ts`**
+### 1. Create Inline Offset Editor Component
+**New file: `src/components/scores/OffsetInlineEditor.tsx`**
 
-Shared utilities for offset conversion (single source of truth):
-- `biasToUserOffset(biasMs: number)`: Convert DB bias_ms to user-facing integer
-- `userOffsetToBias(userOffset: number)`: Convert user input back to bias_ms
-- `formatOffset(offset: number | null)`: Format as "+3ms" or "-6ms"
+A single component that handles both display and edit modes:
+- Internal state: `isEditing` boolean
+- Display mode: renders OffsetChip
+- Edit mode: renders input + action buttons
+- Handles save/clear/cancel logic internally
+- Animates between states
 
-### 2. Create Offset Chip Component
-**New file: `src/components/ui/OffsetChip.tsx`**
-
-A small, tappable chip similar to EraChip/HaloChip:
-- Displays offset value (e.g., "-6ms") or "Add offset"
-- Outline variant when showing global offset
-- Filled variant when showing custom offset
-- onClick handler to open edit modal
-
-### 3. Create Offset Edit Modal/Popover
-**New file: `src/components/scores/OffsetEditPopover.tsx`**
-
-A small popover that appears when tapping the chip:
-- Shows current offset value (global or custom)
-- Input field for custom offset (-99 to +99 range)
-- Save button to store custom offset
-- Clear/Reset button to delete custom and revert to global
-- Cancel to close without changes
-
-### 4. Create Offset Data Hook
-**New file: `src/hooks/useOffset.ts`**
-
-Hook to manage offset data:
-- Fetch song_bias for given song_id
-- Fetch user_song_offsets for current user
-- Combine to determine effective offset
-- CRUD operations for user custom offsets
-
-### 5. Update Song Detail Modal
-**File: `src/components/scores/SongDetailModal.tsx`**
-
-Add the OffsetChip below the Era chip in the header section:
-- Pass song_id to useOffset hook
-- Render OffsetChip with onClick to open OffsetEditPopover
-- Handle save/clear callbacks
-
-## Component Placement in Modal
-
-```text
-┌────────────────────────────┐
-│        [Jacket Art]        │
-│          ARTIST            │
-│        Song Title          │
-│        [Era Chip]          │
-│       [Offset Chip] ← NEW  │
-├────────────────────────────┤
-│ ■ 18  │ 999,450  AAA  PFC  │
-│ ■ 16  │ 998,200  AA+  GFC  │
-│ ■ 14  │ No play            │
-├────────────────────────────┤
-│         [ Close ]          │
-└────────────────────────────┘
+Props:
+```typescript
+interface OffsetInlineEditorProps {
+  effectiveOffset: number | null;
+  globalOffset: number | null;
+  hasCustomOffset: boolean;
+  onSave: (offset: number) => Promise<void>;
+  onClear: () => Promise<void>;
+}
 ```
 
-## Chip Visual States
+### 2. Update Song Detail Modal
+**File: `src/components/scores/SongDetailModal.tsx`**
 
-| State | Appearance | Label |
-|-------|------------|-------|
-| Global offset only | Outline chip, muted | `-6ms` |
-| Custom offset set | Filled chip, primary | `+3ms` |
-| No offset data | Outline chip, dashed | `Add offset` |
+- Remove OffsetEditPopover import and usage
+- Remove `offsetPopoverOpen` state
+- Replace with new OffsetInlineEditor component
+- Pass same props from useOffset hook
+
+### 3. Delete OffsetEditPopover
+**File: `src/components/scores/OffsetEditPopover.tsx`**
+
+- Remove this file entirely since it's no longer needed
+
+## Component Structure (OffsetInlineEditor)
+
+```tsx
+// Display mode
+<div className="animate-fade-in">
+  <OffsetChip onClick={() => setEditing(true)} />
+</div>
+
+// Edit mode  
+<div className="animate-fade-in flex items-center gap-1.5">
+  <Input type="number" className="w-12 h-6 text-xs" />
+  <span className="text-xs text-muted-foreground">ms</span>
+  <Button size="icon" variant="ghost" onClick={save}>✓</Button>
+  <Button size="icon" variant="ghost" onClick={cancel}>✕</Button>
+  {hasCustomOffset && (
+    <Button size="icon" variant="ghost" onClick={reset}>↺</Button>
+  )}
+</div>
+```
+
+## Edit Mode Layout Details
+
+- Input: 48px wide, number type, -99 to +99 range
+- Buttons: 24x24px icon buttons (Check, X, RotateCcw icons from lucide)
+- Total width: ~140px in edit mode vs ~50px in display mode
+- Container uses `min-w-fit` to accommodate both states
 
 ## Files to Create
-
-1. `src/lib/offsetUtils.ts` - Shared conversion functions
-2. `src/components/ui/OffsetChip.tsx` - Display chip
-3. `src/components/scores/OffsetEditPopover.tsx` - Edit UI
-4. `src/hooks/useOffset.ts` - Data fetching and mutations
+1. `src/components/scores/OffsetInlineEditor.tsx`
 
 ## Files to Modify
+1. `src/components/scores/SongDetailModal.tsx` - Use new inline editor
 
-1. `src/components/scores/SongDetailModal.tsx` - Add chip integration
-
-## Implementation Order
-
-1. Create offset utility functions (pure logic, testable)
-2. Create useOffset hook (data layer)
-3. Create OffsetChip component (display)
-4. Create OffsetEditPopover (edit UI)
-5. Integrate into SongDetailModal
-6. Test end-to-end flow
+## Files to Delete
+1. `src/components/scores/OffsetEditPopover.tsx` - No longer needed
