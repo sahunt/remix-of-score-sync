@@ -256,7 +256,7 @@ export function SongDetailModal({
           </p>
 
           {/* Era + Offset Chips - inline row */}
-          <div className="flex items-center justify-center gap-2 mt-2">
+          <div className="flex items-start justify-center gap-2 mt-2">
             {/* Offset Inline Editor (left) */}
             <OffsetInlineEditor
               effectiveOffset={effectiveOffset}
