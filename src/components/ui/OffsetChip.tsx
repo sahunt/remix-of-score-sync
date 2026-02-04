@@ -28,7 +28,7 @@ export function OffsetChip({
 }: OffsetChipProps) {
   const hasOffset = offset !== null;
   const label = hasOffset ? formatOffset(offset) : 'Add offset';
-  return <button type="button" onClick={onClick} className={cn("inline-flex items-center justify-center gap-1 px-2 text-[10px] font-semibold transition-colors min-h-[20px] py-px rounded-sm",
+  return <button type="button" onClick={onClick} className={cn("inline-flex items-center justify-center gap-1 px-2 text-[10px] font-semibold transition-colors min-h-[20px] rounded-sm py-0",
   // Variant styling
   hasOffset ? isCustom ? 'bg-primary text-primary-foreground' // Custom: filled
   : 'bg-transparent border border-muted-foreground/40 text-muted-foreground' // Global: outline
