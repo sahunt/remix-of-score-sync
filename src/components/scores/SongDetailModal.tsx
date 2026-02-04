@@ -5,8 +5,7 @@ import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
 import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
 import { SourceIcon } from '@/components/ui/SourceIcon';
 import { EraChip } from '@/components/ui/EraChip';
-import { OffsetChip } from '@/components/ui/OffsetChip';
-import { OffsetEditPopover } from '@/components/scores/OffsetEditPopover';
+import { OffsetInlineEditor } from '@/components/scores/OffsetInlineEditor';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useAuth } from '@/hooks/useAuth';
 import { useOffset } from '@/hooks/useOffset';
@@ -89,7 +88,6 @@ export function SongDetailModal({
   const { transformHalo } = use12MSMode();
   const [charts, setCharts] = useState<ChartWithScore[]>([]);
   const [loading, setLoading] = useState(false);
-  const [offsetPopoverOpen, setOffsetPopoverOpen] = useState(false);
 
   // Offset data
   const {
@@ -259,21 +257,14 @@ export function SongDetailModal({
 
           {/* Era + Offset Chips - inline row */}
           <div className="flex items-center justify-center gap-2 mt-2">
-            {/* Offset Chip (left) */}
-            <OffsetEditPopover
+            {/* Offset Inline Editor (left) */}
+            <OffsetInlineEditor
               effectiveOffset={effectiveOffset}
               globalOffset={globalOffset}
               hasCustomOffset={hasCustomOffset}
               onSave={saveCustomOffset}
               onClear={clearCustomOffset}
-              open={offsetPopoverOpen}
-              onOpenChange={setOffsetPopoverOpen}
-            >
-              <OffsetChip
-                offset={effectiveOffset}
-                isCustom={hasCustomOffset}
-              />
-            </OffsetEditPopover>
+            />
             
             {/* Era Chip (right) */}
             {era !== null && era !== undefined && (
