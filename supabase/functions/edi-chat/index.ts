@@ -359,6 +359,52 @@ function calculateSpeedProficiency(
   };
 }
 
+// Calculate total stats across ALL levels (not just 12+) for accurate counts
+interface TotalStats {
+  totalPlayed: number;
+  totalMfcs: number;
+  totalPfcs: number;
+  totalGfcs: number;
+  totalFcs: number;
+  totalLife4s: number;
+  totalClears: number;
+  totalAAAs: number;
+}
+
+function calculateTotalStats(userScores: UserScore[]): TotalStats {
+  let totalMfcs = 0;
+  let totalPfcs = 0;
+  let totalGfcs = 0;
+  let totalFcs = 0;
+  let totalLife4s = 0;
+  let totalClears = 0;
+  let totalAAAs = 0;
+
+  for (const score of userScores) {
+    const halo = score.halo?.toLowerCase() || '';
+    const rank = score.rank?.toUpperCase() || '';
+
+    if (halo === 'mfc') totalMfcs++;
+    if (halo === 'pfc') totalPfcs++;
+    if (halo === 'gfc') totalGfcs++;
+    if (halo === 'fc') totalFcs++;
+    if (halo === 'life4') totalLife4s++;
+    if (!['fail', 'none', ''].includes(halo)) totalClears++;
+    if (rank === 'AAA') totalAAAs++;
+  }
+
+  return {
+    totalPlayed: userScores.length,
+    totalMfcs,
+    totalPfcs,
+    totalGfcs,
+    totalFcs,
+    totalLife4s,
+    totalClears,
+    totalAAAs,
+  };
+}
+
 function buildPlayerProfile(userScores: UserScore[], chartAnalysis: ChartAnalysis[]): PlayerProfile {
   const levelMastery = calculateLevelMastery(userScores);
   const { clearCeiling, fcCeiling, pfcCeiling } = calculateCeilings(levelMastery);
@@ -415,7 +461,7 @@ function stageDescription(stage: PlayerStage): string {
   return descriptions[stage];
 }
 
-function buildSystemPrompt(profile: PlayerProfile, chartAnalysis: ChartAnalysis[], userScores: UserScore[], songBiasMap: Map<number, number>): string {
+function buildSystemPrompt(profile: PlayerProfile, chartAnalysis: ChartAnalysis[], userScores: UserScore[], songBiasMap: Map<number, number>, totalStats: TotalStats): string {
   const masteryLines = profile.levelMastery
     .filter(lm => lm.level >= 14)
     .map(lm => {
@@ -554,6 +600,19 @@ PLAYER PROFILE:
 - FC Ceiling: Level ${profile.fcCeiling}
 - Clear Ceiling: Level ${profile.clearCeiling}
 - Comfort Ceiling: Level ${profile.comfortCeiling}
+
+TOTAL STATS (ALL LEVELS - USE THESE FOR COUNT QUESTIONS):
+- Total Charts Played: ${totalStats.totalPlayed}
+- MFCs: ${totalStats.totalMfcs}
+- PFCs: ${totalStats.totalPfcs}
+- GFCs: ${totalStats.totalGfcs}
+- FCs: ${totalStats.totalFcs}
+- LIFE4s: ${totalStats.totalLife4s}
+- Clears: ${totalStats.totalClears}
+- AAAs: ${totalStats.totalAAAs}
+
+CRITICAL: When user asks "how many MFCs/PFCs/FCs do I have?" - use THESE EXACT NUMBERS above.
+These counts include ALL difficulty levels (1-19), not just 12+.
 
 LEVEL MASTERY (Lv14+):
 ${masteryLines}
@@ -922,9 +981,11 @@ serve(async (req) => {
     console.log(`Loaded ${songBiasMap.size} song bias entries`);
 
     const profile = buildPlayerProfile(userScores || [], chartAnalysis);
+    const totalStats = calculateTotalStats(userScores || []);
     console.log("Player profile:", JSON.stringify(profile, null, 2));
+    console.log("Total stats:", JSON.stringify(totalStats, null, 2));
 
-    const systemPrompt = buildSystemPrompt(profile, chartAnalysis, userScores || [], songBiasMap);
+    const systemPrompt = buildSystemPrompt(profile, chartAnalysis, userScores || [], songBiasMap, totalStats);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
