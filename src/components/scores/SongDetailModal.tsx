@@ -5,8 +5,11 @@ import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
 import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
 import { SourceIcon } from '@/components/ui/SourceIcon';
 import { EraChip } from '@/components/ui/EraChip';
+import { OffsetChip } from '@/components/ui/OffsetChip';
+import { OffsetEditPopover } from '@/components/scores/OffsetEditPopover';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useAuth } from '@/hooks/useAuth';
+import { useOffset } from '@/hooks/useOffset';
 import { supabase } from '@/integrations/supabase/client';
 import { getJacketUrl, getJacketFallbackUrl } from '@/lib/jacketUrl';
 import { cn } from '@/lib/utils';
@@ -86,6 +89,16 @@ export function SongDetailModal({
   const { transformHalo } = use12MSMode();
   const [charts, setCharts] = useState<ChartWithScore[]>([]);
   const [loading, setLoading] = useState(false);
+  const [offsetPopoverOpen, setOffsetPopoverOpen] = useState(false);
+
+  // Offset data
+  const {
+    effectiveOffset,
+    globalOffset,
+    hasCustomOffset,
+    saveCustomOffset,
+    clearCustomOffset,
+  } = useOffset(songId);
 
   // Image fallback state
   const [imgError, setImgError] = useState(false);
@@ -250,6 +263,25 @@ export function SongDetailModal({
               <EraChip era={era} className="h-5" />
             </div>
           )}
+
+          {/* Offset Chip */}
+          <div className="flex justify-center mt-2">
+            <OffsetEditPopover
+              effectiveOffset={effectiveOffset}
+              globalOffset={globalOffset}
+              hasCustomOffset={hasCustomOffset}
+              onSave={saveCustomOffset}
+              onClear={clearCustomOffset}
+              open={offsetPopoverOpen}
+              onOpenChange={setOffsetPopoverOpen}
+            >
+              <OffsetChip
+                offset={effectiveOffset}
+                isCustom={hasCustomOffset}
+                onClick={() => setOffsetPopoverOpen(true)}
+              />
+            </OffsetEditPopover>
+          </div>
         </div>
 
         {/* Difficulty Rows */}
