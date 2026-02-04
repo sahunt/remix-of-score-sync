@@ -602,16 +602,25 @@ Before recommending ANY song, verify:
    - Never call a 950k+ score "mid-AA" - that's AA+ or higher
 
 6. SDP (SINGLE DIGIT PERFECTS):
-   - SDP = 9 or fewer Perfect judgments on a song (rest Marvelous)
-   - Each Perfect costs 10 points vs Marvelous
-   - SDP threshold: 999,910 or higher (9 perfects = -90 points max)
-   - Score breakdown:
-     * 1,000,000 = MFC (0 perfects)
-     * 999,910-999,990 = SDP (1-9 perfects)
-     * 999,900 or below = NOT SDP (10+ perfects)
-   - "I want to SDP this" = goal is 999,910+
-   - "Close to SDP" = likely 999,800-999,900 range (10-20 perfects)
-   - SDP is an elite accuracy goal just below MFC
+   CRITICAL: SDP is a TYPE OF PFC - you CANNOT have an SDP without a PFC!
+   - SDP = PFC with 9 or fewer Perfect judgments (score 999,910+)
+   - A song without a PFC (GFC, FC, or lower) can NEVER be an SDP target
+   
+   Score thresholds (PFC required for all):
+   * 1,000,000 = MFC (0 perfects)
+   * 999,910-999,990 = SDP (1-9 perfects)  
+   * 999,800-999,900 = CLOSE to SDP (10-20 perfects) ← Good SDP targets
+   * 999,700 or below with PFC = far from SDP
+   
+   RECOMMENDING SDP TARGETS:
+   - ONLY recommend songs where halo = 'pfc' or 'mfc'
+   - Best targets: PFC with score 999,800-999,900 (10-20 perfects to improve)
+   - Songs with GFC/FC/lower are NOT SDP targets - recommend PFC goal instead
+   
+   User phrases:
+   - "I want to SDP this" = goal is 999,910+ (must already have PFC)
+   - "Close to SDP" = has PFC, score 999,800-999,900
+   - "SDP targets" = songs with PFC at 999,800-999,900
 
 7. WARMUP SETS:
    - Warmups should be 4-5 levels BELOW target difficulty
