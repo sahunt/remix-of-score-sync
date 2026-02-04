@@ -74,14 +74,18 @@ function getDifficultyColorClass(difficultyName: string | null): string {
   }
 }
 
-// Get difficulty hex color for drop shadow
-function getDifficultyHexColor(level: number | null): string {
-  if (!level) return 'transparent';
-  if (level <= 5) return '#C5D0E6'; // Beginner
-  if (level <= 8) return '#F2C94C'; // Basic
-  if (level <= 12) return '#F26C6C'; // Difficult
-  if (level <= 16) return '#7BDCB5'; // Expert
-  return '#A78BDA'; // Challenge
+// Get difficulty hex color for drop shadow based on difficulty name
+function getDifficultyHexColor(difficultyName: string | null): string {
+  if (!difficultyName) return 'transparent';
+  const normalized = difficultyName.toUpperCase();
+  switch (normalized) {
+    case 'BEGINNER': return '#C5D0E6';
+    case 'BASIC': return '#F2C94C';
+    case 'DIFFICULT': return '#F26C6C';
+    case 'EXPERT': return '#7BDCB5';
+    case 'CHALLENGE': return '#A78BDA';
+    default: return 'transparent';
+  }
 }
 
 // Convert numeric flare (1-9, 10 for EX) to FlareType
@@ -171,10 +175,10 @@ export function SongCard({
         {/* Album art with difficulty shadow element */}
         <div className="relative w-[41px] h-[41px] flex-shrink-0">
           {/* Solid color shadow element - positioned behind, extends past image */}
-          {difficultyLevel && (
+          {difficultyName && (
             <div 
               className="absolute top-[5px] left-[5px] w-[36px] h-[36px] rounded-[3px]"
-              style={{ backgroundColor: getDifficultyHexColor(difficultyLevel) }}
+              style={{ backgroundColor: getDifficultyHexColor(difficultyName) }}
             />
           )}
           {/* Song jacket image or placeholder - on top at origin */}
