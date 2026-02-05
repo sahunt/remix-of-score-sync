@@ -1,108 +1,145 @@
 
-# Inline Offset Editor (Replacing Popover)
+# Fix Plan: EDI Skill Activation & Data Referencing
 
-## Overview
-Replace the problematic popover with an inline edit mode that transforms the offset chip area. When tapped, the chip smoothly transitions into an input field with save/cancel buttons, then animates back when editing is complete.
+## Problem Summary
 
-## User Flow
+Looking at the edge function logs, I found the root cause:
 
-```text
-DISPLAY MODE                    EDIT MODE
-┌─────────────┐                ┌──────────────────────────┐
-│   -6ms      │  ──tap──►      │ [___] ms  ✓  ✗  ↺       │
-└─────────────┘                └──────────────────────────┘
-                   ◄──save/cancel──
+```
+2026-02-05T02:40:08Z INFO Active skills for this query: whoIAm, playerProfile
 ```
 
-## Visual Design
+The **countingStats** skill is NOT activating even when it should be. The data (183 MFCs) is being calculated correctly in `totalStats`, but it **never reaches the AI prompt** because the skill's `shouldActivate()` pattern is too narrow.
 
-**Display Mode:**
-- Current OffsetChip (unchanged)
-- Shows offset value or "Add offset"
+## Root Causes
 
-**Edit Mode:**
-- Compact horizontal layout within the same space
-- Number input (small, ~40px wide)
-- "ms" label
-- Save button (checkmark icon)
-- Cancel button (X icon)  
-- Reset button (only if custom offset exists)
+1. **Too-narrow keyword patterns** - The `countingStats` skill only matches `/how many|total|count|do i have/`. Questions like "tell me about my MFCs", "what are my stats", or "MFC count" won't trigger it.
 
-## Animation Strategy
+2. **No fallback for stat-related queries** - If keywords don't match, Edi only gets `whoIAm` and `playerProfile`, leaving her blind to the actual stat numbers.
 
-Use CSS transitions for smooth state changes:
-- `animate-fade-in` / `animate-fade-out` for content swap
-- Scale transition on the container to accommodate width change
-- Duration: 200ms for snappy feel
+3. **Song catalog not activating for some song queries** - Similar issue with the catalog skill's patterns.
 
-## Technical Changes
+---
 
-### 1. Create Inline Offset Editor Component
-**New file: `src/components/scores/OffsetInlineEditor.tsx`**
+## Solution: Expand Skill Activation Patterns
 
-A single component that handles both display and edit modes:
-- Internal state: `isEditing` boolean
-- Display mode: renders OffsetChip
-- Edit mode: renders input + action buttons
-- Handles save/clear/cancel logic internally
-- Animates between states
+### 1. Update `counting-stats.ts` shouldActivate()
 
-Props:
+**Current pattern:**
 ```typescript
-interface OffsetInlineEditorProps {
-  effectiveOffset: number | null;
-  globalOffset: number | null;
-  hasCustomOffset: boolean;
-  onSave: (offset: number) => Promise<void>;
-  onClear: () => Promise<void>;
-}
+return /how many|total|count|do i have/i.test(lower);
 ```
 
-### 2. Update Song Detail Modal
-**File: `src/components/scores/SongDetailModal.tsx`**
-
-- Remove OffsetEditPopover import and usage
-- Remove `offsetPopoverOpen` state
-- Replace with new OffsetInlineEditor component
-- Pass same props from useOffset hook
-
-### 3. Delete OffsetEditPopover
-**File: `src/components/scores/OffsetEditPopover.tsx`**
-
-- Remove this file entirely since it's no longer needed
-
-## Component Structure (OffsetInlineEditor)
-
-```tsx
-// Display mode
-<div className="animate-fade-in">
-  <OffsetChip onClick={() => setEditing(true)} />
-</div>
-
-// Edit mode  
-<div className="animate-fade-in flex items-center gap-1.5">
-  <Input type="number" className="w-12 h-6 text-xs" />
-  <span className="text-xs text-muted-foreground">ms</span>
-  <Button size="icon" variant="ghost" onClick={save}>✓</Button>
-  <Button size="icon" variant="ghost" onClick={cancel}>✕</Button>
-  {hasCustomOffset && (
-    <Button size="icon" variant="ghost" onClick={reset}>↺</Button>
-  )}
-</div>
+**Improved pattern (expand to catch more stat queries):**
+```typescript
+return /how many|total|count|do i have|mfc|pfc|gfc|fc|life4|clear|aaa|stats|score|played/i.test(lower);
 ```
 
-## Edit Mode Layout Details
+This will activate the counting stats skill when users ask about:
+- "how many MFCs" ✓ (already works)
+- "tell me about my MFCs" ✓ (now works)
+- "what are my stats" ✓ (now works)
+- "MFC count" ✓ (now works)
+- "AAAs I have" ✓ (now works)
 
-- Input: 48px wide, number type, -99 to +99 range
-- Buttons: 24x24px icon buttons (Check, X, RotateCcw icons from lucide)
-- Total width: ~140px in edit mode vs ~50px in display mode
-- Container uses `min-w-fit` to accommodate both states
+### 2. Update `song-catalog.ts` shouldActivate()
 
-## Files to Create
-1. `src/components/scores/OffsetInlineEditor.tsx`
+**Current pattern:**
+```typescript
+return /recommend|suggest|practice|play|target|pfc|fc|mfc|gfc|songs?|chart|what.*should|give me|list|folder|\d+s\b/i.test(lower);
+```
 
-## Files to Modify
-1. `src/components/scores/SongDetailModal.tsx` - Use new inline editor
+**Improved pattern (add more song query triggers):**
+```typescript
+return /recommend|suggest|practice|play|target|pfc|fc|mfc|gfc|songs?|chart|what.*should|give me|list|folder|\d+s\b|level|difficulty|clear|lamp|which|work on/i.test(lower);
+```
 
-## Files to Delete
-1. `src/components/scores/OffsetEditPopover.tsx` - No longer needed
+### 3. Update `chart-patterns.ts` shouldActivate()
+
+**Current pattern:**
+```typescript
+return /crossover|footswitch|jack|drill|stamina|pattern|technical|stream|speed|bpm/i.test(lower);
+```
+
+**Improved pattern:**
+```typescript
+return /crossover|footswitch|jack|drill|stamina|pattern|technical|stream|speed|bpm|fast|slow|notes|nps|hard part/i.test(lower);
+```
+
+### 4. Update `sdp-rules.ts` shouldActivate()
+
+**Current pattern:**
+```typescript
+return /sdp|single digit|close to mfc|near mfc/i.test(lower);
+```
+
+**Improved pattern:**
+```typescript
+return /sdp|single digit|close to mfc|near mfc|almost mfc|999/i.test(lower);
+```
+
+### 5. Update `warmup-rules.ts` shouldActivate()
+
+**Current pattern:**
+```typescript
+return /warmup|warm up|warm-up|prepare|injury|hurt|before playing|start.*session/i.test(lower);
+```
+
+**Improved pattern:**
+```typescript
+return /warmup|warm up|warm-up|prepare|injury|hurt|before playing|start.*session|stretch|safe|don't.*injur/i.test(lower);
+```
+
+---
+
+## Implementation Steps
+
+1. **Update each skill file's `shouldActivate()` function** with the expanded patterns above
+
+2. **Re-deploy the edi-chat edge function**
+
+3. **Test with various queries** to verify skills are activating correctly:
+   - "How many MFCs do I have?" → should activate `countingStats`
+   - "Tell me about my stats" → should activate `countingStats`
+   - "What are my MFCs?" → should activate `countingStats`
+   - "Recommend some 15s" → should activate `songCatalog`
+   - "What songs have crossovers?" → should activate `chartPatterns` + `songCatalog`
+
+---
+
+## Technical Details
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `supabase/functions/edi-chat/skills/counting-stats.ts` | Expand `shouldActivate()` regex |
+| `supabase/functions/edi-chat/skills/song-catalog.ts` | Expand `shouldActivate()` regex |
+| `supabase/functions/edi-chat/skills/chart-patterns.ts` | Expand `shouldActivate()` regex |
+| `supabase/functions/edi-chat/skills/sdp-rules.ts` | Expand `shouldActivate()` regex |
+| `supabase/functions/edi-chat/skills/warmup-rules.ts` | Expand `shouldActivate()` regex |
+
+### Expected Behavior After Fix
+
+When user asks "How many MFCs do I have?":
+- **Before:** Active skills: `whoIAm, playerProfile` (missing the data!)
+- **After:** Active skills: `whoIAm, playerProfile, countingStats` (correct data included)
+
+The counting stats section will now appear in the prompt with:
+```
+YOUR TOTALS (ALL DIFFICULTY LEVELS 1-19):
+- MFCs: 183
+- PFCs: 1600
+...
+```
+
+---
+
+## Verification
+
+After deployment, check the logs for:
+```
+Active skills for this query: whoIAm, playerProfile, countingStats
+```
+
+This confirms the counting stats skill is now activating when it should.
