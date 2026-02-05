@@ -225,6 +225,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         messages: allMessages,
+        tools: toolDefinitions,
         stream: true,
       }),
     });
