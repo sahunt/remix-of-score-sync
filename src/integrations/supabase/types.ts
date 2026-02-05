@@ -40,6 +40,7 @@ export type Database = {
           mean_nps: number | null
           median_nps: number | null
           min_nps: number | null
+          mines: number | null
           music_length: number | null
           notes: number | null
           peak_nps: number | null
@@ -79,6 +80,7 @@ export type Database = {
           mean_nps?: number | null
           median_nps?: number | null
           min_nps?: number | null
+          mines?: number | null
           music_length?: number | null
           notes?: number | null
           peak_nps?: number | null
@@ -118,6 +120,7 @@ export type Database = {
           mean_nps?: number | null
           median_nps?: number | null
           min_nps?: number | null
+          mines?: number | null
           music_length?: number | null
           notes?: number | null
           peak_nps?: number | null
