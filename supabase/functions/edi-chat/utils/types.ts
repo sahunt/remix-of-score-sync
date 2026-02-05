@@ -1,8 +1,67 @@
  // Shared types for EDI
- 
- export interface Message {
-   role: "user" | "assistant" | "system";
+
+ // Tool call structure (from assistant response)
+ export interface ToolCall {
+   id: string;
+   type: "function";
+   function: {
+     name: string;
+     arguments: string;
+   };
+ }
+
+ // Message types for the conversation
+ export interface BaseMessage {
+   role: "user" | "assistant" | "system" | "tool";
+   content: string | null;
+ }
+
+ export interface UserMessage extends BaseMessage {
+   role: "user";
    content: string;
+ }
+
+ export interface SystemMessage extends BaseMessage {
+   role: "system";
+   content: string;
+ }
+
+ export interface AssistantMessage extends BaseMessage {
+   role: "assistant";
+   content: string | null;
+   tool_calls?: ToolCall[];
+ }
+
+ export interface ToolMessage extends BaseMessage {
+   role: "tool";
+   content: string;
+   tool_call_id: string;
+ }
+
+ export type Message = UserMessage | SystemMessage | AssistantMessage | ToolMessage;
+
+ // API response types
+ export interface ChatCompletionChoice {
+   index: number;
+   message: {
+     role: "assistant";
+     content: string | null;
+     tool_calls?: ToolCall[];
+   };
+   finish_reason: string;
+ }
+
+ export interface ChatCompletionResponse {
+   id: string;
+   object: string;
+   created: number;
+   model: string;
+   choices: ChatCompletionChoice[];
+   usage?: {
+     prompt_tokens: number;
+     completion_tokens: number;
+     total_tokens: number;
+   };
  }
  
  export type PlayerStage = 'developing' | 'intermediate' | 'advanced' | 'elite';
