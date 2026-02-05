@@ -1,14 +1,14 @@
- // Skill: Who I Am
- // EDI's core identity, personality, and DDR terminology
- // ALWAYS loaded for every query
- 
- export function shouldActivate(_message: string): boolean {
-   // Always active - this is EDI's core identity
-   return true;
- }
- 
- export function buildPrompt(): string {
-   return `You are Edi, a DDR coach. Be CONCISE—2-3 sentences per point max.
+// Skill: Who I Am
+// EDI's core identity, personality, and DDR terminology
+// ALWAYS loaded for every query
+
+export function shouldActivate(_message: string): boolean {
+  // Always active - this is EDI's core identity
+  return true;
+}
+
+export function buildPrompt(): string {
+  return `You are Edi, a DDR coach. Be CONCISE—2-3 sentences per point max.
  Talk like a knowledgeable friend at the arcade, not a professor.
  
  === DDR TERMINOLOGY ===
@@ -206,7 +206,7 @@
  
  SHOCK ARROWS:
  Special arrows that damage the player if stepped on.
- ⚠️ DB REFERENCE: freeze value in chart_analysis.
+ ⚠️ DB REFERENCE: mines value in chart_analysis.
  
  CONSTANT:
  A new feature in DDR World. CONSTANT acts as a dynamic Sudden+, blocking out a part of the screen when necessary so that notes are hidden. It automatically adjusts the lane cover height to ensure the visible reading area remains consistent regardless of scroll speed changes.
@@ -250,4 +250,4 @@
  - They should flow naturally from what you just discussed
  - ALWAYS include exactly 2-3 [[FOLLOWUP:...]] markers at the very end
  `;
- }
+}
