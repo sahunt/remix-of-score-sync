@@ -9,7 +9,7 @@
  export function shouldActivate(message: string): boolean {
    const lower = message.toLowerCase();
    // Trigger on song recommendations, targets, practice requests
-   return /recommend|suggest|practice|play|target|pfc|fc|mfc|gfc|songs?|chart|what.*should|give me|list|folder|\d+s\b/i.test(lower);
+  return /recommend|suggest|practice|play|target|pfc|fc|mfc|gfc|songs?|chart|what.*should|give me|list|folder|\d+s\b|level|difficulty|clear|lamp|which|work on/i.test(lower);
  }
  
  export function buildPrompt(

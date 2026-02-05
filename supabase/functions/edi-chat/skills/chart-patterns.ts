@@ -4,7 +4,7 @@
  
  export function shouldActivate(message: string): boolean {
    const lower = message.toLowerCase();
-   return /crossover|footswitch|jack|drill|stamina|pattern|technical|stream|speed|bpm/i.test(lower);
+  return /crossover|footswitch|jack|drill|stamina|pattern|technical|stream|speed|bpm|fast|slow|notes|nps|hard part/i.test(lower);
  }
  
  export function buildPrompt(): string {

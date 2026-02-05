@@ -4,7 +4,7 @@
  
  export function shouldActivate(message: string): boolean {
    const lower = message.toLowerCase();
-   return /sdp|single digit|close to mfc|near mfc/i.test(lower);
+  return /sdp|single digit|close to mfc|near mfc|almost mfc|999/i.test(lower);
  }
  
  export function buildPrompt(): string {

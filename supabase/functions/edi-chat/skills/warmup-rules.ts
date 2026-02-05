@@ -3,7 +3,7 @@
  
  export function shouldActivate(message: string): boolean {
    const lower = message.toLowerCase();
-   return /warmup|warm up|warm-up|prepare|injury|hurt|before playing|start.*session/i.test(lower);
+  return /warmup|warm up|warm-up|prepare|injury|hurt|before playing|start.*session|stretch|safe|don't.*injur/i.test(lower);
  }
  
  export function buildPrompt(): string {

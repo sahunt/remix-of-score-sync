@@ -21,6 +21,7 @@ export type Database = {
           bpm: number | null
           brackets: number | null
           chaos: number | null
+          chart_id: number | null
           chart_length: number | null
           created_at: string | null
           crossovers: number | null
@@ -61,6 +62,7 @@ export type Database = {
           bpm?: number | null
           brackets?: number | null
           chaos?: number | null
+          chart_id?: number | null
           chart_length?: number | null
           created_at?: string | null
           crossovers?: number | null
@@ -101,6 +103,7 @@ export type Database = {
           bpm?: number | null
           brackets?: number | null
           chaos?: number | null
+          chart_id?: number | null
           chart_length?: number | null
           created_at?: string | null
           crossovers?: number | null
