@@ -54,7 +54,7 @@ export const toolDefinitions: ToolDefinition[] = [
     function: {
       name: "get_songs_by_criteria",
       description:
-        "Filter songs by gameplay criteria. Use for recommendations, practice suggestions, finding songs with specific patterns, or checking achievement status. Examples: 'songs with crossovers', '17s without a PFC', 'stamina charts at level 16'.",
+        "Filter songs by gameplay criteria. Use for recommendations, practice suggestions, finding songs with specific patterns, or checking achievement status. Examples: 'songs with crossovers', '17s without a PFC', 'stamina charts at level 16', 'songs with shock arrows', 'gimmicky charts'.",
       parameters: {
         type: "object",
         properties: {
@@ -110,6 +110,16 @@ export const toolDefinitions: ToolDefinition[] = [
             description: "Minimum jack count (repeated notes on same arrow)",
             minimum: 0,
           },
+          min_mines: {
+            type: "integer",
+            description: "Minimum shock arrow (mines) count. Shock arrows are obstacles to AVOID, not hit.",
+            minimum: 0,
+          },
+          min_stops: {
+            type: "integer",
+            description: "Minimum stop/freeze count (indicates gimmicky charts with speed changes or stops)",
+            minimum: 0,
+          },
           min_notes: {
             type: "integer",
             description: "Minimum total note count (for stamina filtering)",
@@ -137,6 +147,11 @@ export const toolDefinitions: ToolDefinition[] = [
             minimum: 0,
             maximum: 1000000,
           },
+          era: {
+            type: "integer",
+            description: "Filter by song era (0=Classic, 1=White, 2=Gold, 3+=newer). Lower era = older songs.",
+            minimum: 0,
+          },
           sort_by: {
             type: "string",
             description: "Sort results by this field",
@@ -144,6 +159,7 @@ export const toolDefinitions: ToolDefinition[] = [
               "crossovers",
               "footswitches",
               "jacks",
+              "mines",
               "notes",
               "bpm",
               "peak_nps",

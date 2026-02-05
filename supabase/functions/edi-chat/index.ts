@@ -35,19 +35,6 @@ const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
 const MAX_TOOL_ROUNDS = 3;
 
-// Helper to create SSE response from non-streaming content
-function createSSEResponse(text: string): Response {
-  const encoder = new TextEncoder();
-  const chunks = [
-    `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,
-    `data: [DONE]\n\n`,
-  ];
-  const body = encoder.encode(chunks.join(""));
-  return new Response(body, {
-    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-  });
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -190,11 +177,10 @@ serve(async (req) => {
       const assistantMessage = choice.message;
       const toolCalls = assistantMessage.tool_calls;
 
-      // If no tool calls, we have our final answer
+      // If no tool calls, break out to make the final streaming call
       if (!toolCalls || toolCalls.length === 0) {
-        console.log("No tool calls - returning final response");
-        const finalText = assistantMessage.content || "";
-        return createSSEResponse(finalText);
+        console.log("No tool calls - breaking to make final streaming call");
+        break;
       }
 
       console.log(`Received ${toolCalls.length} tool call(s)`);
@@ -227,8 +213,8 @@ serve(async (req) => {
       // Loop back for another round
     }
 
-    // If we exhausted all tool rounds, make one final streaming call WITHOUT tools
-    console.log("Exhausted tool rounds - making final streaming call");
+    // Make final streaming call WITHOUT tools (either after tools completed or if no tools were needed)
+    console.log("Making final streaming call");
 
     const finalResponse = await fetch(GATEWAY_URL, {
       method: "POST",
