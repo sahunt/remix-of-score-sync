@@ -1,6 +1,7 @@
 // EDI Chat - Consolidated Single File
 // All modules inlined to reduce bundle complexity and fix deployment timeouts
 
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 // ============================================================================
