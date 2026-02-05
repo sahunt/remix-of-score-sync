@@ -95,6 +95,7 @@
          footswitches: patternData ? (patternData.footswitches as number) : null,
          jacks: patternData ? (patternData.jacks as number) : null,
          notes: patternData ? (patternData.notes as number) : null,
+         mines: patternData ? (patternData.mines as number) : null,
          stream: patternData ? (patternData.stream as number) : null,
          peak_nps: patternData ? (patternData.peak_nps as number) : null,
          eamuse_id: row.eamuse_id as string | null,

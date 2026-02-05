@@ -114,6 +114,7 @@
    footswitches: number | null;
    jacks: number | null;
    notes: number | null;
+   mines: number | null;
    stream: number | null;
    peak_nps: number | null;
    eamuse_id: string | null;
