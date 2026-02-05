@@ -6,7 +6,7 @@
  
  export function shouldActivate(message: string): boolean {
    const lower = message.toLowerCase();
-   return /how many|total|count|do i have/i.test(lower);
+  return /how many|total|count|do i have|mfc|pfc|gfc|fc|life4|clear|aaa|stats|score|played/i.test(lower);
  }
  
  export function buildPrompt(totalStats: TotalStats): string {
