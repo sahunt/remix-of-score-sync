@@ -83,8 +83,10 @@ serve(async (req) => {
 
     // Fetch data needed for player profile and stats
     // These are still loaded at startup because they're needed for the system prompt
-    const userScores = await fetchUserScores(supabase, userId);
-    const chartAnalysis = await fetchMusicDb(supabaseServiceRole);
+    const [userScores, chartAnalysis] = await Promise.all([
+      fetchUserScores(supabase, userId),
+      fetchMusicDb(supabaseServiceRole),
+    ]);
 
     // Calculate player profile and total stats
     const profile = buildPlayerProfile(userScores, chartAnalysis);
@@ -210,7 +212,10 @@ serve(async (req) => {
           content: result,
         });
       }
-      // Loop back for another round
+      // After executing tools, go straight to final streaming response
+      // Most queries need only one tool round; skipping the extra
+      // non-streaming check saves ~5 seconds
+      break;
     }
 
     // Make final streaming call WITHOUT tools (either after tools completed or if no tools were needed)
