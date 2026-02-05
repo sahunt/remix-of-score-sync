@@ -35,6 +35,32 @@ const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
 const MAX_TOOL_ROUNDS = 3;
 
+/**
+ * Converts text to an SSE stream compatible with the client's parser.
+ * Splits text into chunks and wraps each as a delta event.
+ */
+function textToSSEStream(text: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const CHUNK_SIZE = 80;
+
+  return new ReadableStream({
+    start(controller) {
+      // Split text into chunks
+      for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+        const chunk = text.slice(i, i + CHUNK_SIZE);
+        // Escape special characters for JSON
+        const escapedChunk = JSON.stringify(chunk).slice(1, -1);
+        const event = `data: {"choices":[{"index":0,"delta":{"content":"${escapedChunk}"},"finish_reason":null}]}\n\n`;
+        controller.enqueue(encoder.encode(event));
+      }
+      // Send finish event
+      controller.enqueue(encoder.encode(`data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -124,6 +150,10 @@ serve(async (req) => {
       ...incomingMessages,
     ];
 
+    // Track if we got a direct response without needing tools
+    let resolvedWithoutTools = false;
+    let directResponseText = "";
+
     // Tool-calling loop
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       console.log(`Tool-calling round ${round + 1}/${MAX_TOOL_ROUNDS}`);
@@ -179,9 +209,12 @@ serve(async (req) => {
       const assistantMessage = choice.message;
       const toolCalls = assistantMessage.tool_calls;
 
-      // If no tool calls, break out to make the final streaming call
+      // If no tool calls, capture the response and return it directly as SSE
+      // This avoids a redundant second LLM call and fixes empty response bugs
       if (!toolCalls || toolCalls.length === 0) {
-        console.log("No tool calls - breaking to make final streaming call");
+        console.log("No tool calls - returning direct response as SSE");
+        directResponseText = assistantMessage.content || "";
+        resolvedWithoutTools = true;
         break;
       }
 
@@ -218,8 +251,17 @@ serve(async (req) => {
       break;
     }
 
-    // Make final streaming call WITHOUT tools (either after tools completed or if no tools were needed)
-    console.log("Making final streaming call");
+    // If we got a direct response without tools, return it as synthetic SSE
+    // This saves ~3-5 seconds and eliminates empty response bugs
+    if (resolvedWithoutTools) {
+      console.log(`Returning direct response (${directResponseText.length} chars) as SSE`);
+      return new Response(textToSSEStream(directResponseText), {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
+    // Make final streaming call (only reached when tools were used)
+    console.log("Making final streaming call after tool execution");
 
     const finalResponse = await fetch(GATEWAY_URL, {
       method: "POST",
