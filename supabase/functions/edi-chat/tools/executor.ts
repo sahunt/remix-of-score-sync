@@ -125,7 +125,7 @@ async function searchSongs(
     });
 
     return {
-      song_marker: songMarker,
+      display_marker: songMarker,
       name: m.name,
       artist: m.artist,
       difficulty: m.difficulty_name,
@@ -158,6 +158,7 @@ async function searchSongs(
 
   return JSON.stringify({
     message: `Found ${results.length} chart(s) matching "${query}"`,
+    instruction: "ONLY recommend songs from this list. Copy each song's display_marker EXACTLY into your response. Do NOT add songs that are not in this list.",
     results,
   });
 }
@@ -457,7 +458,7 @@ async function getSongsByCriteria(
 
   // Format output with song markers
   const formattedResults = results.map(r => ({
-    song_marker: formatSongMarker({
+    display_marker: formatSongMarker({
       song_id: r.song_id,
       title: r.name,
       difficulty: r.difficulty,
@@ -476,6 +477,7 @@ async function getSongsByCriteria(
 
   return JSON.stringify({
     message: `Found ${formattedResults.length} chart(s) matching criteria`,
+    instruction: "ONLY recommend songs from this list. Copy each song's display_marker EXACTLY into your response. Do NOT invent additional songs.",
     total_matches: results.length,
     results: formattedResults,
   });
