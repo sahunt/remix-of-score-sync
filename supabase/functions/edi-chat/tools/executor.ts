@@ -2,16 +2,7 @@
 // Executes tool calls by querying Supabase
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// Types for tool calls (OpenAI format)
-export interface ToolCall {
-  id: string;
-  type: "function";
-  function: {
-    name: string;
-    arguments: string;
-  };
-}
+import { ToolCall } from "../utils/types.ts";
 
 // Result format for songs (frontend expects this marker format)
 interface SongMarker {
@@ -43,7 +34,7 @@ async function searchSongs(
   // Search musicdb for matching songs
   let musicDbQuery = supabaseServiceRole
     .from("musicdb")
-    .select("id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id")
+    .select("id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating")
     .eq("playstyle", "SP")
     .eq("deleted", false)
     .ilike("name", `%${query}%`)
@@ -78,7 +69,7 @@ async function searchSongs(
   // Fetch chart_analysis for pattern data
   const { data: chartData, error: chartError } = await supabaseServiceRole
     .from("chart_analysis")
-    .select("song_id, difficulty_name, crossovers, footswitches, jacks, notes, bpm, peak_nps")
+    .select("song_id, difficulty_name, crossovers, full_crossovers, footswitches, up_footswitches, down_footswitches, sideswitches, jacks, notes, bpm, peak_nps, mines, stop_count, stream")
     .in("song_id", songIds);
 
   if (chartError) {
@@ -139,13 +130,22 @@ async function searchSongs(
       artist: m.artist,
       difficulty: m.difficulty_name,
       level: m.difficulty_level,
+      era: m.era,
+      sanbai_rating: m.sanbai_rating,
       patterns: patterns ? {
         crossovers: patterns.crossovers,
+        full_crossovers: patterns.full_crossovers,
         footswitches: patterns.footswitches,
+        up_footswitches: patterns.up_footswitches,
+        down_footswitches: patterns.down_footswitches,
+        sideswitches: patterns.sideswitches,
         jacks: patterns.jacks,
+        mines: patterns.mines,
         notes: patterns.notes,
         bpm: patterns.bpm,
         peak_nps: patterns.peak_nps,
+        stop_count: patterns.stop_count,
+        stream: patterns.stream,
       } : null,
       user_score: userScore ? {
         score: userScore.score,
@@ -173,11 +173,14 @@ async function getSongsByCriteria(
     min_crossovers?: number;
     min_footswitches?: number;
     min_jacks?: number;
+    min_mines?: number;
+    min_stops?: number;
     min_notes?: number;
     min_bpm?: number;
     max_bpm?: number;
     min_score?: number;
     max_score?: number;
+    era?: number;
     sort_by?: string;
     limit?: number;
   },
@@ -194,11 +197,14 @@ async function getSongsByCriteria(
     min_crossovers,
     min_footswitches,
     min_jacks,
+    min_mines,
+    min_stops,
     min_notes,
     min_bpm,
     max_bpm,
     min_score,
     max_score,
+    era,
     sort_by,
     limit = 10,
   } = args;
@@ -241,7 +247,7 @@ async function getSongsByCriteria(
   // Step 2: Build musicdb query
   let musicDbQuery = supabaseServiceRole
     .from("musicdb")
-    .select("id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id")
+    .select("id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating")
     .eq("playstyle", "SP")
     .eq("deleted", false);
 
@@ -280,7 +286,7 @@ async function getSongsByCriteria(
 
   let chartQuery = supabaseServiceRole
     .from("chart_analysis")
-    .select("song_id, difficulty_name, crossovers, footswitches, jacks, notes, bpm, peak_nps")
+    .select("song_id, difficulty_name, crossovers, full_crossovers, footswitches, up_footswitches, down_footswitches, sideswitches, jacks, notes, bpm, peak_nps, mines, stop_count, stream")
     .in("song_id", songIds);
 
   const { data: chartData, error: chartError } = await chartQuery;
@@ -307,6 +313,8 @@ async function getSongsByCriteria(
     difficulty: string;
     level: number;
     eamuse_id: string | null;
+    era: number | null;
+    sanbai_rating: number | null;
     patterns: Record<string, unknown> | null;
     user_score: { score: number; halo: string; rank: string; flare: number | null } | null;
   }> = [];
@@ -351,19 +359,24 @@ async function getSongsByCriteria(
       }
     }
 
+    // Apply era filter (from musicdb, not patterns)
+    if (era !== undefined && m.era !== era) continue;
+
     // Apply pattern filters
     if (patterns) {
       if (min_crossovers !== undefined && ((patterns.crossovers as number) || 0) < min_crossovers) continue;
       if (min_footswitches !== undefined && ((patterns.footswitches as number) || 0) < min_footswitches) continue;
       if (min_jacks !== undefined && ((patterns.jacks as number) || 0) < min_jacks) continue;
+      if (min_mines !== undefined && ((patterns.mines as number) || 0) < min_mines) continue;
+      if (min_stops !== undefined && ((patterns.stop_count as number) || 0) < min_stops) continue;
       if (min_notes !== undefined && ((patterns.notes as number) || 0) < min_notes) continue;
       if (min_bpm !== undefined && ((patterns.bpm as number) || 0) < min_bpm) continue;
       if (max_bpm !== undefined && ((patterns.bpm as number) || Infinity) > max_bpm) continue;
     } else {
       // If pattern filters are requested but no pattern data exists, skip
       if (min_crossovers !== undefined || min_footswitches !== undefined ||
-          min_jacks !== undefined || min_notes !== undefined ||
-          min_bpm !== undefined || max_bpm !== undefined) continue;
+          min_jacks !== undefined || min_mines !== undefined || min_stops !== undefined ||
+          min_notes !== undefined || min_bpm !== undefined || max_bpm !== undefined) continue;
     }
 
     // Apply score filters
@@ -381,13 +394,22 @@ async function getSongsByCriteria(
       difficulty: m.difficulty_name,
       level: m.difficulty_level,
       eamuse_id: m.eamuse_id,
+      era: m.era,
+      sanbai_rating: m.sanbai_rating,
       patterns: patterns ? {
         crossovers: patterns.crossovers,
+        full_crossovers: patterns.full_crossovers,
         footswitches: patterns.footswitches,
+        up_footswitches: patterns.up_footswitches,
+        down_footswitches: patterns.down_footswitches,
+        sideswitches: patterns.sideswitches,
         jacks: patterns.jacks,
+        mines: patterns.mines,
         notes: patterns.notes,
         bpm: patterns.bpm,
         peak_nps: patterns.peak_nps,
+        stop_count: patterns.stop_count,
+        stream: patterns.stream,
       } : null,
       user_score: userScore,
     });
@@ -404,6 +426,9 @@ async function getSongsByCriteria(
         break;
       case "jacks":
         results.sort((a, b) => ((b.patterns?.jacks as number) || 0) - ((a.patterns?.jacks as number) || 0));
+        break;
+      case "mines":
+        results.sort((a, b) => ((b.patterns?.mines as number) || 0) - ((a.patterns?.mines as number) || 0));
         break;
       case "notes":
         results.sort((a, b) => ((b.patterns?.notes as number) || 0) - ((a.patterns?.notes as number) || 0));
@@ -443,6 +468,8 @@ async function getSongsByCriteria(
     artist: r.artist,
     difficulty: r.difficulty,
     level: r.level,
+    era: r.era,
+    sanbai_rating: r.sanbai_rating,
     patterns: r.patterns,
     user_score: r.user_score,
   }));
@@ -640,11 +667,14 @@ export async function executeToolCall(
           min_crossovers?: number;
           min_footswitches?: number;
           min_jacks?: number;
+          min_mines?: number;
+          min_stops?: number;
           min_notes?: number;
           min_bpm?: number;
           max_bpm?: number;
           min_score?: number;
           max_score?: number;
+          era?: number;
           sort_by?: string;
           limit?: number;
         },
