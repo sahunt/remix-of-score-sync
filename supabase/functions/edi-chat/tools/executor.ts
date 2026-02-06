@@ -640,6 +640,82 @@ async function getCatalogStats(
   });
 }
 
+// Map lamp target to halo_filter for finding remaining (not-yet-achieved) songs
+function remainingHaloFilter(targetType: string, targetValue: string): string | null {
+  if (targetType === "lamp") {
+    const map: Record<string, string> = {
+      "clear": "no_clear",
+      "fc": "clear_no_fc",
+      "gfc": "clear_no_fc",
+      "pfc": "fc_no_pfc",
+      "mfc": "pfc_no_mfc",
+    };
+    return map[targetValue.toLowerCase()] || null;
+  }
+  return null;
+}
+
+// Build get_songs_by_criteria params from goal criteria for follow-up tool calls
+function buildSearchParams(
+  rules: Array<{ field: string; operator: string; values: unknown[] }>,
+  targetType: string,
+  targetValue: string,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+
+  for (const rule of rules) {
+    if (rule.field === "level" && Array.isArray(rule.values) && rule.values.length > 0) {
+      const nums = rule.values.map((v: unknown) => Number(v));
+      if (rule.operator === "is_between" && nums.length >= 2) {
+        params.min_difficulty_level = Math.min(...nums);
+        params.max_difficulty_level = Math.max(...nums);
+      } else if (rule.operator === "is") {
+        if (nums.length === 1) {
+          params.difficulty_level = nums[0];
+        } else {
+          params.min_difficulty_level = Math.min(...nums);
+          params.max_difficulty_level = Math.max(...nums);
+        }
+      }
+    } else if (rule.field === "difficulty" && Array.isArray(rule.values) && rule.values.length === 1) {
+      const raw = String(rule.values[0]);
+      params.difficulty_name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    }
+  }
+
+  const haloFilter = remainingHaloFilter(targetType, targetValue);
+  if (haloFilter) params.halo_filter = haloFilter;
+
+  return params;
+}
+
+// Build human-readable criteria summary
+function buildCriteriaSummary(
+  rules: Array<{ field: string; operator: string; values: unknown[] }>,
+  targetType: string,
+  targetValue: string,
+): string {
+  const parts: string[] = [];
+
+  for (const rule of rules) {
+    if (rule.field === "level" && Array.isArray(rule.values) && rule.values.length > 0) {
+      const nums = rule.values.map((v: unknown) => Number(v));
+      if (rule.operator === "is_between" && nums.length >= 2) {
+        parts.push(`Level ${Math.min(...nums)}-${Math.max(...nums)}`);
+      } else if (rule.operator === "is") {
+        parts.push(`Level ${nums.join(", ")}`);
+      } else if (rule.operator === "is_not") {
+        parts.push(`Not level ${nums.join(", ")}`);
+      }
+    } else if (rule.field === "difficulty" && Array.isArray(rule.values)) {
+      parts.push(rule.values.map((v: unknown) => String(v)).join(", "));
+    }
+  }
+
+  parts.push(`${targetType.toUpperCase()} ${targetValue}`);
+  return parts.join(" | ");
+}
+
 // Get user goals with progress
 async function getUserGoals(
   args: {
@@ -675,6 +751,8 @@ async function getUserGoals(
   const goalsWithProgress: Array<Record<string, unknown>> = [];
 
   for (const goal of goals) {
+    const rules = (goal.criteria_rules as Array<{ field: string; operator: string; values: unknown[] }>) || [];
+
     const goalData: Record<string, unknown> = {
       id: goal.id,
       name: goal.name,
@@ -685,12 +763,12 @@ async function getUserGoals(
       score_mode: goal.score_mode,
       score_floor: goal.score_floor,
       created_at: goal.created_at,
+      criteria_summary: buildCriteriaSummary(rules, goal.target_type, goal.target_value),
+      search_params: buildSearchParams(rules, goal.target_type, goal.target_value),
     };
 
     if (include_progress) {
       // Parse criteria_rules to extract level and difficulty filters
-      const rules = (goal.criteria_rules as Array<{ field: string; operator: string; values: unknown[] }>) || [];
-
       let levelValues: number[] | null = null;
       let levelOperator = "is";
       let difficultyValues: string[] | null = null;
@@ -774,6 +852,7 @@ async function getUserGoals(
 
     lines.push("");
     lines.push(`${i + 1}. Goal: ${g.name}`);
+    lines.push(`   Criteria: ${g.criteria_summary}`);
     lines.push(`   Target: ${targetLabel}`);
 
     if (progress && !progress.error) {
@@ -801,6 +880,7 @@ async function getUserGoals(
 
   return JSON.stringify({
     message: lines.join("\n"),
+    instruction: "To recommend songs for a goal, call get_songs_by_criteria using the search_params from that goal. Each goal includes search_params with the appropriate filters already mapped.",
     goal_count: filteredGoals.length,
     goals: filteredGoals,
   });
