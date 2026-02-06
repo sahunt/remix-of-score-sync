@@ -25,7 +25,7 @@ export function useToggleSongAccess() {
     queryClient.getQueriesData<ScoreWithSong[]>({ queryKey: ['user-scores'] }).forEach(
       ([queryKey, data]) => {
         if (!data) return;
-        previousCacheEntries.push({ queryKey, data });
+        previousCacheEntries.push({ queryKey: queryKey as unknown[], data });
         const updated = data.map(score => {
           const scoreSongId = score.musicdb?.song_id ?? score.song_id;
           if (scoreSongId === songId) {
