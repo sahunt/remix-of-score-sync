@@ -5,7 +5,15 @@ import { EdiSongCard } from './EdiSongCard';
 import { FeedbackButtons } from './FeedbackButtons';
 import { parseFollowUps } from '@/lib/parseFollowUps';
 
-interface ParsedSong {
+// Minimal marker format from backend (ID-only to prevent hallucination)
+interface SongMarker {
+  song_id: number;
+  difficulty: string;
+  eamuse_id: string | null;
+}
+
+// Hydrated song data after looking up from database
+interface HydratedSong {
   song_id: number;
   title: string;
   difficulty: string;
@@ -22,16 +30,24 @@ interface ChatMessageProps {
     flare: number | null;
     halo: string | null;
   } | null;
-  onSongClick?: (song: ParsedSong) => void;
+  // Lookup function to hydrate song data from database
+  // Returns null if song not found (hallucinated)
+  getSongData?: (songId: number, difficultyName: string) => {
+    title: string;
+    level: number;
+    eamuse_id: string | null;
+  } | null;
+  onSongClick?: (song: HydratedSong) => void;
   userPrompt?: string;
   conversationContext?: { role: string; content: string }[];
 }
 
-type ParsedPart = { type: 'text'; value: string } | { type: 'song'; value: ParsedSong };
+type ParsedPart = { type: 'text'; value: string } | { type: 'song'; value: SongMarker };
 
 /**
  * Parse message content for [[SONG:...]] patterns
- * Returns array of text and song parts for rendering
+ * Returns array of text and song marker parts for rendering
+ * The marker only contains IDs - frontend must hydrate full data from database
  */
 function parseMessageContent(content: string): ParsedPart[] {
   const parts: ParsedPart[] = [];
@@ -48,10 +64,16 @@ function parseMessageContent(content: string): ParsedPart[] {
       }
     }
 
-    // Parse the song JSON
+    // Parse the song JSON (now ID-only marker format)
     try {
-      const songData = JSON.parse(match[1]) as ParsedSong;
-      parts.push({ type: 'song', value: songData });
+      const markerData = JSON.parse(match[1]) as SongMarker;
+      // Validate required fields exist
+      if (markerData.song_id && markerData.difficulty) {
+        parts.push({ type: 'song', value: markerData });
+      } else {
+        // Invalid marker, keep as text
+        parts.push({ type: 'text', value: match[0] });
+      }
     } catch {
       // If JSON fails, keep as text
       parts.push({ type: 'text', value: match[0] });
@@ -80,10 +102,11 @@ function hasIncompleteMarker(content: string): boolean {
   return openCount > closeCount;
 }
 
-export function ChatMessage({ 
-  message, 
-  isStreaming, 
-  getUserScore, 
+export function ChatMessage({
+  message,
+  isStreaming,
+  getUserScore,
+  getSongData,
   onSongClick,
   userPrompt,
   conversationContext,
@@ -190,18 +213,36 @@ export function ChatMessage({
               </div>
             );
           } else {
-            const song = part.value;
-            const userScore = getUserScore?.(song.song_id, song.difficulty) ?? null;
+            // Hydrate song data from database using the marker IDs
+            const marker = part.value;
+            const songData = getSongData?.(marker.song_id, marker.difficulty);
+
+            // If song not found in database, it was hallucinated - skip rendering
+            if (!songData) {
+              console.warn(`Skipping hallucinated song: song_id=${marker.song_id}, difficulty=${marker.difficulty}`);
+              return null;
+            }
+
+            // Build hydrated song object
+            const hydratedSong: HydratedSong = {
+              song_id: marker.song_id,
+              title: songData.title,
+              difficulty: marker.difficulty,
+              level: songData.level,
+              eamuse_id: songData.eamuse_id ?? marker.eamuse_id,
+            };
+
+            const userScore = getUserScore?.(marker.song_id, marker.difficulty) ?? null;
             return (
               <EdiSongCard
-                key={`song-${index}-${song.song_id}`}
-                songId={song.song_id}
-                title={song.title}
-                difficultyName={song.difficulty}
-                difficultyLevel={song.level}
-                eamuseId={song.eamuse_id}
+                key={`song-${index}-${marker.song_id}`}
+                songId={hydratedSong.song_id}
+                title={hydratedSong.title}
+                difficultyName={hydratedSong.difficulty}
+                difficultyLevel={hydratedSong.level}
+                eamuseId={hydratedSong.eamuse_id}
                 userScore={userScore}
-                onClick={() => onSongClick?.(song)}
+                onClick={() => onSongClick?.(hydratedSong)}
               />
             );
           }

@@ -125,6 +125,27 @@ export default function Edi() {
     return scoreMap.get(key) ?? null;
   }, [scoreMap]);
 
+  // Callback to hydrate song data from database (for anti-hallucination)
+  // Returns null if song doesn't exist - hallucinated songs get filtered out
+  const getSongData = useCallback((songId: number, difficultyName: string) => {
+    if (!musicDbData) return null;
+
+    // Find the chart by song_id and difficulty_name
+    const normalizedDifficulty = difficultyName.toUpperCase();
+    const chart = musicDbData.charts.find(
+      c => c.song_id === songId &&
+           c.difficulty_name?.toUpperCase() === normalizedDifficulty
+    );
+
+    if (!chart) return null;
+
+    return {
+      title: chart.name ?? 'Unknown',
+      level: chart.difficulty_level ?? 0,
+      eamuse_id: chart.eamuse_id,
+    };
+  }, [musicDbData]);
+
   // Handle song card click - open modal
   const handleSongClick = useCallback((song: SelectedSong) => {
     setSelectedSong(song);
@@ -289,6 +310,7 @@ export default function Edi() {
                 message={message}
                 isStreaming={isLoading && isLastMessage && message.role === 'assistant'}
                 getUserScore={getUserScore}
+                getSongData={getSongData}
                 onSongClick={handleSongClick}
                 userPrompt={userPrompt}
                 conversationContext={conversationContext}
