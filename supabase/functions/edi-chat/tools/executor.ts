@@ -4,12 +4,11 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ToolCall } from "../utils/types.ts";
 
-// Result format for songs (frontend expects this marker format)
+// Minimal marker format - ID-only to prevent hallucination
+// Frontend hydrates title, level, patterns from database
 interface SongMarker {
   song_id: number;
-  title: string;
   difficulty: string;
-  level: number;
   eamuse_id: string | null;
 }
 
@@ -118,9 +117,7 @@ async function searchSongs(
 
     const songMarker = formatSongMarker({
       song_id: m.song_id,
-      title: m.name,
       difficulty: m.difficulty_name,
-      level: m.difficulty_level,
       eamuse_id: m.eamuse_id,
     });
 
@@ -456,13 +453,11 @@ async function getSongsByCriteria(
   // Limit results
   results = results.slice(0, effectiveLimit);
 
-  // Format output with song markers
+  // Format output with song markers (ID-only, frontend hydrates the rest)
   const formattedResults = results.map(r => ({
     display_marker: formatSongMarker({
       song_id: r.song_id,
-      title: r.name,
       difficulty: r.difficulty,
-      level: r.level,
       eamuse_id: r.eamuse_id,
     }),
     name: r.name,
