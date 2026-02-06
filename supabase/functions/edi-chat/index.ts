@@ -942,7 +942,7 @@ These rules override everything else. Before EVERY response, check:
 // TOOL EXECUTOR
 // ============================================================================
 
-interface SongMarker { song_id: number; title: string; difficulty: string; level: number; eamuse_id: string | null }
+interface SongMarker { song_id: number; difficulty: string; eamuse_id: string | null }
 
 function formatSongMarker(song: SongMarker): string {
   return `[[SONG:${JSON.stringify(song)}]]`;
@@ -990,7 +990,7 @@ async function searchSongs(
     const patterns = chartMap.get(chartKey);
     const userScore = userScoreMap.get(m.id);
     return {
-      display_marker: formatSongMarker({ song_id: m.song_id, title: m.name, difficulty: m.difficulty_name, level: m.difficulty_level, eamuse_id: m.eamuse_id }),
+      display_marker: formatSongMarker({ song_id: m.song_id, difficulty: m.difficulty_name, eamuse_id: m.eamuse_id }),
       name: m.name, artist: m.artist, difficulty: m.difficulty_name, level: m.difficulty_level, era: m.era, sanbai_rating: m.sanbai_rating,
       patterns: patterns ? { crossovers: patterns.crossovers, footswitches: patterns.footswitches, jacks: patterns.jacks, shock_arrows: patterns.mines, notes: patterns.notes, bpm: patterns.bpm, peak_nps: patterns.peak_nps, stop_count: patterns.stop_count } : null,
       user_score: userScore ? { score: userScore.score, halo: userScore.halo, rank: userScore.rank, flare: userScore.flare } : null,
@@ -1129,7 +1129,7 @@ async function getSongsByCriteria(
   results = results.slice(0, effectiveLimit);
 
   const formattedResults = results.map(r => ({
-    display_marker: formatSongMarker({ song_id: r.song_id, title: r.name, difficulty: r.difficulty, level: r.level, eamuse_id: r.eamuse_id }),
+    display_marker: formatSongMarker({ song_id: r.song_id, difficulty: r.difficulty, eamuse_id: r.eamuse_id }),
     name: r.name, artist: r.artist, difficulty: r.difficulty, level: r.level, era: r.era, sanbai_rating: r.sanbai_rating, patterns: r.patterns, user_score: r.user_score,
   }));
 
