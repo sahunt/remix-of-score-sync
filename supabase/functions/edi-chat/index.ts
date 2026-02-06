@@ -150,6 +150,7 @@ const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
 const MAX_TOOL_ROUNDS = 3;
 const PAGE_SIZE = 1000;
+const MAX_CONVERSATION_MESSAGES = 20;
 
 // ============================================================================
 // DATA FETCHERS
@@ -826,6 +827,20 @@ You have access to tools that query the DDR database. USE THEM — do NOT guess.
 2. NEVER construct [[SONG:...]] markers yourself - ONLY copy from tool results
 3. If tool returns 4 songs, recommend AT MOST those 4 songs
 4. If tool shows user_score as null, user has NOT played that song
+
+══════════════════════════════════════════════════════════════════════════════
+⚠️ ANTI-HALLUCINATION RULES — VERIFY BEFORE EVERY RESPONSE
+══════════════════════════════════════════════════════════════════════════════
+
+These rules override everything else. Before EVERY response, check:
+
+1. ONLY reference songs from the CURRENT tool results in THIS turn.
+   Songs mentioned earlier in conversation history are STALE — do NOT re-recommend them.
+2. If you need song data, CALL A TOOL. Never rely on memory of previous results.
+3. NEVER invent song names, scores, halos, or achievements. If unsure, ask or look it up.
+4. Every [[SONG:...]] marker must be COPIED from a tool result — never constructed.
+5. If a user asks about a song from earlier in the conversation, call search_songs
+   again to get fresh data — do NOT recite what you said before.
 `;
 
 // ============================================================================
@@ -887,7 +902,7 @@ async function searchSongs(
     };
   });
 
-  return JSON.stringify({ message: `Found ${results.length} chart(s) matching "${query}"`, instruction: "ONLY recommend songs from this list. Copy each song's display_marker EXACTLY.", results });
+  return JSON.stringify({ message: `Found ${results.length} chart(s) matching "${query}"`, instruction: "ONLY recommend songs from THIS result. Do NOT reference songs from earlier in the conversation. Copy each song's display_marker EXACTLY as shown.", results });
 }
 
 async function getSongsByCriteria(
@@ -999,7 +1014,7 @@ async function getSongsByCriteria(
     name: r.name, artist: r.artist, difficulty: r.difficulty, level: r.level, era: r.era, sanbai_rating: r.sanbai_rating, patterns: r.patterns, user_score: r.user_score,
   }));
 
-  return JSON.stringify({ message: `Found ${formattedResults.length} chart(s) matching criteria`, instruction: "ONLY recommend songs from this list.", total_matches: results.length, results: formattedResults });
+  return JSON.stringify({ message: `Found ${formattedResults.length} chart(s) matching criteria`, instruction: "ONLY recommend songs from THIS result. Do NOT reference songs from earlier in the conversation. Copy each song's display_marker EXACTLY as shown.", total_matches: results.length, results: formattedResults });
 }
 
 async function getSongOffset(args: { query: string }, supabaseServiceRole: SupabaseClient): Promise<string> {
@@ -1078,6 +1093,26 @@ async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, sup
 }
 
 // ============================================================================
+// CONVERSATION HISTORY MANAGEMENT
+// ============================================================================
+
+/**
+ * Limits conversation history to prevent hallucination in long conversations.
+ * As conversations grow, the LLM may mix up data from earlier messages with
+ * current tool results. This function:
+ * 1. Caps the number of messages sent to the LLM
+ * 2. Keeps the most recent messages for continuity
+ */
+function prepareMessages(incomingMessages: Message[]): Message[] {
+  if (incomingMessages.length <= MAX_CONVERSATION_MESSAGES) {
+    return incomingMessages;
+  }
+
+  console.log(`Trimming conversation from ${incomingMessages.length} to ${MAX_CONVERSATION_MESSAGES} messages`);
+  return incomingMessages.slice(-MAX_CONVERSATION_MESSAGES);
+}
+
+// ============================================================================
 // SSE STREAM HELPER
 // ============================================================================
 
@@ -1151,7 +1186,8 @@ serve(async (req) => {
 
     console.log(`System prompt length: ${systemPrompt.length} characters`);
 
-    const allMessages: Message[] = [{ role: "system", content: systemPrompt }, ...incomingMessages];
+    const preparedMessages = prepareMessages(incomingMessages);
+    const allMessages: Message[] = [{ role: "system", content: systemPrompt }, ...preparedMessages];
 
     let resolvedWithoutTools = false;
     let directResponseText = "";
