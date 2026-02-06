@@ -773,7 +773,7 @@ const toolDefinitions: ToolDefinition[] = [
           min_difficulty_level: { type: "integer", description: "Minimum difficulty level", minimum: 1, maximum: 20 },
           max_difficulty_level: { type: "integer", description: "Maximum difficulty level", minimum: 1, maximum: 20 },
           difficulty_name: { type: "string", enum: ["Beginner", "Basic", "Difficult", "Expert", "Challenge"] },
-          halo_filter: { type: "string", enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "pfc_no_mfc", "has_pfc", "has_mfc"] },
+          halo_filter: { type: "string", enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "has_gfc", "pfc_no_mfc", "has_pfc", "has_mfc"] },
           min_crossovers: { type: "integer", minimum: 0 },
           min_footswitches: { type: "integer", minimum: 0 },
           min_jacks: { type: "integer", minimum: 0 },
@@ -919,10 +919,23 @@ async function getSongsByCriteria(
 
   const effectiveLimit = Math.min(limit, 25);
 
-  const { data: allUserScores } = await supabase.from("user_scores").select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)`).eq("user_id", userId);
+  // Paginate user scores to ensure we fetch ALL rows (Supabase default limit is ~1000)
+  let allUserScores: Record<string, unknown>[] = [];
+  let userScoreFrom = 0;
+  let userScoreHasMore = true;
+  while (userScoreHasMore) {
+    const { data: userScorePage } = await supabase.from("user_scores").select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)`).eq("user_id", userId).range(userScoreFrom, userScoreFrom + PAGE_SIZE - 1);
+    if (userScorePage && userScorePage.length > 0) {
+      allUserScores = [...allUserScores, ...userScorePage as Record<string, unknown>[]];
+      userScoreFrom += PAGE_SIZE;
+      userScoreHasMore = userScorePage.length === PAGE_SIZE;
+    } else {
+      userScoreHasMore = false;
+    }
+  }
 
   const userScoreByMusicdbId = new Map<number, { score: number; halo: string; rank: string; flare: number | null }>();
-  if (allUserScores) for (const us of allUserScores) userScoreByMusicdbId.set(us.musicdb_id, { score: us.score, halo: us.halo, rank: us.rank, flare: us.flare });
+  for (const us of allUserScores) userScoreByMusicdbId.set(us.musicdb_id as number, { score: us.score as number, halo: us.halo as string, rank: us.rank as string, flare: us.flare as number | null });
 
   let musicDbQuery = supabaseServiceRole.from("musicdb").select("id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating").eq("playstyle", "SP").eq("deleted", false);
 
@@ -958,6 +971,7 @@ async function getSongsByCriteria(
         case "no_clear": if (hasScore && !["fail", "none", ""].includes(halo)) continue; break;
         case "clear_no_fc": if (!hasScore || ["fc", "gfc", "pfc", "mfc", "fail", "none", ""].includes(halo)) continue; break;
         case "fc_no_pfc": if (!hasScore || !["fc", "gfc"].includes(halo)) continue; break;
+        case "has_gfc": if (!hasScore || !["gfc", "pfc", "mfc"].includes(halo)) continue; break;
         case "pfc_no_mfc": if (!hasScore || halo !== "pfc") continue; break;
         case "has_pfc": if (!hasScore || !["pfc", "mfc"].includes(halo)) continue; break;
         case "has_mfc": if (!hasScore || halo !== "mfc") continue; break;
