@@ -640,6 +640,172 @@ async function getCatalogStats(
   });
 }
 
+// Get user goals with progress
+async function getUserGoals(
+  args: {
+    status?: string;
+    include_progress?: boolean;
+  },
+  supabase: SupabaseClient,
+  supabaseServiceRole: SupabaseClient,
+  userId: string
+): Promise<string> {
+  const { status = "active", include_progress = true } = args;
+
+  // Fetch all goals for the user (RLS handles user filtering)
+  const { data: goals, error: goalsError } = await supabase
+    .from("user_goals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (goalsError) {
+    console.error("Error fetching user goals:", goalsError);
+    return JSON.stringify({ error: "Failed to fetch goals", details: goalsError.message });
+  }
+
+  if (!goals || goals.length === 0) {
+    return JSON.stringify({
+      message: "No goals found. The user hasn't set any goals yet.",
+      goals: [],
+    });
+  }
+
+  // Calculate progress for each goal if requested
+  const goalsWithProgress: Array<Record<string, unknown>> = [];
+
+  for (const goal of goals) {
+    const goalData: Record<string, unknown> = {
+      id: goal.id,
+      name: goal.name,
+      target_type: goal.target_type,
+      target_value: goal.target_value,
+      goal_mode: goal.goal_mode,
+      goal_count: goal.goal_count,
+      score_mode: goal.score_mode,
+      score_floor: goal.score_floor,
+      created_at: goal.created_at,
+    };
+
+    if (include_progress) {
+      // Parse criteria_rules to extract level and difficulty filters
+      const rules = (goal.criteria_rules as Array<{ field: string; operator: string; values: unknown[] }>) || [];
+
+      let levelValues: number[] | null = null;
+      let levelOperator = "is";
+      let difficultyValues: string[] | null = null;
+      let difficultyOperator = "is";
+
+      for (const rule of rules) {
+        if (rule.field === "level" && Array.isArray(rule.values)) {
+          levelValues = rule.values.map((v: unknown) => Number(v));
+          levelOperator = rule.operator || "is";
+        } else if (rule.field === "difficulty" && Array.isArray(rule.values)) {
+          difficultyValues = rule.values.map((v: unknown) => String(v).toUpperCase());
+          difficultyOperator = rule.operator || "is";
+        }
+      }
+
+      // Call calculate_goal_progress RPC
+      const { data: progressData, error: progressError } = await supabaseServiceRole
+        .rpc("calculate_goal_progress", {
+          p_user_id: userId,
+          p_level_values: levelValues,
+          p_level_operator: levelOperator,
+          p_difficulty_values: difficultyValues,
+          p_difficulty_operator: difficultyOperator,
+          p_target_type: goal.target_type,
+          p_target_value: goal.target_value,
+        });
+
+      if (progressError) {
+        console.error(`Error calculating progress for goal ${goal.id}:`, progressError);
+        goalData.progress = { error: "Failed to calculate progress" };
+      } else if (progressData && progressData.length > 0) {
+        const progress = progressData[0];
+        const completedCount = Number(progress.completed_count);
+        const totalCount = Number(progress.total_count);
+        const averageScore = Number(progress.average_score);
+
+        // Determine the effective target for goal_mode: "count" uses goal_count, "all" uses total_count
+        const effectiveTarget = goal.goal_mode === "count" && goal.goal_count
+          ? Math.min(goal.goal_count, totalCount)
+          : totalCount;
+
+        const isCompleted = effectiveTarget > 0 && completedCount >= effectiveTarget;
+        const percentage = effectiveTarget > 0
+          ? Math.min(100, Math.round((completedCount / effectiveTarget) * 100))
+          : 0;
+
+        goalData.progress = {
+          completed: completedCount,
+          target: effectiveTarget,
+          total_matching_charts: totalCount,
+          percentage,
+          is_completed: isCompleted,
+        };
+
+        // Include average score for score-type goals
+        if (goal.target_type === "score") {
+          (goalData.progress as Record<string, unknown>).average_score = averageScore;
+        }
+
+        goalData.computed_status = isCompleted ? "completed" : "active";
+      }
+    }
+
+    goalsWithProgress.push(goalData);
+  }
+
+  // Filter by status if requested
+  let filteredGoals = goalsWithProgress;
+  if (status !== "all" && include_progress) {
+    filteredGoals = goalsWithProgress.filter(g => g.computed_status === status);
+  }
+
+  // Format human-readable output
+  const statusLabel = status === "all" ? "All" : status === "completed" ? "Completed" : "Active";
+  const lines: string[] = [`${statusLabel} Goals (${filteredGoals.length}):`];
+
+  for (let i = 0; i < filteredGoals.length; i++) {
+    const g = filteredGoals[i];
+    const progress = g.progress as Record<string, unknown> | undefined;
+    const targetLabel = `${(g.target_type as string).toUpperCase()} ${g.target_value}`;
+
+    lines.push("");
+    lines.push(`${i + 1}. Goal: ${g.name}`);
+    lines.push(`   Target: ${targetLabel}`);
+
+    if (progress && !progress.error) {
+      const pct = progress.percentage as number;
+      const completed = progress.completed as number;
+      const target = progress.target as number;
+
+      if (g.target_type === "score" && g.score_mode === "average") {
+        lines.push(`   Progress: Avg. ${(progress.average_score as number)?.toLocaleString()} / Target ${Number(g.target_value).toLocaleString()}`);
+      } else {
+        lines.push(`   Progress: ${completed}/${target} (${pct}%)`);
+      }
+
+      if (pct >= 100) {
+        lines.push(`   Status: COMPLETED`);
+      } else if (pct >= 90) {
+        lines.push(`   Status: Almost there!`);
+      } else {
+        lines.push(`   Status: Active`);
+      }
+    }
+
+    lines.push(`   Created: ${(g.created_at as string).split("T")[0]}`);
+  }
+
+  return JSON.stringify({
+    message: lines.join("\n"),
+    goal_count: filteredGoals.length,
+    goals: filteredGoals,
+  });
+}
+
 // Main executor function
 export async function executeToolCall(
   toolCall: ToolCall,
@@ -705,6 +871,14 @@ export async function executeToolCall(
       return await getCatalogStats(
         args as { difficulty_level?: number },
         supabaseServiceRole
+      );
+
+    case "get_user_goals":
+      return await getUserGoals(
+        args as { status?: string; include_progress?: boolean },
+        supabase,
+        supabaseServiceRole,
+        userId
       );
 
     default:
