@@ -201,10 +201,15 @@ export function useGoalProgress(
     }
 
     // Apply criteria_rules filtering using centralized filter matcher
-    const matchingScores = filterScoresByRules(
+    const allMatchingScores = filterScoresByRules(
       scores, 
       goal.criteria_rules as FilterRule[], 
       goal.criteria_match_mode
+    );
+
+    // Exclude no-access songs from goal calculations
+    const matchingScores = allMatchingScores.filter(
+      s => s.has_access !== false
     );
 
     // Handle average score mode differently
