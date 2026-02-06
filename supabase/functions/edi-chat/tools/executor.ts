@@ -209,37 +209,51 @@ async function getSongsByCriteria(
 
   const effectiveLimit = Math.min(limit, 25);
 
-  // Step 1: Get all user scores for this user
-  const { data: allUserScores, error: userScoreError } = await supabase
-    .from("user_scores")
-    .select(`
-      musicdb_id,
-      score,
-      halo,
-      rank,
-      flare,
-      musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)
-    `)
-    .eq("user_id", userId);
+  // Step 1: Get all user scores for this user (paginated to fetch ALL rows)
+  const PAGE_SIZE = 1000;
+  let allUserScores: Record<string, unknown>[] = [];
+  let userScoreFrom = 0;
+  let userScoreHasMore = true;
+  while (userScoreHasMore) {
+    const { data: userScorePage, error: userScoreError } = await supabase
+      .from("user_scores")
+      .select(`
+        musicdb_id,
+        score,
+        halo,
+        rank,
+        flare,
+        musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)
+      `)
+      .eq("user_id", userId)
+      .range(userScoreFrom, userScoreFrom + PAGE_SIZE - 1);
 
-  if (userScoreError) {
-    console.error("Error fetching user scores:", userScoreError);
+    if (userScoreError) {
+      console.error("Error fetching user scores:", userScoreError);
+      break;
+    }
+
+    if (userScorePage && userScorePage.length > 0) {
+      allUserScores = [...allUserScores, ...userScorePage as Record<string, unknown>[]];
+      userScoreFrom += PAGE_SIZE;
+      userScoreHasMore = userScorePage.length === PAGE_SIZE;
+    } else {
+      userScoreHasMore = false;
+    }
   }
 
   // Build user score map by musicdb_id
   const userScoreByMusicdbId = new Map<number, { score: number; halo: string; rank: string; flare: number | null }>();
   const scoredMusicdbIds = new Set<number>();
 
-  if (allUserScores) {
-    for (const us of allUserScores) {
-      userScoreByMusicdbId.set(us.musicdb_id, {
-        score: us.score,
-        halo: us.halo,
-        rank: us.rank,
-        flare: us.flare,
-      });
-      scoredMusicdbIds.add(us.musicdb_id);
-    }
+  for (const us of allUserScores) {
+    userScoreByMusicdbId.set(us.musicdb_id as number, {
+      score: us.score as number,
+      halo: us.halo as string,
+      rank: us.rank as string,
+      flare: us.flare as number | null,
+    });
+    scoredMusicdbIds.add(us.musicdb_id as number);
   }
 
   // Step 2: Build musicdb query
@@ -341,6 +355,10 @@ async function getSongsByCriteria(
         case "fc_no_pfc":
           if (!hasScore) continue;
           if (!["fc", "gfc"].includes(halo)) continue;
+          break;
+        case "has_gfc":
+          if (!hasScore) continue;
+          if (!["gfc", "pfc", "mfc"].includes(halo)) continue;
           break;
         case "pfc_no_mfc":
           if (!hasScore) continue;

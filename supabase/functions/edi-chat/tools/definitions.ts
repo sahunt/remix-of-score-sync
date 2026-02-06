@@ -90,6 +90,7 @@ export const toolDefinitions: ToolDefinition[] = [
               "no_clear",
               "clear_no_fc",
               "fc_no_pfc",
+              "has_gfc",
               "pfc_no_mfc",
               "has_pfc",
               "has_mfc",
