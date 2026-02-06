@@ -63,6 +63,7 @@ export function useUserScores(options?: {
             halo,
             source_type,
             musicdb_id,
+            has_access,
             musicdb!inner(
               name, artist, eamuse_id, song_id, deleted, era, name_romanized,
               difficulty_name, difficulty_level, playstyle
@@ -121,6 +122,7 @@ export function useUserScores(options?: {
               halo: score.halo,
               source_type: score.source_type,
               musicdb_id: score.musicdb_id,
+              has_access: score.has_access,
               // Flatten chart metadata from musicdb for compatibility with existing code
               playstyle: score.musicdb.playstyle,
               difficulty_name: score.musicdb.difficulty_name,

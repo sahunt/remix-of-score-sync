@@ -89,6 +89,18 @@ export default function GoalDetail() {
     [matchingScores]
   );
 
+  // Create set of no-access song_ids from user scores
+  const noAccessSongIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const s of globalScores) {
+      if (s.has_access === false) {
+        const sid = s.musicdb?.song_id ?? s.song_id;
+        if (sid) ids.add(sid);
+      }
+    }
+    return ids;
+  }, [globalScores]);
+
   // Identify unplayed charts and convert to ScoreWithSong format
   const unplayedCharts: ScoreWithSong[] = useMemo(() => 
     matchingCharts
@@ -108,18 +120,43 @@ export default function GoalDetail() {
         song_id: chart.song_id,
         era: chart.era,
         isUnplayed: true,
+        // Inherit no-access from song-level flag
+        has_access: noAccessSongIds.has(chart.song_id) ? false : true,
       })),
-    [matchingCharts, playedChartIds]
+    [matchingCharts, playedChartIds, noAccessSongIds]
   );
 
   // Calculate progress with 12MS mode transformation
   const progress = useGoalProgress(goal ?? null, matchingScores, [], scoresLoading, reverseTransformHalo);
 
-  // Combine remaining songs with unplayed charts for the tabs
-  const allRemainingSongs = useMemo(() => 
-    [...progress.remainingSongs, ...unplayedCharts],
-    [progress.remainingSongs, unplayedCharts]
-  );
+  // Separate no-access songs from remaining
+  const { accessibleRemaining, noAccessSongs } = useMemo(() => {
+    const allRemaining = [...progress.remainingSongs, ...unplayedCharts];
+    const accessible: ScoreWithSong[] = [];
+    const noAccess: ScoreWithSong[] = [];
+    
+    for (const song of allRemaining) {
+      const songId = song.musicdb?.song_id ?? song.song_id;
+      const isNoAccess = song.has_access === false || (songId && noAccessSongIds.has(songId));
+      if (isNoAccess) {
+        noAccess.push(song);
+      } else {
+        accessible.push(song);
+      }
+    }
+    
+    return { accessibleRemaining: accessible, noAccessSongs: noAccess };
+  }, [progress.remainingSongs, unplayedCharts, noAccessSongIds]);
+
+  // Count no-access charts matching goal criteria for denominator adjustment
+  const noAccessChartCount = useMemo(() => {
+    return matchingCharts.filter(c => noAccessSongIds.has(c.song_id)).length;
+  }, [matchingCharts, noAccessSongIds]);
+
+  // Also count no-access played scores for the denominator
+  const noAccessPlayedCount = useMemo(() => {
+    return matchingScores.filter(s => s.has_access === false).length;
+  }, [matchingScores]);
 
   // Handler for song card clicks
   const handleSongClick = useCallback((song: ScoreWithSong) => {
@@ -241,7 +278,7 @@ export default function GoalDetail() {
             current={progress.current}
             total={goal.target_type === 'score' && goal.score_mode === 'average' 
               ? progress.total 
-              : (musicDbTotal > 0 ? musicDbTotal : progress.total)}
+              : (musicDbTotal > 0 ? musicDbTotal - noAccessChartCount : progress.total - noAccessPlayedCount)}
             scoreMode={goal.score_mode as 'target' | 'average' | undefined}
             scoreFloor={goal.score_floor}
           />
@@ -252,7 +289,8 @@ export default function GoalDetail() {
           <GoalSongTabs
             goal={goal}
             completedSongs={progress.completedSongs}
-            remainingSongs={allRemainingSongs}
+            remainingSongs={accessibleRemaining}
+            noAccessSongs={noAccessSongs}
             isLoading={scoresLoading}
             onSongClick={handleSongClick}
           />

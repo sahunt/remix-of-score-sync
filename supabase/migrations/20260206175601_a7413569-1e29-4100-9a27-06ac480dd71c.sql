@@ -1,0 +1,1 @@
+ALTER TABLE public.user_scores ADD COLUMN has_access boolean DEFAULT true;

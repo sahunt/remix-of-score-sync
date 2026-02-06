@@ -5,12 +5,13 @@ import { cn } from '@/lib/utils';
 
 interface RemainingSongsListProps {
   songs: ScoreWithSong[];
+  noAccessSongs?: ScoreWithSong[];
   goal: Goal;
   isLoading: boolean;
   onSongClick?: (song: ScoreWithSong) => void;
 }
 
-export function RemainingSongsList({ songs, goal, isLoading, onSongClick }: RemainingSongsListProps) {
+export function RemainingSongsList({ songs, noAccessSongs = [], goal, isLoading, onSongClick }: RemainingSongsListProps) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -21,7 +22,7 @@ export function RemainingSongsList({ songs, goal, isLoading, onSongClick }: Rema
     );
   }
 
-  if (songs.length === 0) {
+  if (songs.length === 0 && noAccessSongs.length === 0) {
     return (
       <div className="py-12 text-center">
         <div className="text-4xl mb-4">🎉</div>
@@ -33,7 +34,7 @@ export function RemainingSongsList({ songs, goal, isLoading, onSongClick }: Rema
     );
   }
 
-  // Separate played vs unplayed songs
+  // Separate played vs unplayed songs (from accessible songs only)
   const playedSongs = songs.filter(s => !s.isUnplayed);
   const unplayedSongs = songs.filter(s => s.isUnplayed);
 
@@ -78,6 +79,31 @@ export function RemainingSongsList({ songs, goal, isLoading, onSongClick }: Rema
                 halo={null}
                 eamuseId={song.eamuse_id}
                 songId={song.song_id}
+                onClick={onSongClick ? () => onSongClick(song) : undefined}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No access songs section */}
+      {noAccessSongs.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide px-1">
+            No access ({noAccessSongs.length})
+          </p>
+          {noAccessSongs.map((song) => (
+            <div key={song.id} className="opacity-50">
+              <SongCard
+                name={song.musicdb?.name ?? song.name ?? 'Unknown Song'}
+                difficultyLevel={song.difficulty_level}
+                difficultyName={song.difficulty_name}
+                score={song.score}
+                rank={song.rank}
+                flare={song.flare}
+                halo={song.halo}
+                eamuseId={song.musicdb?.eamuse_id ?? song.eamuse_id}
+                songId={song.musicdb?.song_id ?? song.song_id}
                 onClick={onSongClick ? () => onSongClick(song) : undefined}
               />
             </div>
