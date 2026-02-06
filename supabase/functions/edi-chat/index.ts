@@ -608,10 +608,40 @@ GRADING (Letter Grades) - Score thresholds:
 - JACKS: Hitting single arrow multiple times with SAME foot
 - STAMINA: Arrow-dense, exhausting charts
 
+--- SHOCK ARROWS ---
+SHOCK ARROWS: Special arrows that DAMAGE the player if stepped on. They are OBSTACLES TO AVOID, not arrows to hit.
+- Appear as flashing/electric arrows
+- Stepping on them damages your life gauge and breaks combo
+- Charts with shock arrows test discipline, body control, and spatial awareness
+⚠️ DB REFERENCE: The database field is called "mines" but ALWAYS say "shock arrows" to the player.
+⚠️ NEVER say "mines" — ALWAYS say "shock arrows" when talking to the player.
+
+When a player asks for "shock arrow charts" or "charts with shocks":
+- They want charts that HAVE shock arrows as a CHART CHARACTERISTIC
+- They enjoy the challenge of avoiding shocks while playing
+- This is NOT a scoring goal or PFC target request
+- DO describe the shock arrow challenge: how many shocks, the movement/avoidance required
+
+--- SONG OFFSET DISPLAY RULES ---
+When displaying song offset/bias information:
+- Format offset as: +Nms or -Nms (e.g., "+3ms", "-6ms", "+0ms")
+- This is how the app displays offsets — use the SAME format
+- Do NOT show raw decimal bias values like "0.015" or "-5.81ms"
+- Do NOT add qualitative descriptions like "(Slightly early)" or "(Late)"
+- ONLY show the rounded integer with sign and "ms" suffix
+- Example: "Set your offset to -6ms" NOT "The offset is -0.006 (Slightly early)"
+
 --- RESPONSE RULES ---
 - Max 2-3 sentences per point
 - When recommending songs, output 3-5 songs using [[SONG:...]] format
 - COPY the [[SONG:...]] markers EXACTLY as shown
+
+--- TERMINOLOGY RULES ---
+- ALWAYS say "shock arrows", NEVER say "mines" when talking to the player
+- Use "jacks" NOT "jackhammer"
+- NEVER use "ankle" or "ankle tapping"
+- Say "crossovers" not "crosses"
+- Say "footswitches" not "foot switches"
 
 --- FOLLOW-UPS (REQUIRED) ---
 At END of EVERY response, include 2-3 follow-up suggestions: [[FOLLOWUP:suggestion text here]]
@@ -746,7 +776,7 @@ const toolDefinitions: ToolDefinition[] = [
           min_crossovers: { type: "integer", minimum: 0 },
           min_footswitches: { type: "integer", minimum: 0 },
           min_jacks: { type: "integer", minimum: 0 },
-          min_mines: { type: "integer", minimum: 0 },
+          min_mines: { type: "integer", minimum: 0, description: "Minimum shock arrow count. Shock arrows are obstacles to AVOID, not hit. Database field is 'mines' but ALWAYS call them 'shock arrows'." },
           min_stops: { type: "integer", minimum: 0 },
           min_notes: { type: "integer", minimum: 0 },
           min_bpm: { type: "integer", minimum: 0 },
@@ -754,7 +784,7 @@ const toolDefinitions: ToolDefinition[] = [
           min_score: { type: "integer", minimum: 0, maximum: 1000000 },
           max_score: { type: "integer", minimum: 0, maximum: 1000000 },
           era: { type: "integer", minimum: 0 },
-          sort_by: { type: "string", enum: ["crossovers", "footswitches", "jacks", "mines", "notes", "bpm", "peak_nps", "score", "random"] },
+          sort_by: { type: "string", enum: ["crossovers", "footswitches", "jacks", "shock_arrows", "notes", "bpm", "peak_nps", "score", "random"], description: "Field to sort results by. 'shock_arrows' sorts by shock arrow count." },
           limit: { type: "integer", minimum: 1, maximum: 25, default: 10 },
         },
         required: [],
@@ -852,7 +882,7 @@ async function searchSongs(
     return {
       display_marker: formatSongMarker({ song_id: m.song_id, title: m.name, difficulty: m.difficulty_name, level: m.difficulty_level, eamuse_id: m.eamuse_id }),
       name: m.name, artist: m.artist, difficulty: m.difficulty_name, level: m.difficulty_level, era: m.era, sanbai_rating: m.sanbai_rating,
-      patterns: patterns ? { crossovers: patterns.crossovers, footswitches: patterns.footswitches, jacks: patterns.jacks, mines: patterns.mines, notes: patterns.notes, bpm: patterns.bpm, peak_nps: patterns.peak_nps, stop_count: patterns.stop_count } : null,
+      patterns: patterns ? { crossovers: patterns.crossovers, footswitches: patterns.footswitches, jacks: patterns.jacks, shock_arrows: patterns.mines, notes: patterns.notes, bpm: patterns.bpm, peak_nps: patterns.peak_nps, stop_count: patterns.stop_count } : null,
       user_score: userScore ? { score: userScore.score, halo: userScore.halo, rank: userScore.rank, flare: userScore.flare } : null,
     };
   });
@@ -943,7 +973,7 @@ async function getSongsByCriteria(
     results.push({
       musicdb_id: m.id, song_id: m.song_id, name: m.name, artist: m.artist, difficulty: m.difficulty_name, level: m.difficulty_level,
       eamuse_id: m.eamuse_id, era: m.era, sanbai_rating: m.sanbai_rating,
-      patterns: patterns ? { crossovers: patterns.crossovers, footswitches: patterns.footswitches, jacks: patterns.jacks, mines: patterns.mines, notes: patterns.notes, bpm: patterns.bpm, peak_nps: patterns.peak_nps, stop_count: patterns.stop_count } : null,
+      patterns: patterns ? { crossovers: patterns.crossovers, footswitches: patterns.footswitches, jacks: patterns.jacks, shock_arrows: patterns.mines, notes: patterns.notes, bpm: patterns.bpm, peak_nps: patterns.peak_nps, stop_count: patterns.stop_count } : null,
       user_score: userScore,
     });
   }
@@ -953,7 +983,7 @@ async function getSongsByCriteria(
       case "crossovers": results.sort((a, b) => ((b.patterns?.crossovers as number) || 0) - ((a.patterns?.crossovers as number) || 0)); break;
       case "footswitches": results.sort((a, b) => ((b.patterns?.footswitches as number) || 0) - ((a.patterns?.footswitches as number) || 0)); break;
       case "jacks": results.sort((a, b) => ((b.patterns?.jacks as number) || 0) - ((a.patterns?.jacks as number) || 0)); break;
-      case "mines": results.sort((a, b) => ((b.patterns?.mines as number) || 0) - ((a.patterns?.mines as number) || 0)); break;
+      case "shock_arrows": case "mines": results.sort((a, b) => ((b.patterns?.mines as number) || 0) - ((a.patterns?.mines as number) || 0)); break;
       case "notes": results.sort((a, b) => ((b.patterns?.notes as number) || 0) - ((a.patterns?.notes as number) || 0)); break;
       case "bpm": results.sort((a, b) => ((b.patterns?.bpm as number) || 0) - ((a.patterns?.bpm as number) || 0)); break;
       case "peak_nps": results.sort((a, b) => ((b.patterns?.peak_nps as number) || 0) - ((a.patterns?.peak_nps as number) || 0)); break;
@@ -995,14 +1025,15 @@ async function getSongOffset(args: { query: string }, supabaseServiceRole: Supab
     const biasInfo = songId ? biasMap.get(songId) : null;
 
     if (biasInfo) {
-      const recommendedOffset = -biasInfo.bias_ms;
+      const userOffset = Math.round(-biasInfo.bias_ms);
+      const sign = userOffset >= 0 ? '+' : '';
+      const formatted_offset = `${sign}${userOffset}ms`;
       return {
-        song_name: name, recommended_offset: Math.round(recommendedOffset), raw_bias_ms: biasInfo.bias_ms, confidence: biasInfo.confidence,
-        explanation: biasInfo.bias_ms > 0 ? `Chart is ${biasInfo.bias_ms}ms late. Set offset to ${Math.round(recommendedOffset)}ms.`
-          : biasInfo.bias_ms < 0 ? `Chart is ${Math.abs(biasInfo.bias_ms)}ms early. Set offset to ${Math.round(recommendedOffset)}ms.` : "Chart is in sync. No offset needed.",
+        song_name: name, formatted_offset, confidence: biasInfo.confidence,
+        instruction: `Tell the player to set their offset to ${formatted_offset}. Use this EXACT format — do NOT show raw decimals or add descriptions like "(early)" or "(late)".`,
       };
     }
-    return { song_name: name, recommended_offset: null, explanation: "No offset data available for this song." };
+    return { song_name: name, formatted_offset: null, instruction: "No offset data available for this song." };
   });
 
   return JSON.stringify({ message: `Offset data for "${query}"`, results });

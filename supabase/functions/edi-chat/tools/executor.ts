@@ -137,7 +137,7 @@ async function searchSongs(
         down_footswitches: patterns.down_footswitches,
         sideswitches: patterns.sideswitches,
         jacks: patterns.jacks,
-        mines: patterns.mines,
+        shock_arrows: patterns.mines,
         notes: patterns.notes,
         bpm: patterns.bpm,
         peak_nps: patterns.peak_nps,
@@ -402,7 +402,7 @@ async function getSongsByCriteria(
         down_footswitches: patterns.down_footswitches,
         sideswitches: patterns.sideswitches,
         jacks: patterns.jacks,
-        mines: patterns.mines,
+        shock_arrows: patterns.mines,
         notes: patterns.notes,
         bpm: patterns.bpm,
         peak_nps: patterns.peak_nps,
@@ -425,6 +425,7 @@ async function getSongsByCriteria(
       case "jacks":
         results.sort((a, b) => ((b.patterns?.jacks as number) || 0) - ((a.patterns?.jacks as number) || 0));
         break;
+      case "shock_arrows":
       case "mines":
         results.sort((a, b) => ((b.patterns?.mines as number) || 0) - ((a.patterns?.mines as number) || 0));
         break;
@@ -541,24 +542,20 @@ async function getSongOffset(
     const biasInfo = songId ? biasMap.get(songId) : null;
 
     if (biasInfo) {
-      // Recommended offset is -bias_ms (negative of stored value)
-      const recommendedOffset = -biasInfo.bias_ms;
+      const userOffset = Math.round(-biasInfo.bias_ms);
+      const sign = userOffset >= 0 ? '+' : '';
+      const formatted_offset = `${sign}${userOffset}ms`;
       return {
         song_name: name,
-        recommended_offset: Math.round(recommendedOffset),
-        raw_bias_ms: biasInfo.bias_ms,
+        formatted_offset,
         confidence: biasInfo.confidence,
-        explanation: biasInfo.bias_ms > 0
-          ? `Chart is ${biasInfo.bias_ms}ms late relative to music. Set offset to ${Math.round(recommendedOffset)}ms.`
-          : biasInfo.bias_ms < 0
-          ? `Chart is ${Math.abs(biasInfo.bias_ms)}ms early relative to music. Set offset to ${Math.round(recommendedOffset)}ms.`
-          : "Chart is in sync with music. No offset needed.",
+        instruction: `Tell the player to set their offset to ${formatted_offset}. Use this EXACT format — do NOT show raw decimals or add descriptions like "(early)" or "(late)".`,
       };
     }
     return {
       song_name: name,
-      recommended_offset: null,
-      explanation: "No offset data available for this song.",
+      formatted_offset: null,
+      instruction: "No offset data available for this song.",
     };
   });
 
