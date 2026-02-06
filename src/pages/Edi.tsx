@@ -139,10 +139,22 @@ export default function Edi() {
 
     if (!chart) return null;
 
+    // Get eamuse_id from the matched chart; if null, try any chart of the same song
+    // (eamuse_id is a song-level attribute shared across all difficulties)
+    let eamuseId = chart.eamuse_id;
+    if (!eamuseId) {
+      const chartWithEamuseId = musicDbData.charts.find(
+        c => c.song_id === songId && c.eamuse_id
+      );
+      if (chartWithEamuseId) {
+        eamuseId = chartWithEamuseId.eamuse_id;
+      }
+    }
+
     return {
       title: chart.name ?? 'Unknown',
       level: chart.difficulty_level ?? 0,
-      eamuse_id: chart.eamuse_id,
+      eamuse_id: eamuseId,
     };
   }, [musicDbData]);
 

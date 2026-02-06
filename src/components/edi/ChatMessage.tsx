@@ -224,12 +224,13 @@ export function ChatMessage({
             }
 
             // Build hydrated song object
+            // Primary source for eamuse_id is the database (songData); marker is fallback
             const hydratedSong: HydratedSong = {
               song_id: marker.song_id,
               title: songData.title,
               difficulty: marker.difficulty,
               level: songData.level,
-              eamuse_id: songData.eamuse_id ?? marker.eamuse_id,
+              eamuse_id: songData.eamuse_id || marker.eamuse_id || null,
             };
 
             const userScore = getUserScore?.(marker.song_id, marker.difficulty) ?? null;
