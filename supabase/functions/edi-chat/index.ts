@@ -546,6 +546,58 @@ function calculateTotalStats(userScores: UserScore[]): TotalStats {
   return { totalPlayed: userScores.length, totalMfcs, totalPfcs, totalGfcs, totalFcs, totalLife4s, totalClears, totalAAAs };
 }
 
+interface LevelHaloStats {
+  level: number;
+  catalogTotal: number;
+  played: number;
+  mfc: number;
+  pfc: number;
+  gfc: number;
+  fc: number;
+  life4: number;
+  clear: number;
+  fail: number;
+}
+
+function calculateLevelHaloStats(userScores: UserScore[], chartAnalysis: ChartAnalysis[]): LevelHaloStats[] {
+  const catalogCounts = new Map<number, number>();
+  for (const chart of chartAnalysis) {
+    catalogCounts.set(chart.difficulty_level, (catalogCounts.get(chart.difficulty_level) || 0) + 1);
+  }
+
+  const levelMap = new Map<number, { played: number; mfc: number; pfc: number; gfc: number; fc: number; life4: number; clear: number; fail: number }>();
+
+  for (const score of userScores) {
+    const level = score.musicdb?.difficulty_level;
+    if (!level) continue;
+
+    const current = levelMap.get(level) || { played: 0, mfc: 0, pfc: 0, gfc: 0, fc: 0, life4: 0, clear: 0, fail: 0 };
+    current.played++;
+
+    const halo = score.halo?.toLowerCase() || '';
+    if (halo === 'mfc') current.mfc++;
+    else if (halo === 'pfc') current.pfc++;
+    else if (halo === 'gfc') current.gfc++;
+    else if (halo === 'fc') current.fc++;
+    else if (halo === 'life4') current.life4++;
+    else if (halo === 'clear') current.clear++;
+    else if (halo === 'fail') current.fail++;
+
+    levelMap.set(level, current);
+  }
+
+  const allLevels = new Set([...catalogCounts.keys(), ...levelMap.keys()]);
+  const results: LevelHaloStats[] = [];
+
+  for (const level of allLevels) {
+    const catalogTotal = catalogCounts.get(level) || 0;
+    const userData = levelMap.get(level) || { played: 0, mfc: 0, pfc: 0, gfc: 0, fc: 0, life4: 0, clear: 0, fail: 0 };
+    results.push({ level, catalogTotal, ...userData });
+  }
+
+  return results.sort((a, b) => a.level - b.level);
+}
+
 // ============================================================================
 // SKILL PROMPTS
 // ============================================================================
@@ -703,6 +755,43 @@ COUNTING STATS (ALL LEVELS 1-19)
 `;
 }
 
+function buildLevelHaloStatsPrompt(levelHaloStats: LevelHaloStats[]): string {
+  const lines = levelHaloStats
+    .filter(s => s.played > 0 || s.catalogTotal > 0)
+    .map(s => {
+      const unplayed = s.catalogTotal - s.played;
+      return `Lv${s.level}: ${s.catalogTotal} catalog, ${s.played} played (${unplayed} unplayed) | MFC:${s.mfc} PFC:${s.pfc} GFC:${s.gfc} FC:${s.fc} LIFE4:${s.life4} CLEAR:${s.clear} FAIL:${s.fail}`;
+    })
+    .join('\n');
+
+  return `
+══════════════════════════════════════════════════════════════════════════════
+PER-LEVEL HALO BREAKDOWN
+══════════════════════════════════════════════════════════════════════════════
+
+${lines}
+
+⚠️ HALO COUNTING RULES — READ CAREFULLY:
+
+Each song has EXACTLY ONE halo — its best achievement. Halos do NOT stack.
+A song with PFC is NOT also counted as GFC, FC, etc. Its halo is PFC, period.
+
+HALO HIERARCHY (best → worst): MFC > PFC > GFC > FC > LIFE4 > CLEAR > FAIL
+
+USE THESE NUMBERS to answer counting questions:
+- "How many 14s left to PFC?" = Lv14 catalog total − (Lv14 PFC + Lv14 MFC)
+- "How many 14s left to FC?" = Lv14 catalog total − (Lv14 MFC + Lv14 PFC + Lv14 GFC + Lv14 FC)
+- "How many 11s have I life4'd?" = Lv11 LIFE4 count above
+- "What 16s have I GFC'd?" = Use get_songs_by_criteria with difficulty_level=16 and halo_filter="is_gfc"
+- "How many 14s have I PFC'd?" = Lv14 PFC + Lv14 MFC (MFCs are better than PFCs)
+- "How many 15s have I cleared?" = Lv15 played − Lv15 FAIL (everything except fails is a clear)
+
+When user says "left to [halo]", they mean songs NOT YET at that halo level or above.
+When user says "have I [halo]'d", they mean songs with EXACTLY that halo (not higher).
+Exception: "PFC'd" includes MFCs because MFC is strictly better than PFC.
+`;
+}
+
 function buildSdpRulesPrompt(): string {
   return `
 ══════════════════════════════════════════════════════════════════════════════
@@ -765,7 +854,7 @@ const toolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "get_songs_by_criteria",
-      description: "Filter songs by gameplay criteria. Use for recommendations, practice suggestions, finding songs with specific patterns.",
+      description: "Filter songs by gameplay criteria. Use for recommendations, practice suggestions, finding songs with specific patterns, or listing songs by halo type. Use is_* halo filters for exact halo matches (e.g., is_gfc for exactly GFC, is_life4 for exactly LIFE4).",
       parameters: {
         type: "object",
         properties: {
@@ -773,7 +862,11 @@ const toolDefinitions: ToolDefinition[] = [
           min_difficulty_level: { type: "integer", description: "Minimum difficulty level", minimum: 1, maximum: 20 },
           max_difficulty_level: { type: "integer", description: "Maximum difficulty level", minimum: 1, maximum: 20 },
           difficulty_name: { type: "string", enum: ["Beginner", "Basic", "Difficult", "Expert", "Challenge"] },
-          halo_filter: { type: "string", enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "has_gfc", "pfc_no_mfc", "has_pfc", "has_mfc"] },
+          halo_filter: {
+            type: "string",
+            description: "Filter by user's halo status. EXACT MATCH filters (is_X) return songs with exactly that halo: is_mfc, is_pfc, is_gfc, is_fc, is_life4, is_clear, is_fail. RANGE filters: no_score (unplayed), no_clear (no clear/fail/unplayed), clear_no_fc (cleared but no full combo — includes CLEAR and LIFE4), fc_no_pfc (has FC or GFC but not PFC/MFC), has_gfc (GFC or better — GFC+PFC+MFC), pfc_no_mfc (exactly PFC), has_pfc (PFC or MFC), has_mfc (exactly MFC).",
+            enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "has_gfc", "pfc_no_mfc", "has_pfc", "has_mfc", "is_mfc", "is_pfc", "is_gfc", "is_fc", "is_life4", "is_clear", "is_fail"],
+          },
           min_crossovers: { type: "integer", minimum: 0 },
           min_footswitches: { type: "integer", minimum: 0 },
           min_jacks: { type: "integer", minimum: 0 },
@@ -818,7 +911,9 @@ AVAILABLE DATA TOOLS
 You have access to tools that query the DDR database. USE THEM — do NOT guess.
 
 - search_songs: Find songs by name
-- get_songs_by_criteria: Filter songs by level, patterns, score status, etc.
+- get_songs_by_criteria: Filter songs by level, patterns, halo status, etc.
+  Use is_* filters for exact halo matches: is_mfc, is_pfc, is_gfc, is_fc, is_life4, is_clear, is_fail
+  Use range filters: no_score, clear_no_fc, fc_no_pfc, has_pfc, has_mfc, etc.
 - get_song_offset: Look up timing offset for a song
 - get_catalog_stats: Get counts of available charts by level
 
@@ -967,6 +1062,7 @@ async function getSongsByCriteria(
       const halo = userScore?.halo?.toLowerCase() || "";
       const hasScore = userScore !== null;
       switch (halo_filter) {
+        // Range filters
         case "no_score": if (hasScore) continue; break;
         case "no_clear": if (hasScore && !["fail", "none", ""].includes(halo)) continue; break;
         case "clear_no_fc": if (!hasScore || ["fc", "gfc", "pfc", "mfc", "fail", "none", ""].includes(halo)) continue; break;
@@ -975,6 +1071,14 @@ async function getSongsByCriteria(
         case "pfc_no_mfc": if (!hasScore || halo !== "pfc") continue; break;
         case "has_pfc": if (!hasScore || !["pfc", "mfc"].includes(halo)) continue; break;
         case "has_mfc": if (!hasScore || halo !== "mfc") continue; break;
+        // Exact match filters
+        case "is_mfc": if (!hasScore || halo !== "mfc") continue; break;
+        case "is_pfc": if (!hasScore || halo !== "pfc") continue; break;
+        case "is_gfc": if (!hasScore || halo !== "gfc") continue; break;
+        case "is_fc": if (!hasScore || halo !== "fc") continue; break;
+        case "is_life4": if (!hasScore || halo !== "life4") continue; break;
+        case "is_clear": if (!hasScore || halo !== "clear") continue; break;
+        case "is_fail": if (!hasScore || halo !== "fail") continue; break;
       }
     }
 
@@ -1021,6 +1125,7 @@ async function getSongsByCriteria(
     }
   }
 
+  const totalBeforeLimit = results.length;
   results = results.slice(0, effectiveLimit);
 
   const formattedResults = results.map(r => ({
@@ -1028,7 +1133,7 @@ async function getSongsByCriteria(
     name: r.name, artist: r.artist, difficulty: r.difficulty, level: r.level, era: r.era, sanbai_rating: r.sanbai_rating, patterns: r.patterns, user_score: r.user_score,
   }));
 
-  return JSON.stringify({ message: `Found ${formattedResults.length} chart(s) matching criteria`, instruction: "ONLY recommend songs from THIS result. Do NOT reference songs from earlier in the conversation. Copy each song's display_marker EXACTLY as shown.", total_matches: results.length, results: formattedResults });
+  return JSON.stringify({ message: `Found ${totalBeforeLimit} chart(s) matching criteria (showing ${formattedResults.length})`, instruction: "ONLY recommend songs from THIS result. Do NOT reference songs from earlier in the conversation. Copy each song's display_marker EXACTLY as shown. Use total_matches for counting questions.", total_matches: totalBeforeLimit, showing: formattedResults.length, results: formattedResults });
 }
 
 async function getSongOffset(args: { query: string }, supabaseServiceRole: SupabaseClient): Promise<string> {
@@ -1187,6 +1292,7 @@ serve(async (req) => {
 
     const profile = buildPlayerProfile(userScores, chartAnalysis);
     const totalStats = calculateTotalStats(userScores);
+    const levelHaloStats = calculateLevelHaloStats(userScores, chartAnalysis);
 
     console.log("Player profile:", JSON.stringify(profile, null, 2));
     console.log("Total stats:", JSON.stringify(totalStats, null, 2));
@@ -1194,6 +1300,7 @@ serve(async (req) => {
     let systemPrompt = buildWhoIAmPrompt();
     systemPrompt += buildPlayerProfilePrompt(profile);
     systemPrompt += buildCountingStatsPrompt(totalStats);
+    systemPrompt += buildLevelHaloStatsPrompt(levelHaloStats);
     systemPrompt += buildSdpRulesPrompt();
     systemPrompt += buildWarmupRulesPrompt();
     systemPrompt += toolsSystemPrompt;
