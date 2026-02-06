@@ -2,11 +2,14 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
+import type { ScoreWithSong } from '@/types/scores';
 
 /**
  * Hook to toggle song access (has_access) for all charts of a song.
  * When toggling OFF access: upserts user_scores rows for all charts with has_access=false.
  * When toggling ON access: sets has_access=true on all existing rows.
+ *
+ * Uses optimistic cache updates for immediate UI feedback.
  */
 export function useToggleSongAccess() {
   const { user } = useAuth();
@@ -16,6 +19,23 @@ export function useToggleSongAccess() {
   const toggleAccess = useCallback(async (songId: number, hasAccess: boolean) => {
     if (!user?.id) return;
     setIsUpdating(true);
+
+    // Optimistically update the React Query cache for immediate UI feedback
+    const previousCacheEntries: Array<{ queryKey: unknown[]; data: unknown }> = [];
+    queryClient.getQueriesData<ScoreWithSong[]>({ queryKey: ['user-scores'] }).forEach(
+      ([queryKey, data]) => {
+        if (!data) return;
+        previousCacheEntries.push({ queryKey, data });
+        const updated = data.map(score => {
+          const scoreSongId = score.musicdb?.song_id ?? score.song_id;
+          if (scoreSongId === songId) {
+            return { ...score, has_access: hasAccess };
+          }
+          return score;
+        });
+        queryClient.setQueryData(queryKey, updated);
+      }
+    );
 
     try {
       // 1. Get all SP charts for this song from musicdb
@@ -114,8 +134,14 @@ export function useToggleSongAccess() {
         }
       }
 
-      // Invalidate scores cache
-      await queryClient.invalidateQueries({ queryKey: ['user-scores'] });
+      // Background-refresh to sync with server state (non-blocking)
+      queryClient.invalidateQueries({ queryKey: ['user-scores'] });
+    } catch (error) {
+      // Rollback optimistic update on failure
+      for (const entry of previousCacheEntries) {
+        queryClient.setQueryData(entry.queryKey, entry.data);
+      }
+      throw error;
     } finally {
       setIsUpdating(false);
     }

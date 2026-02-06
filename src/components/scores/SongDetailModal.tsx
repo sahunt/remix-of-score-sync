@@ -131,9 +131,10 @@ export function SongDetailModal({
     );
   }, [scores, songId]);
 
-  const handleToggleAccess = async () => {
+  const handleToggleAccess = () => {
     if (!songId) return;
-    await toggleAccess(songId, hasNoAccess); // if currently no-access, set to has-access
+    // Fire-and-forget: optimistic cache update in the hook gives instant UI feedback
+    toggleAccess(songId, hasNoAccess); // if currently no-access, set to has-access
     setMenuOpen(false);
   };
 

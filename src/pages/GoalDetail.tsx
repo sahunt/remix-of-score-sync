@@ -129,24 +129,21 @@ export default function GoalDetail() {
   // Calculate progress with 12MS mode transformation
   const progress = useGoalProgress(goal ?? null, matchingScores, [], scoresLoading, reverseTransformHalo);
 
-  // Separate no-access songs from remaining
+  // Separate no-access songs from remaining.
+  // No-access played songs are filtered out by useGoalProgress and not in unplayedCharts
+  // (because they have user_scores rows), so we must collect them directly from matchingScores.
   const { accessibleRemaining, noAccessSongs } = useMemo(() => {
-    const allRemaining = [...progress.remainingSongs, ...unplayedCharts];
-    const accessible: ScoreWithSong[] = [];
-    const noAccess: ScoreWithSong[] = [];
-    
-    for (const song of allRemaining) {
-      const songId = song.musicdb?.song_id ?? song.song_id;
-      const isNoAccess = song.has_access === false || (songId && noAccessSongIds.has(songId));
-      if (isNoAccess) {
-        noAccess.push(song);
-      } else {
-        accessible.push(song);
-      }
-    }
-    
-    return { accessibleRemaining: accessible, noAccessSongs: noAccess };
-  }, [progress.remainingSongs, unplayedCharts, noAccessSongIds]);
+    // 1. Accessible remaining = progress remaining + accessible unplayed
+    const accessibleUnplayed = unplayedCharts.filter(s => s.has_access !== false);
+    const accessibleRemaining = [...progress.remainingSongs, ...accessibleUnplayed];
+
+    // 2. No-access songs: played scores with has_access=false + unplayed charts for no-access songs
+    const noAccessPlayed = matchingScores.filter(s => s.has_access === false);
+    const noAccessUnplayed = unplayedCharts.filter(s => s.has_access === false);
+    const noAccess = [...noAccessPlayed, ...noAccessUnplayed];
+
+    return { accessibleRemaining, noAccessSongs: noAccess };
+  }, [progress.remainingSongs, unplayedCharts, matchingScores]);
 
   // Count no-access charts matching goal criteria for denominator adjustment
   const noAccessChartCount = useMemo(() => {
