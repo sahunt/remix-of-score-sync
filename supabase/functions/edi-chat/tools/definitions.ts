@@ -112,7 +112,7 @@ export const toolDefinitions: ToolDefinition[] = [
           },
           min_mines: {
             type: "integer",
-            description: "Minimum shock arrow (mines) count. Shock arrows are obstacles to AVOID, not hit.",
+            description: "Minimum shock arrow count. Shock arrows are obstacles to AVOID, not hit. Database field is 'mines' but ALWAYS call them 'shock arrows'.",
             minimum: 0,
           },
           min_stops: {
@@ -154,12 +154,12 @@ export const toolDefinitions: ToolDefinition[] = [
           },
           sort_by: {
             type: "string",
-            description: "Sort results by this field",
+            description: "Sort results by this field. 'shock_arrows' sorts by shock arrow count.",
             enum: [
               "crossovers",
               "footswitches",
               "jacks",
-              "mines",
+              "shock_arrows",
               "notes",
               "bpm",
               "peak_nps",
