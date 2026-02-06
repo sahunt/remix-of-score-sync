@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1646,17 +1646,34 @@ Deno.serve(async (req) => {
 
     const uploadId = upload.id;
 
-    // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
-    EdgeRuntime.waitUntil(
-      processUploadInBackground(
-        supabaseUrl,
-        supabaseServiceKey,
-        user.id,
-        uploadId,
-        content,
-        sourceType
-      )
+    const backgroundPromise = processUploadInBackground(
+      supabaseUrl,
+      supabaseServiceKey,
+      user.id,
+      uploadId,
+      content,
+      sourceType
     );
+
+    // Try to use EdgeRuntime.waitUntil for background processing.
+    // If EdgeRuntime is not available, fall back to synchronous processing.
+    let useSync = false;
+    try {
+      // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(backgroundPromise);
+      } else {
+        useSync = true;
+      }
+    } catch {
+      useSync = true;
+    }
+
+    if (useSync) {
+      console.log('EdgeRuntime not available, processing synchronously');
+      await backgroundPromise;
+    }
 
     return new Response(JSON.stringify({
       upload_id: uploadId,
