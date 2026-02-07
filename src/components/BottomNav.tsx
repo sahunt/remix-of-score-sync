@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useState, useEffect } from 'react';
-import { EDI_BOUNCE_EVENT, EDI_ICON_ID } from '@/hooks/useEdiMinimize';
+import { EDI_BOUNCE_EVENT, EDI_ICON_ID, saveEdiIconPosition } from '@/hooks/useEdiMinimize';
 
 // Custom icon components matching the design spec
 const HomeIcon = ({
@@ -77,6 +77,14 @@ export function BottomNav() {
     window.addEventListener(EDI_BOUNCE_EVENT, handleBounce);
     return () => window.removeEventListener(EDI_BOUNCE_EVENT, handleBounce);
   }, []);
+
+  // Save the Edi icon position whenever the nav is visible so the Edi page
+  // can animate to/from it even after the nav unmounts
+  useEffect(() => {
+    // Small delay to ensure layout is settled
+    const t = setTimeout(() => saveEdiIconPosition(), 100);
+    return () => clearTimeout(t);
+  });
   const {
     isVisible
   } = useScrollDirection({
