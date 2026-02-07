@@ -14,7 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { parseFollowUps } from '@/lib/parseFollowUps';
-import { useEdiMinimize, getEdiIconRect } from '@/hooks/useEdiMinimize';
+import { useEdiMinimize, getSavedIconCenter } from '@/hooks/useEdiMinimize';
 
 interface SelectedSong {
   song_id: number;
@@ -87,15 +87,15 @@ export default function Edi() {
   // Expand-from-icon animation on mount
   useEffect(() => {
     const container = containerRef.current;
-    const iconRect = getEdiIconRect();
-    if (!container || !iconRect) {
+    const iconCenter = getSavedIconCenter();
+    if (!container || !iconCenter) {
       setExpandAnimation(false);
       return;
     }
 
     const containerRect = container.getBoundingClientRect();
-    const dx = (iconRect.left + iconRect.width / 2) - (containerRect.left + containerRect.width / 2);
-    const dy = (iconRect.top + iconRect.height / 2) - (containerRect.top + containerRect.height / 2);
+    const dx = iconCenter.x - (containerRect.left + containerRect.width / 2);
+    const dy = iconCenter.y - (containerRect.top + containerRect.height / 2);
 
     // Inject dynamic keyframe
     const styleEl = document.createElement('style');
