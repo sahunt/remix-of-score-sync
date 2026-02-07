@@ -257,7 +257,7 @@ async function logUsage(supabaseServiceRole: SupabaseClient, usage: UsageData): 
 function extractUsageFromResponse(data: ChatCompletionResponse): {
   inputTokens: number; outputTokens: number; totalTokens: number; cachedTokens: number;
 } {
-  const usage = (data as Record<string, unknown>).usage as Record<string, number> | undefined;
+  const usage = (data as unknown as Record<string, unknown>).usage as Record<string, number> | undefined;
   if (usage) {
     return {
       inputTokens: usage.prompt_tokens || usage.prompt_token_count || 0,
