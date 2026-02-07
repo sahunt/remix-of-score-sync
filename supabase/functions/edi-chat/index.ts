@@ -347,8 +347,8 @@ function calculateLevelMastery(userScores: UserScore[]): LevelMastery[] {
     const clearRate = data.clears / played;
     const totalFcs = data.fcs + data.gfcs + data.pfcs + data.mfcs;
     const fcRate = totalFcs / played;
-    const totalPfcs = data.pfcs + data.mfcs;
-    const pfcRate = totalPfcs / played;
+    const pfcOrBetter = data.pfcs + data.mfcs;
+    const pfcRate = pfcOrBetter / played;
     const aaaRate = data.aaas / played;
 
     const lmData = {
@@ -360,7 +360,7 @@ function calculateLevelMastery(userScores: UserScore[]): LevelMastery[] {
       fcRate,
       pfcRate,
       aaaRate,
-      pfcCount: totalPfcs,
+      pfcCount: data.pfcs,
       aaaCount: data.aaas,
       fcCount: data.fcs,
       gfcCount: data.gfcs,
@@ -486,7 +486,7 @@ function buildPlayerProfile(userScores: UserScore[], chartAnalysis: ChartAnalysi
     if (lm.clearRate > 0.3 && lm.played >= 3) clearCeiling = lm.level;
     const totalFcs = lm.fcCount + lm.gfcCount + lm.pfcCount + lm.mfcCount;
     if (totalFcs >= 3) fcCeiling = lm.level;
-    if (lm.pfcCount >= 3) pfcCeiling = lm.level;
+    if ((lm.pfcCount + lm.mfcCount) >= 3) pfcCeiling = lm.level;
   }
 
   let playerStage: PlayerStage = 'developing';
@@ -726,7 +726,7 @@ function buildPlayerProfilePrompt(profile: PlayerProfile): string {
       const pfcPct = Math.round(lm.pfcRate * 100);
       const aaaPct = Math.round(lm.aaaRate * 100);
       const varianceK = Math.round(lm.scoreVariance / 1000);
-      return `Lv${lm.level}: ${masteryTierLabel(lm.masteryTier)} - ${lm.pfcCount} PFCs (${pfcPct}%), ${lm.aaaCount} AAAs (${aaaPct}%), ${varianceK}k variance`;
+      return `Lv${lm.level}: ${masteryTierLabel(lm.masteryTier)} - ${lm.pfcCount} PFCs, ${lm.mfcCount} MFCs (${pfcPct}% PFC+MFC rate), ${lm.aaaCount} AAAs (${aaaPct}%), ${varianceK}k variance`;
     })
     .join('\n');
 
