@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { ChatMessage } from '@/components/edi/ChatMessage';
 import { ChatInput } from '@/components/edi/ChatInput';
@@ -14,7 +13,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { parseFollowUps } from '@/lib/parseFollowUps';
-import { useEdiMinimize, getSavedIconCenter } from '@/hooks/useEdiMinimize';
+
+interface EdiProps {
+  onMinimize: () => void;
+}
 
 interface SelectedSong {
   song_id: number;
@@ -27,17 +29,13 @@ interface SelectedSong {
 // Difficulty order for modal display
 const DIFFICULTY_ORDER = ['CHALLENGE', 'EXPERT', 'DIFFICULT', 'BASIC', 'BEGINNER'];
 
-export default function Edi() {
-  const navigate = useNavigate();
+export default function Edi({ onMinimize }: EdiProps) {
   const { messages, isLoading, error, sendMessage, clearMessages } = useEdiChat();
   const { scores, isLoading: scoresLoading } = useScores();
   const { data: musicDbData } = useMusicDb();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
-  const [expandAnimation, setExpandAnimation] = useState(true);
-  const minimize = useEdiMinimize(containerRef);
 
   // Check if chart analysis data is loaded
   const { data: chartCount, refetch: refetchChartCount } = useQuery({
@@ -84,31 +82,6 @@ export default function Edi() {
     }
   }, [chartCount, isImporting, refetchChartCount]);
 
-  // Expand-from-icon animation on mount
-  useEffect(() => {
-    const container = containerRef.current;
-    const iconCenter = getSavedIconCenter();
-    if (!container || !iconCenter) {
-      setExpandAnimation(false);
-      return;
-    }
-
-    const containerRect = container.getBoundingClientRect();
-    const dx = iconCenter.x - (containerRect.left + containerRect.width / 2);
-    const dy = iconCenter.y - (containerRect.top + containerRect.height / 2);
-
-    // Inject dynamic keyframe
-    const styleEl = document.createElement('style');
-    styleEl.textContent = `
-      @keyframes edi-expand {
-        0% { transform: translate(${dx}px, ${dy}px) scale(0.05); opacity: 0; }
-        100% { transform: translate(0, 0) scale(1); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(styleEl);
-    return () => { document.head.removeChild(styleEl); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -125,10 +98,8 @@ export default function Edi() {
     
     for (const score of scores) {
       if (!score.musicdb) continue;
-      // Key by song_id + difficulty_name for matching
       const key = `${score.musicdb.song_id}_${score.musicdb.difficulty_name?.toUpperCase()}`;
       const existing = map.get(key);
-      // Keep highest score
       if (!existing || (score.score && (!existing.score || score.score > existing.score))) {
         map.set(key, {
           score: score.score ?? null,
@@ -142,36 +113,23 @@ export default function Edi() {
     return map;
   }, [scores]);
 
-  // Callback to get user score for a specific song/difficulty
   const getUserScore = useCallback((songId: number, difficultyName: string) => {
     const key = `${songId}_${difficultyName.toUpperCase()}`;
     return scoreMap.get(key) ?? null;
   }, [scoreMap]);
 
-  // Callback to hydrate song data from database (for anti-hallucination)
-  // Returns null if song doesn't exist - hallucinated songs get filtered out
   const getSongData = useCallback((songId: number, difficultyName: string) => {
     if (!musicDbData) return null;
-
-    // Find the chart by song_id and difficulty_name
     const normalizedDifficulty = difficultyName.toUpperCase();
     const chart = musicDbData.charts.find(
-      c => c.song_id === songId &&
-           c.difficulty_name?.toUpperCase() === normalizedDifficulty
+      c => c.song_id === songId && c.difficulty_name?.toUpperCase() === normalizedDifficulty
     );
-
     if (!chart) return null;
 
-    // Get eamuse_id from the matched chart; if null, try any chart of the same song
-    // (eamuse_id is a song-level attribute shared across all difficulties)
     let eamuseId = chart.eamuse_id;
     if (!eamuseId) {
-      const chartWithEamuseId = musicDbData.charts.find(
-        c => c.song_id === songId && c.eamuse_id
-      );
-      if (chartWithEamuseId) {
-        eamuseId = chartWithEamuseId.eamuse_id;
-      }
+      const chartWithEamuseId = musicDbData.charts.find(c => c.song_id === songId && c.eamuse_id);
+      if (chartWithEamuseId) eamuseId = chartWithEamuseId.eamuse_id;
     }
 
     return {
@@ -181,15 +139,12 @@ export default function Edi() {
     };
   }, [musicDbData]);
 
-  // Handle song card click - open modal
   const handleSongClick = useCallback((song: SelectedSong) => {
     setSelectedSong(song);
   }, []);
 
-  // Build preloaded charts for modal from musicdb and scores
   const preloadedCharts = useMemo((): ChartWithScore[] | undefined => {
     if (!selectedSong || !musicDbData) return undefined;
-    
     const songCharts = musicDbData.bySongId.get(selectedSong.song_id);
     if (!songCharts) return undefined;
 
@@ -215,14 +170,12 @@ export default function Edi() {
       });
   }, [selectedSong, musicDbData, scoreMap]);
 
-  // Get artist for selected song
   const selectedSongArtist = useMemo(() => {
     if (!selectedSong || !musicDbData) return null;
     const chart = musicDbData.charts.find(c => c.song_id === selectedSong.song_id);
     return chart?.artist ?? null;
   }, [selectedSong, musicDbData]);
 
-  // Get era for selected song
   const selectedSongEra = useMemo(() => {
     if (!selectedSong || !musicDbData) return null;
     const chart = musicDbData.charts.find(c => c.song_id === selectedSong.song_id);
@@ -231,24 +184,15 @@ export default function Edi() {
 
   const hasMessages = messages.length > 0;
   const showQuickPrompts = !hasMessages && !isLoading;
-
-  // Check if user has enough data for meaningful coaching
   const hasEnoughData = scores.length >= 10;
   const level12PlusCount = scores.filter(s => s.musicdb?.difficulty_level && s.musicdb.difficulty_level >= 12).length;
 
   return (
-    <div
-      ref={containerRef}
-      className="flex flex-col h-[100dvh] bg-background w-full max-w-[720px] mx-auto"
-      style={expandAnimation ? {
-        animation: 'edi-expand 320ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
-      } : undefined}
-      onAnimationEnd={() => setExpandAnimation(false)}
-    >
+    <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <button
-          onClick={minimize}
+          onClick={onMinimize}
           className="p-2 -ml-2 rounded-full hover:bg-secondary active:scale-95 transition-all"
           aria-label="Minimize"
         >
@@ -269,7 +213,6 @@ export default function Edi() {
       {/* Chat Area - scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="flex flex-col gap-4 py-4 pb-4">
-          {/* Loading chart data notice */}
           {!hasChartData && !hasMessages && (
             <div className="mx-4 p-3 rounded-xl bg-secondary border border-border">
               <p className="text-sm text-muted-foreground">
@@ -279,10 +222,8 @@ export default function Edi() {
             </div>
           )}
 
-          {/* Welcome message when no conversation */}
           {!hasMessages && hasChartData && <WelcomeMessage />}
 
-          {/* Data status messages */}
           {!hasMessages && !scoresLoading && !hasEnoughData && hasChartData && (
             <div className="mx-4 p-3 rounded-xl bg-warning/10 border border-warning/20">
               <p className="text-sm text-warning">
@@ -303,14 +244,11 @@ export default function Edi() {
             </div>
           )}
 
-          {/* Quick prompts */}
           {showQuickPrompts && hasEnoughData && hasChartData && (
             <QuickPrompts onSelect={sendMessage} disabled={isLoading} />
           )}
 
-          {/* Messages */}
           {messages.map((message, index) => {
-            // Find the user prompt that preceded this assistant message
             let userPrompt = '';
             if (message.role === 'assistant') {
               for (let i = index - 1; i >= 0; i--) {
@@ -321,7 +259,6 @@ export default function Edi() {
               }
             }
             
-            // Build conversation context up to this message
             const conversationContext = messages
               .slice(0, index + 1)
               .map(m => ({ role: m.role, content: m.content }));
@@ -342,7 +279,6 @@ export default function Edi() {
             );
           })}
 
-          {/* Follow-up suggestions - rendered outside messages with QuickPrompts style */}
           {(() => {
             const lastMessage = messages[messages.length - 1];
             if (!lastMessage || lastMessage.role !== 'assistant' || isLoading) return null;
@@ -352,9 +288,9 @@ export default function Edi() {
 
             return (
               <div className="flex flex-wrap gap-2 px-4 py-3">
-                {followUps.map((suggestion, index) => (
+                {followUps.map((suggestion, idx) => (
                   <button
-                    key={index}
+                    key={idx}
                     onClick={() => sendMessage(suggestion)}
                     disabled={isLoading}
                     className={cn(
@@ -371,7 +307,6 @@ export default function Edi() {
             );
           })()}
 
-          {/* Error message */}
           {error && (
             <div className="mx-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20">
               <p className="text-sm text-destructive">
@@ -416,4 +351,3 @@ export default function Edi() {
     </div>
   );
 }
-
