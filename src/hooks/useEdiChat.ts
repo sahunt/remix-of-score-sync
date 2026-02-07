@@ -183,15 +183,42 @@ export function useEdiChat() {
         }
       }
 
+      // If stream finished but no content was produced, treat as an error
+      if (!assistantContent.trim()) {
+        console.warn('Stream completed with empty content');
+        setError('Edi couldn\'t generate a response. Try rephrasing or tap retry.');
+        setMessages(prev => prev.filter(m => m.id !== assistantId));
+      }
+
     } catch (e) {
       console.error('Chat error:', e);
       setError(e instanceof Error ? e.message : 'Failed to send message');
       // Remove the empty assistant message if there was an error
-      setMessages(prev => prev.filter(m => m.content !== '' || m.role !== 'assistant'));
+      setMessages(prev => prev.filter(m => m.id !== assistantId));
     } finally {
       setIsLoading(false);
     }
   }, [messages, session?.access_token]);
+
+  const retryLastMessage = useCallback(() => {
+    // Find the last user message to resend
+    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+    if (!lastUserMessage) return;
+
+    // Remove the failed assistant response (if any empty one exists) and the user message
+    // so sendMessage can re-add them cleanly
+    setMessages(prev => {
+      const lastUserIdx = prev.findLastIndex(m => m.role === 'user');
+      if (lastUserIdx === -1) return prev;
+      return prev.slice(0, lastUserIdx);
+    });
+    setError(null);
+
+    // Small delay to let state settle before resending
+    setTimeout(() => {
+      sendMessage(lastUserMessage.content);
+    }, 100);
+  }, [messages, sendMessage]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -205,5 +232,6 @@ export function useEdiChat() {
     error,
     sendMessage,
     clearMessages,
+    retryLastMessage,
   };
 }

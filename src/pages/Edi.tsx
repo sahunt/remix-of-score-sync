@@ -32,7 +32,7 @@ interface SelectedSong {
 const DIFFICULTY_ORDER = ['CHALLENGE', 'EXPERT', 'DIFFICULT', 'BASIC', 'BEGINNER'];
 
 export default function Edi({ onMinimize }: EdiProps) {
-  const { messages, isLoading, error, sendMessage, clearMessages } = useEdiChat();
+  const { messages, isLoading, error, sendMessage, clearMessages, retryLastMessage } = useEdiChat();
   const { scores, isLoading: scoresLoading } = useScores();
   const { data: musicDbData } = useMusicDb();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -315,6 +315,20 @@ export default function Edi({ onMinimize }: EdiProps) {
                 <Icon name="error" size={16} className="inline mr-1.5 -mt-0.5" />
                 {error}
               </p>
+              {messages.some(m => m.role === 'user') && (
+                <button
+                  onClick={retryLastMessage}
+                  disabled={isLoading}
+                  className={cn(
+                    'mt-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                    'bg-destructive/20 text-destructive hover:bg-destructive/30 active:scale-95',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                >
+                  <RefreshCw size={14} className="inline mr-1.5 -mt-0.5" />
+                  Retry
+                </button>
+              )}
             </div>
           )}
 

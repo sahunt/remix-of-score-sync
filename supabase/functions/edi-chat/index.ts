@@ -194,7 +194,6 @@ const MODEL = "gemini-3-flash-preview";
 const MAX_TOOL_ROUNDS = 2;
 const PAGE_SIZE = 1000;
 const MAX_CONVERSATION_MESSAGES = 10;
-const RECENT_MESSAGES_TO_KEEP_INTACT = 4;
 
 // ============================================================================
 // PRICING CONSTANTS (per 1M tokens)
@@ -1665,50 +1664,18 @@ async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, sup
 // ============================================================================
 
 /**
- * Strips [[SONG:...]] markers and other bulky inline data from a message's
- * content. These markers are only useful in the current turn — older ones
- * waste tokens and can confuse the model.
- */
-function trimMessageContent(content: string): string {
-  // Replace [[SONG:{...}]] markers with a compact placeholder
-  let trimmed = content.replace(/\[\[SONG:\{[^}]*\}\]\]/g, '[song card]');
-  // Collapse consecutive song card placeholders
-  trimmed = trimmed.replace(/(\[song card\]\s*){2,}/g, '[song cards]\n');
-  return trimmed;
-}
-
-/**
  * Limits conversation history to prevent token bloat and hallucination in
- * long conversations. Strategy:
- * 1. Cap total messages sent to the LLM (MAX_CONVERSATION_MESSAGES)
- * 2. Keep the most recent messages fully intact for context continuity
- * 3. Strip bulky song markers from older messages to reduce token count
+ * long conversations. Caps the number of messages sent to the LLM while
+ * keeping the most recent messages for continuity. Song markers are preserved
+ * so the model can resolve follow-up questions like "which of these...".
  */
 function prepareMessages(incomingMessages: Message[]): Message[] {
-  // Step 1: Truncate to the most recent N messages
-  let messages = incomingMessages;
-  if (messages.length > MAX_CONVERSATION_MESSAGES) {
-    console.log(`Trimming conversation from ${messages.length} to ${MAX_CONVERSATION_MESSAGES} messages`);
-    messages = messages.slice(-MAX_CONVERSATION_MESSAGES);
+  if (incomingMessages.length <= MAX_CONVERSATION_MESSAGES) {
+    return incomingMessages;
   }
 
-  // Step 2: Trim content of older messages (keep recent ones intact)
-  const recentStart = Math.max(0, messages.length - RECENT_MESSAGES_TO_KEEP_INTACT);
-  let charsSaved = 0;
-
-  const result = messages.map((msg, i) => {
-    if (i >= recentStart || !msg.content) return msg;
-    const trimmed = trimMessageContent(msg.content);
-    if (trimmed.length === msg.content.length) return msg;
-    charsSaved += msg.content.length - trimmed.length;
-    return { ...msg, content: trimmed };
-  });
-
-  if (charsSaved > 0) {
-    console.log(`Trimmed ${charsSaved} chars of stale song data from older messages`);
-  }
-
-  return result;
+  console.log(`Trimming conversation from ${incomingMessages.length} to ${MAX_CONVERSATION_MESSAGES} messages`);
+  return incomingMessages.slice(-MAX_CONVERSATION_MESSAGES);
 }
 
 // ============================================================================
@@ -2006,7 +1973,7 @@ Deno.serve(async (req) => {
       finalResponse = await fetch(GATEWAY_URL, {
         method: "POST",
         headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, stream: true }),
+        body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, tool_choice: "none", stream: true }),
         signal: finalController.signal,
       });
     } catch (fetchErr) {
