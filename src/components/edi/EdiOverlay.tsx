@@ -56,7 +56,7 @@ export function EdiOverlay() {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.6, y: 60 }}
           transition={{
-            type: "easeOutCirc",
+            type: "spring",
             damping: 28,
             stiffness: 320,
             mass: 0.8,
