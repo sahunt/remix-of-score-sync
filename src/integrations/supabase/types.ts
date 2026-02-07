@@ -176,33 +176,54 @@ export type Database = {
       edi_usage_log: {
         Row: {
           active_skills: string[] | null
+          cached_tokens: number
           created_at: string | null
+          estimated_cost_usd: number | null
           id: string
-          prompt_tokens: number | null
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          query_preview: string | null
           request_type: string | null
           response_time_ms: number | null
-          response_tokens: number | null
-          user_id: string | null
+          tool_rounds: number | null
+          tools_called: string[] | null
+          total_tokens: number
+          user_id: string
         }
         Insert: {
           active_skills?: string[] | null
+          cached_tokens?: number
           created_at?: string | null
+          estimated_cost_usd?: number | null
           id?: string
-          prompt_tokens?: number | null
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          query_preview?: string | null
           request_type?: string | null
           response_time_ms?: number | null
-          response_tokens?: number | null
-          user_id?: string | null
+          tool_rounds?: number | null
+          tools_called?: string[] | null
+          total_tokens?: number
+          user_id: string
         }
         Update: {
           active_skills?: string[] | null
+          cached_tokens?: number
           created_at?: string | null
+          estimated_cost_usd?: number | null
           id?: string
-          prompt_tokens?: number | null
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          query_preview?: string | null
           request_type?: string | null
           response_time_ms?: number | null
-          response_tokens?: number | null
-          user_id?: string | null
+          tool_rounds?: number | null
+          tools_called?: string[] | null
+          total_tokens?: number
+          user_id?: string
         }
         Relationships: []
       }
@@ -755,6 +776,43 @@ export type Database = {
         }
         Relationships: []
       }
+      user_current_month_usage: {
+        Row: {
+          request_count: number | null
+          total_cost_usd: number | null
+          total_input_tokens: number | null
+          total_output_tokens: number | null
+          total_tokens: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      user_daily_usage: {
+        Row: {
+          request_count: number | null
+          total_cached_tokens: number | null
+          total_cost_usd: number | null
+          total_input_tokens: number | null
+          total_output_tokens: number | null
+          total_tokens: number | null
+          usage_date: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      user_monthly_usage: {
+        Row: {
+          request_count: number | null
+          total_cached_tokens: number | null
+          total_cost_usd: number | null
+          total_input_tokens: number | null
+          total_output_tokens: number | null
+          total_tokens: number | null
+          usage_month: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       bulk_update_era: {
@@ -797,6 +855,21 @@ export type Database = {
           average_score: number
           completed_count: number
           total_count: number
+        }[]
+      }
+      check_user_ai_quota: {
+        Args: {
+          p_daily_request_limit?: number
+          p_monthly_token_limit?: number
+          p_user_id: string
+        }
+        Returns: {
+          daily_requests_remaining: number
+          daily_requests_used: number
+          monthly_tokens_remaining: number
+          monthly_tokens_used: number
+          within_daily_limit: boolean
+          within_monthly_limit: boolean
         }[]
       }
       get_user_stats: {
