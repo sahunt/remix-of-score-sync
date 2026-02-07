@@ -795,7 +795,13 @@ function buildLevelHaloStatsPrompt(levelHaloStats: LevelHaloStats[]): string {
     .filter(s => s.played > 0 || s.catalogTotal > 0)
     .map(s => {
       const unplayed = s.catalogTotal - s.played;
-      return `Lv${s.level}: ${s.catalogTotal} catalog, ${s.played} played (${unplayed} unplayed) | MFC:${s.mfc} PFC:${s.pfc} GFC:${s.gfc} FC:${s.fc} LIFE4:${s.life4} CLEAR:${s.clear} FAIL:${s.fail}`;
+      const pfcd = s.pfc + s.mfc;
+      const fcd = pfcd + s.gfc + s.fc;
+      const cleared = s.played - s.fail;
+      const leftToPfc = s.catalogTotal - pfcd;
+      const leftToFc = s.catalogTotal - fcd;
+      const leftToClear = s.catalogTotal - cleared;
+      return `Lv${s.level}: ${s.catalogTotal} catalog, ${s.played} played (${unplayed} unplayed) | MFC:${s.mfc} PFC:${s.pfc} GFC:${s.gfc} FC:${s.fc} LIFE4:${s.life4} CLEAR:${s.clear} FAIL:${s.fail} | PFC'd:${pfcd} left-to-PFC:${leftToPfc} FC'd:${fcd} left-to-FC:${leftToFc} cleared:${cleared} left-to-clear:${leftToClear}`;
     })
     .join('\n');
 
@@ -806,24 +812,18 @@ PER-LEVEL HALO BREAKDOWN
 
 ${lines}
 
-⚠️ HALO COUNTING RULES — READ CAREFULLY:
+⚠️ HALO COUNTING RULES:
 
 Each song has EXACTLY ONE halo — its best achievement. Halos do NOT stack.
-A song with PFC is NOT also counted as GFC, FC, etc. Its halo is PFC, period.
-
 HALO HIERARCHY (best → worst): MFC > PFC > GFC > FC > LIFE4 > CLEAR > FAIL
 
-USE THESE NUMBERS to answer counting questions:
-- "How many 14s left to PFC?" = Lv14 catalog total − (Lv14 PFC + Lv14 MFC)
-- "How many 14s left to FC?" = Lv14 catalog total − (Lv14 MFC + Lv14 PFC + Lv14 GFC + Lv14 FC)
-- "How many 11s have I life4'd?" = Lv11 LIFE4 count above
-- "What 16s have I GFC'd?" = Use get_songs_by_criteria with difficulty_level=16 and halo_filter="is_gfc"
-- "How many 14s have I PFC'd?" = Lv14 PFC + Lv14 MFC (MFCs are better than PFCs)
-- "How many 15s have I cleared?" = Lv15 played − Lv15 FAIL (everything except fails is a clear)
-
-When user says "left to [halo]", they mean songs NOT YET at that halo level or above.
-When user says "have I [halo]'d", they mean songs with EXACTLY that halo (not higher).
-Exception: "PFC'd" includes MFCs because MFC is strictly better than PFC.
+PRE-COMPUTED ANSWERS — USE THESE DIRECTLY (do NOT recalculate):
+- "How many Xs have I PFC'd?" → Read PFC'd value (includes MFCs since MFC > PFC)
+- "How many Xs left to PFC?" → Read left-to-PFC value
+- "How many Xs left to FC?" → Read left-to-FC value
+- "How many Xs have I cleared?" → Read cleared value
+- "How many Xs have I [exact halo]'d?" → Read that halo's count (e.g. GFC:5 means exactly 5 GFCs)
+- "What songs have I [halo]'d?" → Use get_songs_by_criteria with halo_filter
 `;
 }
 
