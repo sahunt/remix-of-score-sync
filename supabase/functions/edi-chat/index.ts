@@ -434,6 +434,39 @@ function levelHaloStatsFromPrecomputed(levelStats: PlayerLevelStatsRow[]): Level
     .sort((a, b) => a.level - b.level);
 }
 
+// User score cache type — shared across tool calls within a single request
+type UserScoreMap = Map<number, { score: number; halo: string; rank: string; flare: number | null }>;
+
+async function loadUserScoreCache(supabase: SupabaseClient, userId: string): Promise<UserScoreMap> {
+  const cache: UserScoreMap = new Map();
+  let from = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const { data: page } = await supabase
+      .from("user_scores")
+      .select(`musicdb_id, score, halo, rank, flare, musicdb!inner(deleted)`)
+      .eq("user_id", userId)
+      .eq("musicdb.deleted", false)
+      .range(from, from + PAGE_SIZE - 1);
+    if (page && page.length > 0) {
+      for (const us of page as Record<string, unknown>[]) {
+        cache.set(us.musicdb_id as number, {
+          score: us.score as number,
+          halo: us.halo as string,
+          rank: us.rank as string,
+          flare: us.flare as number | null,
+        });
+      }
+      from += PAGE_SIZE;
+      hasMore = page.length === PAGE_SIZE;
+    } else {
+      hasMore = false;
+    }
+  }
+  console.log(`User score cache loaded: ${cache.size} scores`);
+  return cache;
+}
+
 // ============================================================================
 // PROFILE CALCULATION
 // ============================================================================
@@ -1155,7 +1188,8 @@ async function getSongsByCriteria(
   args: Record<string, unknown>,
   supabaseServiceRole: SupabaseClient,
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  scoreCache: UserScoreMap | null
 ): Promise<string> {
   const { difficulty_level, min_difficulty_level, max_difficulty_level, difficulty_name, halo_filter, min_crossovers, min_footswitches, min_jacks, min_mines, min_stops, min_notes, min_bpm, max_bpm, min_score, max_score, era, sort_by, limit = 10 } = args as {
     difficulty_level?: number; min_difficulty_level?: number; max_difficulty_level?: number; difficulty_name?: string; halo_filter?: string;
@@ -1165,28 +1199,8 @@ async function getSongsByCriteria(
 
   const effectiveLimit = Math.min(limit, 25);
 
-  // Paginate user score fetch to avoid Supabase's default 1000-row limit
-  let allUserScores: Record<string, unknown>[] = [];
-  let scoreFrom = 0;
-  let hasMoreScores = true;
-  while (hasMoreScores) {
-    const { data: scorePage } = await supabase
-      .from("user_scores")
-      .select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id, deleted)`)
-      .eq("user_id", userId)
-      .eq("musicdb.deleted", false)
-      .range(scoreFrom, scoreFrom + PAGE_SIZE - 1);
-    if (scorePage && scorePage.length > 0) {
-      allUserScores = [...allUserScores, ...scorePage as Record<string, unknown>[]];
-      scoreFrom += PAGE_SIZE;
-      hasMoreScores = scorePage.length === PAGE_SIZE;
-    } else {
-      hasMoreScores = false;
-    }
-  }
-
-  const userScoreByMusicdbId = new Map<number, { score: number; halo: string; rank: string; flare: number | null }>();
-  for (const us of allUserScores) userScoreByMusicdbId.set(us.musicdb_id as number, { score: us.score as number, halo: us.halo as string, rank: us.rank as string, flare: us.flare as number | null });
+  // Use cached user scores (loaded once per request, shared across tool calls)
+  const userScoreByMusicdbId: UserScoreMap = scoreCache || new Map();
 
   let musicDbQuery = supabaseServiceRole.from("musicdb").select("id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating").eq("playstyle", "SP").eq("deleted", false);
 
@@ -1553,7 +1567,7 @@ async function getUserGoals(
   });
 }
 
-async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, supabaseServiceRole: SupabaseClient, userId: string): Promise<string> {
+async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, supabaseServiceRole: SupabaseClient, userId: string, scoreCache: UserScoreMap | null): Promise<string> {
   const { name, arguments: argsString } = toolCall.function;
 
   let args: Record<string, unknown>;
@@ -1563,7 +1577,7 @@ async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, sup
 
   switch (name) {
     case "search_songs": return await searchSongs(args as { query: string; difficulty_level?: number; difficulty_name?: string; include_user_scores?: boolean }, supabaseServiceRole, supabase, userId);
-    case "get_songs_by_criteria": return await getSongsByCriteria(args, supabaseServiceRole, supabase, userId);
+    case "get_songs_by_criteria": return await getSongsByCriteria(args, supabaseServiceRole, supabase, userId, scoreCache);
     case "get_song_offset": return await getSongOffset(args as { query: string }, supabaseServiceRole);
     case "get_catalog_stats": return await getCatalogStats(args as { difficulty_level?: number }, supabaseServiceRole);
     case "get_user_goals": return await getUserGoals(args as { status?: string; include_progress?: boolean }, supabase, supabaseServiceRole, userId);
@@ -1741,8 +1755,7 @@ serve(async (req) => {
       levelHaloStats = calculateLevelHaloStats(userScores, chartAnalysis);
     }
 
-    console.log("Player profile:", JSON.stringify(profile, null, 2));
-    console.log("Total stats:", JSON.stringify(totalStats, null, 2));
+    console.log(`Player: ${profile.playerStage}, PFC ceiling: ${profile.pfcCeiling}, ${totalStats.totalPlayed} plays`);
 
     // Get the last user message to detect needed skills
     const lastUserMessage = incomingMessages
@@ -1759,24 +1772,41 @@ serve(async (req) => {
     const preparedMessages = prepareMessages(incomingMessages);
     const allMessages: Message[] = [{ role: "system", content: systemPrompt }, ...preparedMessages];
 
+    // User score cache: loaded lazily on first tool round, reused across all rounds
+    let scoreCache: UserScoreMap | null = null;
+
     let resolvedWithoutTools = false;
     let directResponseText = "";
+
+    const AI_TIMEOUT_MS = 25000;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       console.log(`Tool-calling round ${round + 1}/${MAX_TOOL_ROUNDS}`);
 
-      const response = await fetch(GATEWAY_URL, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, tool_choice: "auto", stream: false }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
+      let response: Response;
+      try {
+        response = await fetch(GATEWAY_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, tool_choice: "auto", stream: false }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        const isTimeout = fetchErr instanceof DOMException && fetchErr.name === "AbortError";
+        console.error(isTimeout ? "Gemini API timed out" : "Gemini API fetch error:", fetchErr);
+        throw new Error(isTimeout ? "AI response timed out" : "AI request failed");
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!response.ok) {
-        if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        if (response.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted. Please try again later." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         const errorText = await response.text();
-        console.error("AI gateway error:", response.status, errorText);
-        return new Response(JSON.stringify({ error: "AI gateway error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        console.error("Gemini API error:", response.status, errorText);
+        throw new Error(`Gemini API error: ${response.status}`);
       }
 
       const data: ChatCompletionResponse = await response.json();
@@ -1784,7 +1814,7 @@ serve(async (req) => {
 
       if (!choice) {
         console.error("No choice in response:", data);
-        return new Response(JSON.stringify({ error: "Invalid AI response" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        throw new Error("Invalid AI response — no choices");
       }
 
       const assistantMessage = choice.message;
@@ -1799,13 +1829,24 @@ serve(async (req) => {
 
       console.log(`Received ${toolCalls.length} tool call(s)`);
 
+      // Load score cache on first round that has tool calls
+      if (!scoreCache) {
+        scoreCache = await loadUserScoreCache(supabase, userId);
+      }
+
       allMessages.push({ role: "assistant", content: assistantMessage.content, tool_calls: toolCalls });
 
-      for (const toolCall of toolCalls) {
-        console.log(`Executing tool: ${toolCall.function.name}`);
-        const result = await executeToolCall(toolCall as ToolCall, supabase, supabaseServiceRole, userId);
-        console.log(`Tool result length: ${result.length} chars`);
-        allMessages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
+      // Execute tool calls in parallel
+      const toolResults = await Promise.all(
+        toolCalls.map(async (toolCall) => {
+          const result = await executeToolCall(toolCall as ToolCall, supabase, supabaseServiceRole, userId, scoreCache);
+          console.log(`Tool ${toolCall.function.name}: ${result.length} chars`);
+          return { id: toolCall.id, result };
+        })
+      );
+
+      for (const { id, result } of toolResults) {
+        allMessages.push({ role: "tool", tool_call_id: id, content: result });
       }
     }
 
@@ -1816,22 +1857,38 @@ serve(async (req) => {
 
     console.log("Making final streaming call after tool execution");
 
-    const finalResponse = await fetch(GATEWAY_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, stream: true }),
-    });
+    const finalController = new AbortController();
+    const finalTimeout = setTimeout(() => finalController.abort(), AI_TIMEOUT_MS);
+
+    let finalResponse: Response;
+    try {
+      finalResponse = await fetch(GATEWAY_URL, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, stream: true }),
+        signal: finalController.signal,
+      });
+    } catch (fetchErr) {
+      clearTimeout(finalTimeout);
+      const isTimeout = fetchErr instanceof DOMException && fetchErr.name === "AbortError";
+      console.error(isTimeout ? "Final Gemini call timed out" : "Final Gemini call failed:", fetchErr);
+      throw new Error(isTimeout ? "AI response timed out" : "AI request failed");
+    } finally {
+      clearTimeout(finalTimeout);
+    }
 
     if (!finalResponse.ok) {
       const errorText = await finalResponse.text();
-      console.error("Final AI gateway error:", finalResponse.status, errorText);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      console.error("Final Gemini API error:", finalResponse.status, errorText);
+      throw new Error(`Final Gemini API error: ${finalResponse.status}`);
     }
 
     return new Response(finalResponse.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 
   } catch (e) {
     console.error("edi-chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Always return SSE so the frontend can render the error as a chat message
+    const errorMessage = "Sorry, I didn't quite get that. Try again? 🔄";
+    return new Response(textToSSEStream(errorMessage), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
   }
 });
