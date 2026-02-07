@@ -16,6 +16,84 @@ function formatSongMarker(song: SongMarker): string {
   return `[[SONG:${JSON.stringify(song)}]]`;
 }
 
+// Search musicdb with word-based fallback for better matching of CJK
+// characters, alternate spellings, and multi-word song titles.
+// If the full query returns no results, splits into individual words
+// and searches for each word, combining and deduplicating results.
+async function searchMusicDb(
+  query: string,
+  difficulty_level: number | undefined,
+  difficulty_name: string | undefined,
+  supabaseServiceRole: SupabaseClient,
+): Promise<Record<string, unknown>[] | null> {
+  const selectCols = "id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating";
+
+  // Try exact substring match first
+  let dbQuery = supabaseServiceRole
+    .from("musicdb")
+    .select(selectCols)
+    .eq("playstyle", "SP")
+    .eq("deleted", false)
+    .ilike("name", `%${query}%`)
+    .order("difficulty_level", { ascending: true })
+    .limit(50);
+  if (difficulty_level !== undefined) dbQuery = dbQuery.eq("difficulty_level", difficulty_level);
+  if (difficulty_name !== undefined) dbQuery = dbQuery.eq("difficulty_name", difficulty_name);
+
+  const { data, error } = await dbQuery;
+  if (error) {
+    console.error("Error searching songs:", error);
+    return null;
+  }
+  if (data && data.length > 0) return data as Record<string, unknown>[];
+
+  // Fallback: split query into words and search for each individually.
+  // Filter out very short words (<=1 char) to avoid overly broad matches,
+  // but keep single CJK characters which are meaningful.
+  const cjkRange = /[\u3000-\u9fff\uf900-\ufaff]/;
+  const words = query.split(/[\s()\[\]{}]+/)
+    .filter(w => w.length > 1 || cjkRange.test(w));
+
+  if (words.length <= 1) return []; // single word already tried above
+
+  console.log(`Exact search failed for "${query}", trying word fallback: [${words.join(", ")}]`);
+
+  const seen = new Set<number>();
+  const combined: Record<string, unknown>[] = [];
+
+  for (const word of words) {
+    let wordQuery = supabaseServiceRole
+      .from("musicdb")
+      .select(selectCols)
+      .eq("playstyle", "SP")
+      .eq("deleted", false)
+      .ilike("name", `%${word}%`)
+      .order("difficulty_level", { ascending: true })
+      .limit(20);
+    if (difficulty_level !== undefined) wordQuery = wordQuery.eq("difficulty_level", difficulty_level);
+    if (difficulty_name !== undefined) wordQuery = wordQuery.eq("difficulty_name", difficulty_name);
+
+    const { data: wordData, error: wordError } = await wordQuery;
+    if (wordError) {
+      console.error(`Error searching word "${word}":`, wordError);
+      continue;
+    }
+    if (wordData) {
+      for (const row of wordData) {
+        const id = row.id as number;
+        if (!seen.has(id)) {
+          seen.add(id);
+          combined.push(row as Record<string, unknown>);
+        }
+      }
+    }
+    // Cap total results to avoid overwhelming the model
+    if (combined.length >= 50) break;
+  }
+
+  return combined;
+}
+
 // Search for songs by name
 async function searchSongs(
   args: {
@@ -30,31 +108,14 @@ async function searchSongs(
 ): Promise<string> {
   const { query, difficulty_level, difficulty_name, include_user_scores = true } = args;
 
-  // Search musicdb for matching songs
-  let musicDbQuery = supabaseServiceRole
-    .from("musicdb")
-    .select("id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating")
-    .eq("playstyle", "SP")
-    .eq("deleted", false)
-    .ilike("name", `%${query}%`)
-    .order("difficulty_level", { ascending: true })
-    .limit(50);
+  // Search musicdb for matching songs — try exact substring first
+  const musicDbResults = await searchMusicDb(query, difficulty_level, difficulty_name, supabaseServiceRole);
 
-  if (difficulty_level !== undefined) {
-    musicDbQuery = musicDbQuery.eq("difficulty_level", difficulty_level);
-  }
-  if (difficulty_name !== undefined) {
-    musicDbQuery = musicDbQuery.eq("difficulty_name", difficulty_name);
+  if (musicDbResults === null) {
+    return JSON.stringify({ error: "Failed to search songs" });
   }
 
-  const { data: musicDbResults, error: musicDbError } = await musicDbQuery;
-
-  if (musicDbError) {
-    console.error("Error searching songs:", musicDbError);
-    return JSON.stringify({ error: "Failed to search songs", details: musicDbError.message });
-  }
-
-  if (!musicDbResults || musicDbResults.length === 0) {
+  if (musicDbResults.length === 0) {
     return JSON.stringify({
       message: `No songs found matching "${query}"`,
       results: []
@@ -62,8 +123,8 @@ async function searchSongs(
   }
 
   // Get song_ids for chart_analysis lookup
-  const songIds = [...new Set(musicDbResults.map(m => m.song_id))];
-  const musicdbIds = musicDbResults.map(m => m.id);
+  const songIds = [...new Set(musicDbResults.map(m => m.song_id as number))];
+  const musicdbIds = musicDbResults.map(m => m.id as number);
 
   // Fetch chart_analysis for pattern data
   const { data: chartData, error: chartError } = await supabaseServiceRole
@@ -113,22 +174,22 @@ async function searchSongs(
   const results = musicDbResults.map(m => {
     const chartKey = `${m.song_id}_${(m.difficulty_name as string).toUpperCase()}`;
     const patterns = chartMap.get(chartKey);
-    const userScore = userScoreMap.get(m.id);
+    const userScore = userScoreMap.get(m.id as number);
 
     const songMarker = formatSongMarker({
-      song_id: m.song_id,
-      difficulty: m.difficulty_name,
-      eamuse_id: m.eamuse_id,
+      song_id: m.song_id as number,
+      difficulty: m.difficulty_name as string,
+      eamuse_id: m.eamuse_id as string | null,
     });
 
     return {
       display_marker: songMarker,
-      name: m.name,
-      artist: m.artist,
-      difficulty: m.difficulty_name,
-      level: m.difficulty_level,
-      era: m.era,
-      sanbai_rating: m.sanbai_rating,
+      name: m.name as string,
+      artist: m.artist as string,
+      difficulty: m.difficulty_name as string,
+      level: m.difficulty_level as number,
+      era: m.era as string,
+      sanbai_rating: m.sanbai_rating as number | null,
       patterns: patterns ? {
         crossovers: patterns.crossovers,
         full_crossovers: patterns.full_crossovers,
@@ -504,21 +565,14 @@ async function getSongOffset(
 ): Promise<string> {
   const { query } = args;
 
-  // First find the song in musicdb
-  const { data: musicDbResults, error: musicDbError } = await supabaseServiceRole
-    .from("musicdb")
-    .select("song_id, name")
-    .eq("playstyle", "SP")
-    .eq("deleted", false)
-    .ilike("name", `%${query}%`)
-    .limit(10);
+  // Find the song in musicdb using the same word-based fallback
+  const musicDbResults = await searchMusicDb(query, undefined, undefined, supabaseServiceRole);
 
-  if (musicDbError) {
-    console.error("Error searching songs for offset:", musicDbError);
-    return JSON.stringify({ error: "Failed to search songs", details: musicDbError.message });
+  if (musicDbResults === null) {
+    return JSON.stringify({ error: "Failed to search songs" });
   }
 
-  if (!musicDbResults || musicDbResults.length === 0) {
+  if (musicDbResults.length === 0) {
     return JSON.stringify({
       message: `No song found matching "${query}". Cannot look up offset.`,
       offset: null,
@@ -526,8 +580,8 @@ async function getSongOffset(
   }
 
   // Get unique song_ids
-  const songIds = [...new Set(musicDbResults.map(m => m.song_id))];
-  const songNames = [...new Set(musicDbResults.map(m => m.name))];
+  const songIds = [...new Set(musicDbResults.map(m => m.song_id as number))];
+  const songNames = [...new Set(musicDbResults.map(m => m.name as string))];
 
   // Look up offset data
   const { data: biasData, error: biasError } = await supabaseServiceRole
@@ -555,8 +609,8 @@ async function getSongOffset(
   }
 
   const results = songNames.map(name => {
-    const matchedRecord = musicDbResults.find(m => m.name === name);
-    const songId = matchedRecord?.song_id;
+    const matchedRecord = musicDbResults.find(m => (m.name as string) === name);
+    const songId = matchedRecord?.song_id as number | undefined;
     const biasInfo = songId ? biasMap.get(songId) : null;
 
     if (biasInfo) {
