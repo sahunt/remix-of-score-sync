@@ -2011,7 +2011,7 @@ Deno.serve(async (req) => {
 
     const finalMessages: Message[] = [
       { role: "system", content: finalSystemPrompt },
-      ...preparedMessages.map(m => ({ role: m.role as string, content: m.content || "" })),
+      ...preparedMessages.map(m => ({ role: m.role, content: m.content || "" }) as Message),
     ];
 
     console.log(`Making final call after tool execution (${toolResultsForFinal.length} tool results)`);
