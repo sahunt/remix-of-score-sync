@@ -196,6 +196,80 @@ const PAGE_SIZE = 1000;
 const MAX_CONVERSATION_MESSAGES = 20;
 
 // ============================================================================
+// PRICING CONSTANTS (per 1M tokens)
+// ============================================================================
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'gemini-3-flash-preview': { input: 0.50, output: 3.00 },
+  'gemini-2.5-flash': { input: 0.30, output: 2.50 },
+  'gemini-2.0-flash': { input: 0.10, output: 0.40 },
+};
+
+function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING['gemini-3-flash-preview'];
+  return (inputTokens / 1_000_000) * pricing.input + (outputTokens / 1_000_000) * pricing.output;
+}
+
+// ============================================================================
+// USAGE LOGGING
+// ============================================================================
+
+interface UsageData {
+  userId: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+  queryPreview: string;
+  toolsCalled: string[];
+  toolRounds: number;
+}
+
+async function logUsage(supabaseServiceRole: SupabaseClient, usage: UsageData): Promise<void> {
+  try {
+    const estimatedCost = calculateCost(usage.model, usage.inputTokens, usage.outputTokens);
+    const { error } = await supabaseServiceRole
+      .from('edi_usage_log')
+      .insert({
+        user_id: usage.userId,
+        model: usage.model,
+        request_type: 'chat',
+        input_tokens: usage.inputTokens,
+        output_tokens: usage.outputTokens,
+        total_tokens: usage.totalTokens,
+        cached_tokens: usage.cachedTokens,
+        estimated_cost_usd: estimatedCost,
+        query_preview: usage.queryPreview.slice(0, 100),
+        tools_called: usage.toolsCalled,
+        tool_rounds: usage.toolRounds,
+      });
+    if (error) {
+      console.error('Failed to log usage:', error);
+    } else {
+      console.log(`Usage: ${usage.totalTokens} tokens, $${estimatedCost.toFixed(6)}`);
+    }
+  } catch (e) {
+    console.error('Usage logging error:', e);
+  }
+}
+
+function extractUsageFromResponse(data: ChatCompletionResponse): {
+  inputTokens: number; outputTokens: number; totalTokens: number; cachedTokens: number;
+} {
+  const usage = (data as Record<string, unknown>).usage as Record<string, number> | undefined;
+  if (usage) {
+    return {
+      inputTokens: usage.prompt_tokens || usage.prompt_token_count || 0,
+      outputTokens: usage.completion_tokens || usage.candidates_token_count || 0,
+      totalTokens: usage.total_tokens || usage.total_token_count || 0,
+      cachedTokens: usage.cached_content_token_count || 0,
+    };
+  }
+  return { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0 };
+}
+
+// ============================================================================
 // DATA FETCHERS
 // ============================================================================
 
@@ -1781,8 +1855,18 @@ serve(async (req) => {
 
     const AI_TIMEOUT_MS = 25000;
 
+    // Usage tracking across all rounds
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalCachedTokens = 0;
+    const toolsCalled: string[] = [];
+    let actualToolRounds = 0;
+
+    const queryPreview = typeof lastUserMessage === 'string' ? lastUserMessage : '';
+
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       console.log(`Tool-calling round ${round + 1}/${MAX_TOOL_ROUNDS}`);
+      actualToolRounds = round + 1;
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
@@ -1811,6 +1895,13 @@ serve(async (req) => {
       }
 
       const data: ChatCompletionResponse = await response.json();
+
+      // Extract and accumulate usage
+      const roundUsage = extractUsageFromResponse(data);
+      totalInputTokens += roundUsage.inputTokens;
+      totalOutputTokens += roundUsage.outputTokens;
+      totalCachedTokens += roundUsage.cachedTokens;
+
       const choice = data.choices[0];
 
       if (!choice) {
@@ -1837,6 +1928,9 @@ serve(async (req) => {
 
       allMessages.push({ role: "assistant", content: assistantMessage.content, tool_calls: toolCalls });
 
+      // Track tool names
+      for (const tc of toolCalls) toolsCalled.push(tc.function.name);
+
       // Execute tool calls in parallel
       const toolResults = await Promise.all(
         toolCalls.map(async (toolCall) => {
@@ -1851,8 +1945,23 @@ serve(async (req) => {
       }
     }
 
+    // Build usage data for logging (shared by both return paths)
+    const usageData: UsageData = {
+      userId,
+      model: MODEL,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      totalTokens: totalInputTokens + totalOutputTokens,
+      cachedTokens: totalCachedTokens,
+      queryPreview,
+      toolsCalled,
+      toolRounds: actualToolRounds,
+    };
+
     if (resolvedWithoutTools) {
       console.log(`Returning direct response (${directResponseText.length} chars) as SSE`);
+      // Log usage (non-blocking — don't await)
+      logUsage(supabaseServiceRole, usageData);
       return new Response(textToSSEStream(directResponseText), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
 
@@ -1883,6 +1992,9 @@ serve(async (req) => {
       console.error("Final Gemini API error:", finalResponse.status, errorText);
       throw new Error(`Final Gemini API error: ${finalResponse.status}`);
     }
+
+    // Log usage for streaming path (non-blocking)
+    logUsage(supabaseServiceRole, usageData);
 
     return new Response(finalResponse.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 
