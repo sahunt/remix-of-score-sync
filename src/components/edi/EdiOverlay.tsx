@@ -79,7 +79,7 @@ export function EdiOverlay() {
           exit={{ opacity: 1, scale: 1, y: "100vh" }}
           transition={{
             type: "spring",
-            damping: 36,
+            damping: 26,
             stiffness: 180,
             mass: 1.6,
           }}
