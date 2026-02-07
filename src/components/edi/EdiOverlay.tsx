@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { EDI_ICON_ID } from '@/hooks/useEdiMinimize';
-import { useEdiOverlay } from '@/contexts/EdiOverlayContext';
-import Edi from '@/pages/Edi';
+import { useCallback, useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { EDI_ICON_ID } from "@/hooks/useEdiMinimize";
+import { useEdiOverlay } from "@/contexts/EdiOverlayContext";
+import Edi from "@/pages/Edi";
 
-// Custom event for Edi icon bounce  
-const EDI_BOUNCE_EVENT = 'edi-icon-bounce';
+// Custom event for Edi icon bounce
+const EDI_BOUNCE_EVENT = "edi-icon-bounce";
 
 export function triggerEdiBounce() {
   window.dispatchEvent(new CustomEvent(EDI_BOUNCE_EVENT));
@@ -20,21 +20,21 @@ function getEdiIconCenter(): { x: number; y: number } | null {
 
 export function EdiOverlay() {
   const { isOpen, phase, setPhase, close } = useEdiOverlay();
-  const [originStyle, setOriginStyle] = useState<React.CSSProperties>({ transformOrigin: '50% 100%' });
+  const [originStyle, setOriginStyle] = useState<React.CSSProperties>({ transformOrigin: "50% 100%" });
 
   // Capture icon position when opening
   useEffect(() => {
-    if (phase === 'opening') {
+    if (phase === "opening") {
       const center = getEdiIconCenter();
       if (center) {
         setOriginStyle({ transformOrigin: `${center.x}px ${center.y}px` });
       }
-      setPhase('open');
+      setPhase("open");
     }
   }, [phase, setPhase]);
 
   const handleExitComplete = useCallback(() => {
-    setPhase('idle');
+    setPhase("idle");
     triggerEdiBounce();
   }, [setPhase]);
 
@@ -56,7 +56,7 @@ export function EdiOverlay() {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.6, y: 60 }}
           transition={{
-            type: 'spring',
+            type: "easeOutCirc",
             damping: 28,
             stiffness: 320,
             mass: 0.8,
