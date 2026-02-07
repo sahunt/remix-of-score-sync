@@ -10,7 +10,7 @@ export interface Message {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edi-chat`;
 const STORAGE_KEY = 'edi-chat-messages';
-const MAX_API_MESSAGES = 10;
+const MAX_API_MESSAGES = 4;
 
 // Load messages from localStorage
 function loadMessages(): Message[] {

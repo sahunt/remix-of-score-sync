@@ -193,7 +193,7 @@ const GATEWAY_URL = "https://generativelanguage.googleapis.com/v1beta/openai/cha
 const MODEL = "gemini-3-flash-preview";
 const MAX_TOOL_ROUNDS = 2;
 const PAGE_SIZE = 1000;
-const MAX_CONVERSATION_MESSAGES = 10;
+const MAX_CONVERSATION_MESSAGES = 4;
 
 // ============================================================================
 // PRICING CONSTANTS (per 1M tokens)
@@ -1664,18 +1664,43 @@ async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, sup
 // ============================================================================
 
 /**
- * Limits conversation history to prevent token bloat and hallucination in
- * long conversations. Caps the number of messages sent to the LLM while
- * keeping the most recent messages for continuity. Song markers are preserved
- * so the model can resolve follow-up questions like "which of these...".
+ * Aggressively limits conversation history to prevent token bloat and
+ * hallucination in long conversations. Only the most recent 4 messages
+ * (~2 exchanges) are kept. This is safe because all player data, scores,
+ * and song info are fetched fresh from Supabase on every request — older
+ * conversation context adds noise without value.
+ *
+ * Additionally, [[SONG:...]] markers in older assistant messages are
+ * stripped to further reduce token count. Only the most recent assistant
+ * message keeps its markers so the model can resolve follow-up questions
+ * like "which of these has the most crossovers?".
  */
 function prepareMessages(incomingMessages: Message[]): Message[] {
-  if (incomingMessages.length <= MAX_CONVERSATION_MESSAGES) {
-    return incomingMessages;
+  const trimmed = incomingMessages.length <= MAX_CONVERSATION_MESSAGES
+    ? incomingMessages.map(m => ({ ...m }))
+    : incomingMessages.slice(-MAX_CONVERSATION_MESSAGES).map(m => ({ ...m }));
+
+  if (incomingMessages.length > MAX_CONVERSATION_MESSAGES) {
+    console.log(`Trimmed conversation from ${incomingMessages.length} to ${trimmed.length} messages`);
   }
 
-  console.log(`Trimming conversation from ${incomingMessages.length} to ${MAX_CONVERSATION_MESSAGES} messages`);
-  return incomingMessages.slice(-MAX_CONVERSATION_MESSAGES);
+  // Strip [[SONG:...]] and [[FOLLOWUP:...]] markers from older assistant
+  // messages to reduce token count. Keep markers only in the most recent
+  // assistant message so follow-up questions still work.
+  let lastAssistantIdx = -1;
+  for (let i = trimmed.length - 1; i >= 0; i--) {
+    if (trimmed[i].role === "assistant") { lastAssistantIdx = i; break; }
+  }
+
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i].role === "assistant" && i !== lastAssistantIdx && trimmed[i].content) {
+      trimmed[i].content = trimmed[i].content!
+        .replace(/\[\[SONG:.*?\]\]/g, "[song]")
+        .replace(/\[\[FOLLOWUP:.*?\]\]/g, "");
+    }
+  }
+
+  return trimmed;
 }
 
 // ============================================================================
