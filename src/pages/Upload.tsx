@@ -81,6 +81,12 @@ export default function UploadPage() {
       setState('success');
       setCurrentUploadId(null);
       
+      // Play completion sound
+      try {
+        const audio = new Audio('/sounds/done.mp3');
+        audio.play();
+      } catch { /* ignore audio errors */ }
+      
       // Clear polling
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
