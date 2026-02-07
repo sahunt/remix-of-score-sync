@@ -1037,7 +1037,6 @@ const toolDefinitions: ToolDefinition[] = [
           min_difficulty_level: { type: "integer", description: "Minimum difficulty level", minimum: 1, maximum: 20 },
           max_difficulty_level: { type: "integer", description: "Maximum difficulty level", minimum: 1, maximum: 20 },
           difficulty_name: { type: "string", enum: ["Beginner", "Basic", "Difficult", "Expert", "Challenge"] },
-          halo_filter: { type: "string", enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "has_fc", "has_gfc", "pfc_no_mfc", "has_pfc", "has_mfc"], description: "Filter by halo/lamp status. has_fc = any FC or better. has_gfc = GFC or better (GFC, PFC, MFC). fc_no_pfc = only FC or GFC (not PFC/MFC)." },
           halo_filter: {
             type: "string",
             description: "Filter by user's halo status. EXACT MATCH filters (is_X) return songs with exactly that halo: is_mfc, is_pfc, is_gfc, is_fc, is_life4, is_clear, is_fail. RANGE filters: no_score (unplayed), no_clear (no clear/fail/unplayed), clear_no_fc (cleared but no full combo — includes CLEAR and LIFE4), fc_no_pfc (has FC or GFC but not PFC/MFC), has_gfc (GFC or better — GFC+PFC+MFC), pfc_no_mfc (exactly PFC), has_pfc (PFC or MFC), has_mfc (exactly MFC).",
