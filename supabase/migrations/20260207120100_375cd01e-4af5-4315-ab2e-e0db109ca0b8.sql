@@ -347,6 +347,7 @@ BEGIN
   SELECT p_user_id, m.difficulty_level, 0, count(*)::integer, 'untouched'
   FROM public.musicdb m
   WHERE m.playstyle = 'SP' AND m.deleted = false
+    AND m.difficulty_level IS NOT NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.player_level_stats pls
       WHERE pls.user_id = p_user_id AND pls.difficulty_level = m.difficulty_level
