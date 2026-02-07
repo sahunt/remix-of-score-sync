@@ -164,8 +164,9 @@ async function fetchUserScores(supabase: SupabaseClient, userId: string): Promis
   while (hasMore) {
     const { data: pageData, error: pageError } = await supabase
       .from("user_scores")
-      .select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name)`)
+      .select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, deleted)`)
       .eq("user_id", userId)
+      .eq("musicdb.deleted", false)
       .range(from, from + PAGE_SIZE - 1);
     
     if (pageError) {
@@ -1055,8 +1056,9 @@ async function getSongsByCriteria(
   while (hasMoreScores) {
     const { data: scorePage } = await supabase
       .from("user_scores")
-      .select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)`)
+      .select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id, deleted)`)
       .eq("user_id", userId)
+      .eq("musicdb.deleted", false)
       .range(scoreFrom, scoreFrom + PAGE_SIZE - 1);
     if (scorePage && scorePage.length > 0) {
       allUserScores = [...allUserScores, ...scorePage as Record<string, unknown>[]];
