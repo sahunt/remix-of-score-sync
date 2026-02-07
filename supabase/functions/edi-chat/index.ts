@@ -191,7 +191,7 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 const MODEL = "gemini-3-flash-preview";
-const MAX_TOOL_ROUNDS = 3;
+const MAX_TOOL_ROUNDS = 2;
 const PAGE_SIZE = 1000;
 const MAX_CONVERSATION_MESSAGES = 20;
 
@@ -768,9 +768,8 @@ function getStageRules(stage: PlayerStage): string {
   return stageRules[stage];
 }
 
-function buildWhoIAmPrompt(): string {
-  return `You are Edi, a DDR coach. Be CONCISE—2-3 sentences per point max.
-Talk like a knowledgeable friend at the arcade, not a professor.
+function buildCorePrompt(): string {
+  return `You are Edi, a DDR coach. Be CONCISE—2-3 sentences per point max. Talk like a knowledgeable friend at the arcade.
 
 ══════════════════════════════════════════════════════════════════════════════
 ⚠️ ANTI-HALLUCINATION RULES — VERIFY BEFORE EVERY RESPONSE
@@ -783,96 +782,77 @@ These rules override everything else. Before EVERY response, check:
 2. If you need song data, CALL A TOOL. Never rely on memory of previous results.
 3. NEVER invent song names, scores, halos, or achievements. If unsure, ask or look it up.
 4. Every [[SONG:...]] marker must be COPIED from a tool result — never constructed.
-5. If a user asks about a song from earlier in the conversation, call search_songs
-   again to get fresh data — do NOT recite what you said before.
+5. If a user asks about a song from earlier in the conversation, call search_songs again.
 6. NEVER recommend a song not returned by a tool call.
 7. If a tool returns 4 songs, recommend AT MOST those 4 songs.
 8. If a tool shows user_score as null, user has NOT played that song.
 
-=== DDR TERMINOLOGY ===
-
---- SCORING ---
-SCORE: A number based on the number of judgements a player gets in a song. There are two types: Money Score and EX Score.
-MONEY SCORE: A number between 0 through 1,000,000. A max score of 1,000,000 means all steps had a Marvelous judgement.
-EX SCORE: Points based on judgements (Marvelous=3, Perfect=2, OK=2, Great=1, others=0). NOT captured in database.
-
-GRADING (Letter Grades) - Score thresholds:
-- AAA: 990,000+ | AA+: 950,000-989,999 | AA: 900,000-949,999 | AA-: 890,000-899,999
-- A+: 850,000-889,999 | A: 800,000-849,999 | A-: 790,000-799,999
-- B+: 750,000-789,999 | B: 700,000-749,999 | B-: 690,000-699,999
-- C+: 650,000-689,999 | C: 600,000-649,999 | C-: 590,000-599,999
-- D+: 550,000-589,999 | D: below 550,000
-
---- HALO/LAMP TYPES ---
-- CLEAR: Complete song without depleting life bar, has misses/NG judgements
-- FC (Full Combo): No Miss judgements, all OKs. "Blue Combo"
-- GFC (Great Full Combo): No Miss or Good judgements. "Green Combo"
-- PFC (Perfect Full Combo): No Miss, Good, or Great judgements. "Gold/Yellow Combo"
-- MFC (Marvelous Full Combo): ONLY Marvelouses. "White Combo"
-
-⚠️ A score of 1,000,000 is an MFC, NOT a PFC. If trying to PFC, target is 999,910-999,990.
-
---- PATTERN TERMINOLOGY ---
-- CROSSOVERS: Patterns that have you turning hips (LDR, RDL)
-- DRILLS: Alternating between two arrows in rapid 16th notes
-- FOOTSWITCHES: Switching feet on patterns, uses BOTH feet
-- JACKS: Hitting single arrow multiple times with SAME foot
-- STAMINA: Arrow-dense, exhausting charts
-
---- SHOCK ARROWS ---
-SHOCK ARROWS: Special arrows that DAMAGE the player if stepped on. They are OBSTACLES TO AVOID, not arrows to hit.
-- Appear as flashing/electric arrows
-- Stepping on them damages your life gauge and breaks combo
-- Charts with shock arrows test discipline, body control, and spatial awareness
-⚠️ DB REFERENCE: The database field is called "mines" but ALWAYS say "shock arrows" to the player.
-⚠️ NEVER say "mines" — ALWAYS say "shock arrows" when talking to the player.
-
-When a player asks for "shock arrow charts" or "charts with shocks":
-- They want charts that HAVE shock arrows as a CHART CHARACTERISTIC
-- They enjoy the challenge of avoiding shocks while playing
-- This is NOT a scoring goal or PFC target request
-- DO describe the shock arrow challenge: how many shocks, the movement/avoidance required
-
---- SONG OFFSET DISPLAY RULES ---
-When displaying song offset/bias information:
-- Format offset as: +Nms or -Nms (e.g., "+3ms", "-6ms", "+0ms")
-- This is how the app displays offsets — use the SAME format
-- Do NOT show raw decimal bias values like "0.015" or "-5.81ms"
-- Do NOT add qualitative descriptions like "(Slightly early)" or "(Late)"
-- ONLY show the rounded integer with sign and "ms" suffix
-- Example: "Set your offset to -6ms" NOT "The offset is -0.006 (Slightly early)"
-
---- RESPONSE RULES ---
+═══ RESPONSE RULES ═══
 - Max 2-3 sentences per point
 - When recommending songs, output 3-5 songs using [[SONG:...]] format
-- COPY the [[SONG:...]] markers EXACTLY as shown
+- COPY the [[SONG:...]] markers EXACTLY as shown from tool results
+- ALWAYS end with 2-3 follow-ups: [[FOLLOWUP:suggestion text here]]
+`;
+}
 
---- TERMINOLOGY RULES ---
-- ALWAYS say "shock arrows", NEVER say "mines" when talking to the player
-- Use "jacks" NOT "jackhammer"
-- NEVER use "ankle" or "ankle tapping"
-- Say "crossovers" not "crosses"
-- Say "footswitches" not "foot switches"
+function buildScoringTerminology(): string {
+  return `
+═══ SCORING TERMINOLOGY ═══
+MONEY SCORE: 0-1,000,000. Max 1,000,000 = all Marvelous judgements.
+GRADES: AAA (990,000+) | AA+ (950,000+) | AA (900,000+) | A+ (850,000+) | A (800,000+)
+⚠️ Score of 1,000,000 is MFC, NOT PFC. PFC target is 999,910-999,990.
+`;
+}
 
---- GOALS AWARENESS ---
-You have access to the user's goals via the get_user_goals tool. Use it when:
-- The user asks about their goals or progress
-- You notice a score or achievement that might relate to a goal they have
-- The user seems unsure what to work on next (check if they have active goals first)
+function buildHaloTerminology(): string {
+  return `
+═══ HALO/LAMP TYPES ═══
+- CLEAR: Completed song, has misses
+- FC (Full Combo): No misses, all OKs. "Blue Combo"
+- GFC (Great Full Combo): No Miss/Good. "Green Combo"
+- PFC (Perfect Full Combo): No Miss/Good/Great. "Gold Combo"
+- MFC (Marvelous Full Combo): ONLY Marvelouses. "White Combo" = 1,000,000 score
+`;
+}
 
-Do NOT:
-- Reference goals in every message
-- Become a passive goal status reporter — you're a coach, not a dashboard
-- Stop challenging users to set NEW ambitious goals just because they have existing ones
-- Call get_user_goals unless the conversation makes it relevant
+function buildPatternTerminology(): string {
+  return `
+═══ PATTERN TERMINOLOGY ═══
+- CROSSOVERS: Patterns requiring hip rotation (LDR, RDL)
+- FOOTSWITCHES: Switching which foot hits a pattern
+- JACKS: Same arrow multiple times with same foot
+- DRILLS: Rapid alternating between two arrows
+- STAMINA: High note density, physically demanding
+Say "crossovers" not "crosses", "footswitches" not "foot switches", "jacks" not "jackhammer". NEVER say "ankle".
+`;
+}
 
-When you DO reference goals, tie it to your coaching voice. Examples:
-- "Oh wait — that 987K on MAX 300? You're knocking on the door of that PFC goal you set. One more clean run."
-- "You've got 13 FCs to go on your 500 FC goal. Want me to find some charts where you're close?"
-- "I see you set a goal to clear all 17s but you've been playing 15s all week. Let's get back on track."
+function buildShockArrowTerminology(): string {
+  return `
+═══ SHOCK ARROWS ═══
+Shock arrows are OBSTACLES TO AVOID, not arrows to hit. Stepping on them damages life and breaks combo.
+⚠️ Database field is "mines" but ALWAYS say "shock arrows" to the player.
+When player asks for "shock arrow charts" — they want charts WITH shocks as a challenge feature.
+`;
+}
 
---- FOLLOW-UPS (REQUIRED) ---
-At END of EVERY response, include 2-3 follow-up suggestions: [[FOLLOWUP:suggestion text here]]
+function buildOffsetTerminology(): string {
+  return `
+═══ SONG OFFSET RULES ═══
+Format offset as: +Nms or -Nms (e.g., "+3ms", "-6ms")
+Do NOT show raw decimals or add descriptions like "(early)" or "(late)".
+Example: "Set your offset to -6ms" NOT "The offset is -0.006 (Slightly early)"
+`;
+}
+
+function buildGoalsTerminology(): string {
+  return `
+═══ GOALS AWARENESS ═══
+Use get_user_goals tool when:
+- User asks about their goals or progress
+- You notice a score might relate to a goal
+- User seems unsure what to work on (check for active goals first)
+Do NOT call get_user_goals on every message — only when relevant.
 `;
 }
 
@@ -1636,6 +1616,76 @@ function textToSSEStream(text: string): ReadableStream<Uint8Array> {
 }
 
 // ============================================================================
+// SKILL DETECTION & DYNAMIC PROMPT
+// ============================================================================
+
+interface SkillFlags {
+  needsScoring: boolean;
+  needsHalos: boolean;
+  needsPatterns: boolean;
+  needsShockArrows: boolean;
+  needsOffset: boolean;
+  needsGoals: boolean;
+  needsSdp: boolean;
+  needsWarmup: boolean;
+  needsFullLevelStats: boolean;
+}
+
+function detectNeededSkills(userMessage: string): SkillFlags {
+  const msg = userMessage.toLowerCase();
+
+  return {
+    needsScoring: /score|aaa|grade|rank|\d{5,}|money|ex\s?score/.test(msg),
+    needsHalos: /mfc|pfc|gfc|fc|halo|lamp|combo|full\s?combo|clear/.test(msg),
+    needsPatterns: /crossover|jack|footswitch|drill|stamina|pattern|stream/.test(msg),
+    needsShockArrows: /shock|mine/.test(msg),
+    needsOffset: /offset|timing|bias|sync|late|early/.test(msg),
+    needsGoals: /goal|target|working\s?on|progress/.test(msg),
+    needsSdp: /sdp|single.?digit|999[89]/.test(msg),
+    needsWarmup: /warm.?up|warmup/.test(msg),
+    needsFullLevelStats: /weakness|strength|ceiling|floor|mastery|breakdown|level.?\d+\s*(mastery|stats)|how.?am.?i.?doing|analyze/.test(msg),
+  };
+}
+
+function buildDynamicSystemPrompt(
+  userMessage: string,
+  profile: PlayerProfile,
+  totalStats: TotalStats,
+  levelHaloStats: LevelHaloStats[]
+): string {
+  const skills = detectNeededSkills(userMessage);
+
+  // ALWAYS include: Core + Profile + Counting Stats + Tools
+  let systemPrompt = buildCorePrompt();
+  systemPrompt += buildPlayerProfilePrompt(profile);
+  systemPrompt += buildCountingStatsPrompt(totalStats);
+  systemPrompt += toolsSystemPrompt;
+
+  // CONDITIONAL: Terminology modules
+  if (skills.needsScoring) systemPrompt += buildScoringTerminology();
+  if (skills.needsHalos) systemPrompt += buildHaloTerminology();
+  if (skills.needsPatterns) systemPrompt += buildPatternTerminology();
+  if (skills.needsShockArrows) systemPrompt += buildShockArrowTerminology();
+  if (skills.needsOffset) systemPrompt += buildOffsetTerminology();
+  if (skills.needsGoals) systemPrompt += buildGoalsTerminology();
+
+  // CONDITIONAL: Specific skills
+  if (skills.needsSdp) systemPrompt += buildSdpRulesPrompt();
+  if (skills.needsWarmup) systemPrompt += buildWarmupRulesPrompt();
+
+  // CONDITIONAL: Full level breakdown — only when analyzing player deeply
+  if (skills.needsFullLevelStats) systemPrompt += buildLevelHaloStatsPrompt(levelHaloStats);
+
+  const loadedSkills = Object.entries(skills)
+    .filter(([_, v]) => v)
+    .map(([k, _]) => k);
+  console.log(`Loaded skills: ${loadedSkills.join(', ') || 'core only'}`);
+  console.log(`System prompt length: ${systemPrompt.length} characters`);
+
+  return systemPrompt;
+}
+
+// ============================================================================
 // MAIN HANDLER
 // ============================================================================
 
@@ -1695,15 +1745,17 @@ serve(async (req) => {
     console.log("Player profile:", JSON.stringify(profile, null, 2));
     console.log("Total stats:", JSON.stringify(totalStats, null, 2));
 
-    let systemPrompt = buildWhoIAmPrompt();
-    systemPrompt += buildPlayerProfilePrompt(profile);
-    systemPrompt += buildCountingStatsPrompt(totalStats);
-    systemPrompt += buildLevelHaloStatsPrompt(levelHaloStats);
-    systemPrompt += buildSdpRulesPrompt();
-    systemPrompt += buildWarmupRulesPrompt();
-    systemPrompt += toolsSystemPrompt;
+    // Get the last user message to detect needed skills
+    const lastUserMessage = incomingMessages
+      .filter(m => m.role === 'user')
+      .pop()?.content || '';
 
-    console.log(`System prompt length: ${systemPrompt.length} characters`);
+    const systemPrompt = buildDynamicSystemPrompt(
+      typeof lastUserMessage === 'string' ? lastUserMessage : '',
+      profile,
+      totalStats,
+      levelHaloStats
+    );
 
     const preparedMessages = prepareMessages(incomingMessages);
     const allMessages: Message[] = [{ role: "system", content: systemPrompt }, ...preparedMessages];
