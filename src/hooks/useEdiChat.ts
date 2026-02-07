@@ -208,7 +208,10 @@ export function useEdiChat() {
     // Remove the failed assistant response (if any empty one exists) and the user message
     // so sendMessage can re-add them cleanly
     setMessages(prev => {
-      const lastUserIdx = prev.findLastIndex(m => m.role === 'user');
+      let lastUserIdx = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].role === 'user') { lastUserIdx = i; break; }
+      }
       if (lastUserIdx === -1) return prev;
       return prev.slice(0, lastUserIdx);
     });
