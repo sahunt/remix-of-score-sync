@@ -189,8 +189,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-3-flash-preview";
+const GATEWAY_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const MODEL = "gemini-3-flash-preview";
 const MAX_TOOL_ROUNDS = 3;
 const PAGE_SIZE = 1000;
 const MAX_CONVERSATION_MESSAGES = 20;
@@ -1647,8 +1647,8 @@ serve(async (req) => {
   try {
     const { messages: incomingMessages } = await req.json() as { messages: Message[] };
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -1716,7 +1716,7 @@ serve(async (req) => {
 
       const response = await fetch(GATEWAY_URL, {
         method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, tool_choice: "auto", stream: false }),
       });
 
@@ -1767,7 +1767,7 @@ serve(async (req) => {
 
     const finalResponse = await fetch(GATEWAY_URL, {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, stream: true }),
     });
 
