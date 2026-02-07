@@ -94,20 +94,23 @@ export function BottomNav() {
       background: 'linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background)) 40%, transparent 100%)'
     }} />}
 
-      <nav className={cn("fixed bottom-[46px] left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-1 h-[55px] px-5 rounded-full bg-[#383C4C] transition-transform duration-300 ease-out pl-[10px] pr-[10px]", isVisible ? "translate-y-0" : "translate-y-[120px]")}>
-        <NavItem to="/home" icon={<HomeIcon />} label="Home" />
+      <div className={cn("fixed bottom-[46px] left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 transition-transform duration-300 ease-out", isVisible ? "translate-y-0" : "translate-y-[120px]")}>
         <button
           id={EDI_ICON_ID}
           onClick={openEdi}
           className={cn(
-            "flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 px-3 py-2",
+            "flex items-center justify-center w-[55px] h-[55px] rounded-full bg-[#383C4C] transition-all duration-200 active:scale-95 shrink-0",
             ediBouncing && "animate-edi-bounce"
           )}
         >
           <span className="text-[#E3E3E3]"><EdiIcon /></span>
         </button>
-        <NavItem to="/scores" icon={<ScoresIcon />} label="Scores" />
-        <NavItem to="/upload" icon={<UploadIcon />} label="Upload" />
-      </nav>
+
+        <nav className="flex items-center justify-center gap-1 h-[55px] px-[10px] rounded-full bg-[#383C4C]">
+          <NavItem to="/home" icon={<HomeIcon />} label="Home" />
+          <NavItem to="/scores" icon={<ScoresIcon />} label="Scores" />
+          <NavItem to="/upload" icon={<UploadIcon />} label="Upload" />
+        </nav>
+      </div>
     </>;
 }
