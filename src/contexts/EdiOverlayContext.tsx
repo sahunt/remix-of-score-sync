@@ -22,6 +22,7 @@ export function EdiOverlayProvider({ children }: { children: React.ReactNode }) 
 
   const close = useCallback(() => {
     setPhase('closing');
+    setIsOpen(false);
   }, []);
 
   // Called when close animation finishes

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Minimize2, RefreshCw } from 'lucide-react';
 import { Icon } from '@/components/ui/Icon';
+import ediWordmark from '@/assets/edi-wordmark.svg';
 import { ChatMessage } from '@/components/edi/ChatMessage';
 import { ChatInput } from '@/components/edi/ChatInput';
 import { QuickPrompts } from '@/components/edi/QuickPrompts';
@@ -196,15 +198,15 @@ export default function Edi({ onMinimize }: EdiProps) {
           className="p-2 -ml-2 rounded-full hover:bg-secondary active:scale-95 transition-all"
           aria-label="Minimize"
         >
-          <Icon name="minimize" size={24} />
+          <Minimize2 size={22} />
         </button>
-        <h1 className="text-lg font-semibold">Edi</h1>
+        <img src={ediWordmark} alt="Edi" className="h-6" />
         {hasMessages && (
           <button
             onClick={clearMessages}
             className="p-2 -mr-2 rounded-full hover:bg-secondary active:scale-95 transition-all"
           >
-            <Icon name="refresh" size={24} />
+            <RefreshCw size={20} />
           </button>
         )}
         {!hasMessages && <div className="w-10" />}
