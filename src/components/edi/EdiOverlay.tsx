@@ -80,8 +80,8 @@ export function EdiOverlay() {
           transition={{
             type: "spring",
             damping: 36,
-            stiffness: 280,
-            mass: 2,
+            stiffness: 180,
+            mass: 0.8,
           }}
           style={originStyle}
           className="fixed inset-0 z-50 flex flex-col bg-background w-full max-w-[720px] mx-auto rounded-[20px] overflow-hidden"
