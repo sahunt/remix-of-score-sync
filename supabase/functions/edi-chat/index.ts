@@ -901,6 +901,7 @@ These rules override everything else. Before EVERY response, check:
 - Max 2-3 sentences per point
 - When recommending songs, output 3-5 songs using [[SONG:...]] format
 - COPY the [[SONG:...]] markers EXACTLY as shown from tool results
+- NEVER wrap [[SONG:...]] or [[FOLLOWUP:...]] markers in markdown (**, *, etc). Put markers on their own line, bare.
 - ALWAYS end with 2-3 follow-ups: [[FOLLOWUP:suggestion text here]]
 - You MUST always produce a visible response — even if tools return no data
 `;
@@ -1708,6 +1709,26 @@ function prepareMessages(incomingMessages: Message[]): Message[] {
 }
 
 // ============================================================================
+// RESPONSE SANITIZATION
+// ============================================================================
+
+/**
+ * Cleans up model output before sending to the frontend.
+ * The model sometimes wraps [[SONG:...]] and [[FOLLOWUP:...]] markers in
+ * markdown formatting (**, *, __, _). When the frontend hydrates markers
+ * into card components, the formatting characters get orphaned as literal text.
+ */
+function sanitizeResponse(text: string): string {
+  return text
+    // Strip bold/italic wrapping around markers: **[[SONG:...]]** → [[SONG:...]]
+    .replace(/\*{1,2}\s*(\[\[(?:SONG|FOLLOWUP):[^\]]*\]\])\s*\*{1,2}/g, '$1')
+    .replace(/_{1,2}\s*(\[\[(?:SONG|FOLLOWUP):[^\]]*\]\])\s*_{1,2}/g, '$1')
+    // Strip orphaned ** or __ on lines that only contain whitespace and markers
+    .replace(/^\*{2}$/gm, '')
+    .replace(/^_{2}$/gm, '');
+}
+
+// ============================================================================
 // SSE STREAM HELPER
 // ============================================================================
 
@@ -1989,7 +2010,7 @@ Deno.serve(async (req) => {
       console.log(`Returning direct response (${directResponseText.length} chars) as SSE`);
       // Log usage (non-blocking — don't await)
       logUsage(supabaseServiceRole, usageData);
-      return new Response(textToSSEStream(directResponseText), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+      return new Response(textToSSEStream(sanitizeResponse(directResponseText)), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
 
     // Final call: build clean messages WITHOUT tool API features.
@@ -2064,7 +2085,7 @@ Deno.serve(async (req) => {
     console.log(`Final response: ${finalText.length} chars`);
     logUsage(supabaseServiceRole, usageData);
 
-    return new Response(textToSSEStream(finalText), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    return new Response(textToSSEStream(sanitizeResponse(finalText)), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 
   } catch (e) {
     console.error("edi-chat error:", e);
