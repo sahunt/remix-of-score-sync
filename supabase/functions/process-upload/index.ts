@@ -1444,18 +1444,22 @@ async function smartUpsertScores(
     }
   }
   
-  // Update existing scores
-  for (const update of toUpdate) {
-    const { error: updateError } = await supabase
-      .from('user_scores')
-      .update(update.data)
-      .eq('id', update.id);
-    
-    if (updateError) {
-      console.error('Update error:', updateError);
-    } else {
-      updated++;
-      changes.push(update.change);
+  // Batch update existing scores (concurrent batches instead of sequential)
+  const UPDATE_BATCH_SIZE = 50;
+  for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH_SIZE) {
+    const batch = toUpdate.slice(i, i + UPDATE_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(update =>
+        supabase.from('user_scores').update(update.data).eq('id', update.id)
+      )
+    );
+    for (let j = 0; j < results.length; j++) {
+      if (results[j].error) {
+        console.error('Update error:', results[j].error);
+      } else {
+        updated++;
+        changes.push(batch[j].change);
+      }
     }
   }
   
