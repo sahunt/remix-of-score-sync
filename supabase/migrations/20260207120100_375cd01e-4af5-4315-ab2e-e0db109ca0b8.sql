@@ -51,6 +51,7 @@ BEGIN
       ON m.song_id = ca.song_id AND UPPER(m.difficulty_name) = UPPER(ca.difficulty_name)
     WHERE us.user_id = p_user_id
       AND us.score IS NOT NULL
+      AND m.deleted = false
       AND m.difficulty_level >= p_pfc_ceiling - 1
       AND m.difficulty_level <= p_pfc_ceiling + 1
       AND CASE
@@ -70,6 +71,7 @@ BEGIN
       ON m.song_id = ca.song_id AND UPPER(m.difficulty_name) = UPPER(ca.difficulty_name)
     WHERE us.user_id = p_user_id
       AND us.score IS NOT NULL
+      AND m.deleted = false
       AND m.difficulty_level >= p_pfc_ceiling - 1
       AND m.difficulty_level <= p_pfc_ceiling + 1
       AND CASE
@@ -144,6 +146,7 @@ BEGIN
       ON m.song_id = ca.song_id AND UPPER(m.difficulty_name) = UPPER(ca.difficulty_name)
     WHERE us.user_id = p_user_id
       AND us.score IS NOT NULL
+      AND m.deleted = false
       AND m.difficulty_level >= p_pfc_ceiling - 1
       AND m.difficulty_level <= p_pfc_ceiling + 1
       AND ca.bpm IS NOT NULL AND ca.bpm >= 180
@@ -157,6 +160,7 @@ BEGIN
       ON m.song_id = ca.song_id AND UPPER(m.difficulty_name) = UPPER(ca.difficulty_name)
     WHERE us.user_id = p_user_id
       AND us.score IS NOT NULL
+      AND m.deleted = false
       AND m.difficulty_level >= p_pfc_ceiling - 1
       AND m.difficulty_level <= p_pfc_ceiling + 1
       AND ca.bpm IS NOT NULL AND ca.bpm < 160
@@ -250,7 +254,8 @@ BEGIN
     v_life4_count, v_clear_count, v_fail_count, v_aaa_count, v_level_12_plus_plays
   FROM public.user_scores us
   INNER JOIN public.musicdb m ON m.id = us.musicdb_id
-  WHERE us.user_id = p_user_id;
+  WHERE us.user_id = p_user_id
+    AND m.deleted = false;
 
   v_total_plays := v_total_scores;
 
@@ -327,10 +332,10 @@ BEGIN
       SELECT m2.difficulty_level, avg(us2.score) as level_avg
       FROM public.user_scores us2
       INNER JOIN public.musicdb m2 ON m2.id = us2.musicdb_id
-      WHERE us2.user_id = p_user_id AND us2.score IS NOT NULL
+      WHERE us2.user_id = p_user_id AND us2.score IS NOT NULL AND m2.deleted = false
       GROUP BY m2.difficulty_level
     ) sub ON m.difficulty_level = sub.difficulty_level
-    WHERE us.user_id = p_user_id AND us.score IS NOT NULL
+    WHERE us.user_id = p_user_id AND us.score IS NOT NULL AND m.deleted = false
     GROUP BY m.difficulty_level
   ) ld
   LEFT JOIN (
