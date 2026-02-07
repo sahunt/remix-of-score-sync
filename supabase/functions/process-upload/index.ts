@@ -1558,7 +1558,20 @@ async function processUploadInBackground(
         },
       })
       .eq('id', uploadId);
-    
+
+    // Refresh pre-computed player summary after successful import
+    try {
+      console.log(`Refreshing player summary for user ${userId}...`);
+      const { error: refreshError } = await supabase.rpc('refresh_player_summary', { p_user_id: userId });
+      if (refreshError) {
+        console.error('Failed to refresh player summary (non-fatal):', refreshError);
+      } else {
+        console.log('Player summary refreshed successfully');
+      }
+    } catch (refreshErr) {
+      console.error('Player summary refresh threw (non-fatal):', refreshErr);
+    }
+
     console.log(`\n========================================`);
     console.log(`Background processing COMPLETE: ${uploadId}`);
     console.log(`========================================\n`);
