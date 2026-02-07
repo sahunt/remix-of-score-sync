@@ -879,6 +879,7 @@ const toolDefinitions: ToolDefinition[] = [
           min_difficulty_level: { type: "integer", description: "Minimum difficulty level", minimum: 1, maximum: 20 },
           max_difficulty_level: { type: "integer", description: "Maximum difficulty level", minimum: 1, maximum: 20 },
           difficulty_name: { type: "string", enum: ["Beginner", "Basic", "Difficult", "Expert", "Challenge"] },
+          halo_filter: { type: "string", enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "has_fc", "has_gfc", "pfc_no_mfc", "has_pfc", "has_mfc"], description: "Filter by halo/lamp status. has_fc = any FC or better. has_gfc = GFC or better (GFC, PFC, MFC). fc_no_pfc = only FC or GFC (not PFC/MFC)." },
           halo_filter: {
             type: "string",
             description: "Filter by user's halo status. EXACT MATCH filters (is_X) return songs with exactly that halo: is_mfc, is_pfc, is_gfc, is_fc, is_life4, is_clear, is_fail. RANGE filters: no_score (unplayed), no_clear (no clear/fail/unplayed), clear_no_fc (cleared but no full combo — includes CLEAR and LIFE4), fc_no_pfc (has FC or GFC but not PFC/MFC), has_gfc (GFC or better — GFC+PFC+MFC), pfc_no_mfc (exactly PFC), has_pfc (PFC or MFC), has_mfc (exactly MFC).",
@@ -1047,6 +1048,22 @@ async function getSongsByCriteria(
 
   const effectiveLimit = Math.min(limit, 25);
 
+  // Paginate user score fetch to avoid Supabase's default 1000-row limit
+  let allUserScores: Record<string, unknown>[] = [];
+  let scoreFrom = 0;
+  let hasMoreScores = true;
+  while (hasMoreScores) {
+    const { data: scorePage } = await supabase
+      .from("user_scores")
+      .select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)`)
+      .eq("user_id", userId)
+      .range(scoreFrom, scoreFrom + PAGE_SIZE - 1);
+    if (scorePage && scorePage.length > 0) {
+      allUserScores = [...allUserScores, ...scorePage as Record<string, unknown>[]];
+      scoreFrom += PAGE_SIZE;
+      hasMoreScores = scorePage.length === PAGE_SIZE;
+    } else {
+      hasMoreScores = false;
   // Paginate user scores to ensure we fetch ALL rows (Supabase default limit is ~1000)
   let allUserScores: Record<string, unknown>[] = [];
   let userScoreFrom = 0;
@@ -1100,6 +1117,7 @@ async function getSongsByCriteria(
         case "no_clear": if (hasScore && !["fail", "none", ""].includes(halo)) continue; break;
         case "clear_no_fc": if (!hasScore || ["fc", "gfc", "pfc", "mfc", "fail", "none", ""].includes(halo)) continue; break;
         case "fc_no_pfc": if (!hasScore || !["fc", "gfc"].includes(halo)) continue; break;
+        case "has_fc": if (!hasScore || !["fc", "gfc", "pfc", "mfc"].includes(halo)) continue; break;
         case "has_gfc": if (!hasScore || !["gfc", "pfc", "mfc"].includes(halo)) continue; break;
         case "pfc_no_mfc": if (!hasScore || halo !== "pfc") continue; break;
         case "has_pfc": if (!hasScore || !["pfc", "mfc"].includes(halo)) continue; break;
