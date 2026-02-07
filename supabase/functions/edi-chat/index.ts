@@ -137,6 +137,49 @@ interface TotalStats {
   totalAAAs: number;
 }
 
+// Pre-computed table row types (from player_summary and player_level_stats)
+interface PlayerSummaryRow {
+  user_id: string;
+  total_scores: number;
+  mfc_count: number;
+  pfc_count: number;
+  gfc_count: number;
+  fc_count: number;
+  life4_count: number;
+  clear_count: number;
+  fail_count: number;
+  aaa_count: number;
+  player_stage: string;
+  clear_ceiling: number;
+  fc_ceiling: number;
+  pfc_ceiling: number;
+  comfort_zone_high: number;
+  total_plays: number;
+  level_12_plus_plays: number;
+  proficiencies: Record<string, { score: number; consistency: number }>;
+}
+
+interface PlayerLevelStatsRow {
+  difficulty_level: number;
+  played: number;
+  avg_score: number;
+  score_variance: number;
+  clear_rate: number;
+  fc_rate: number;
+  pfc_rate: number;
+  aaa_rate: number;
+  mfc_count: number;
+  pfc_count: number;
+  gfc_count: number;
+  fc_count: number;
+  life4_count: number;
+  clear_count: number;
+  fail_count: number;
+  aaa_count: number;
+  mastery_tier: string;
+  total_charts_available: number;
+}
+
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -292,6 +335,103 @@ async function fetchMusicDb(supabaseServiceRole: SupabaseClient): Promise<ChartA
   
   console.log(`Built complete chart catalog with ${chartAnalysis.length} charts`);
   return chartAnalysis;
+}
+
+// ============================================================================
+// PRE-COMPUTED DATA FETCHERS
+// ============================================================================
+
+async function fetchPlayerSummary(supabase: SupabaseClient, userId: string): Promise<PlayerSummaryRow | null> {
+  const { data, error } = await supabase
+    .from("player_summary")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+  if (error || !data) return null;
+  return data as PlayerSummaryRow;
+}
+
+async function fetchPlayerLevelStats(supabase: SupabaseClient, userId: string): Promise<PlayerLevelStatsRow[]> {
+  const { data, error } = await supabase
+    .from("player_level_stats")
+    .select("*")
+    .eq("user_id", userId)
+    .order("difficulty_level", { ascending: true });
+  if (error || !data) return [];
+  return data as PlayerLevelStatsRow[];
+}
+
+function profileFromPrecomputed(summary: PlayerSummaryRow, levelStats: PlayerLevelStatsRow[]): PlayerProfile {
+  const levelMastery: LevelMastery[] = levelStats
+    .filter(ls => ls.difficulty_level >= 12 && ls.played > 0)
+    .map(ls => ({
+      level: ls.difficulty_level,
+      played: ls.played,
+      avgScore: ls.avg_score,
+      scoreVariance: ls.score_variance,
+      clearRate: Number(ls.clear_rate),
+      fcRate: Number(ls.fc_rate),
+      pfcRate: Number(ls.pfc_rate),
+      aaaRate: Number(ls.aaa_rate),
+      pfcCount: ls.pfc_count,
+      aaaCount: ls.aaa_count,
+      fcCount: ls.fc_count,
+      gfcCount: ls.gfc_count,
+      mfcCount: ls.mfc_count,
+      masteryTier: ls.mastery_tier as MasteryTier,
+    }))
+    .sort((a, b) => a.level - b.level);
+
+  const prof = summary.proficiencies || {};
+  const defaultProf = { score: 5, consistency: 5 };
+
+  return {
+    playerStage: summary.player_stage as PlayerStage,
+    clearCeiling: summary.clear_ceiling,
+    fcCeiling: summary.fc_ceiling,
+    pfcCeiling: summary.pfc_ceiling,
+    comfortCeiling: summary.comfort_zone_high,
+    totalPlays: summary.total_plays,
+    level12PlusPlays: summary.level_12_plus_plays,
+    levelMastery,
+    proficiencies: {
+      crossovers: prof.crossovers || defaultProf,
+      footswitches: prof.footswitches || defaultProf,
+      stamina: prof.stamina || defaultProf,
+      speed: prof.speed || defaultProf,
+      jacks: prof.jacks || defaultProf,
+    },
+  };
+}
+
+function totalStatsFromPrecomputed(summary: PlayerSummaryRow): TotalStats {
+  return {
+    totalPlayed: summary.total_scores,
+    totalMfcs: summary.mfc_count,
+    totalPfcs: summary.pfc_count,
+    totalGfcs: summary.gfc_count,
+    totalFcs: summary.fc_count,
+    totalLife4s: summary.life4_count,
+    totalClears: summary.clear_count,
+    totalAAAs: summary.aaa_count,
+  };
+}
+
+function levelHaloStatsFromPrecomputed(levelStats: PlayerLevelStatsRow[]): LevelHaloStats[] {
+  return levelStats
+    .map(ls => ({
+      level: ls.difficulty_level,
+      catalogTotal: ls.total_charts_available,
+      played: ls.played,
+      mfc: ls.mfc_count,
+      pfc: ls.pfc_count,
+      gfc: ls.gfc_count,
+      fc: ls.fc_count,
+      life4: ls.life4_count,
+      clear: ls.clear_count,
+      fail: ls.fail_count,
+    }))
+    .sort((a, b) => a.level - b.level);
 }
 
 // ============================================================================
@@ -1529,11 +1669,28 @@ serve(async (req) => {
     const userId = userData.user.id;
     const supabaseServiceRole = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const [userScores, chartAnalysis] = await Promise.all([fetchUserScores(supabase, userId), fetchMusicDb(supabaseServiceRole)]);
+    // Try pre-computed tables first (populated by process-upload after score imports)
+    const [summaryRow, levelStatsRows] = await Promise.all([
+      fetchPlayerSummary(supabase, userId),
+      fetchPlayerLevelStats(supabase, userId),
+    ]);
 
-    const profile = buildPlayerProfile(userScores, chartAnalysis);
-    const totalStats = calculateTotalStats(userScores);
-    const levelHaloStats = calculateLevelHaloStats(userScores, chartAnalysis);
+    let profile: PlayerProfile;
+    let totalStats: TotalStats;
+    let levelHaloStats: LevelHaloStats[];
+
+    if (summaryRow && levelStatsRows.length > 0) {
+      console.log("Using pre-computed player data");
+      profile = profileFromPrecomputed(summaryRow, levelStatsRows);
+      totalStats = totalStatsFromPrecomputed(summaryRow);
+      levelHaloStats = levelHaloStatsFromPrecomputed(levelStatsRows);
+    } else {
+      console.log("No pre-computed data found, computing at runtime");
+      const [userScores, chartAnalysis] = await Promise.all([fetchUserScores(supabase, userId), fetchMusicDb(supabaseServiceRole)]);
+      profile = buildPlayerProfile(userScores, chartAnalysis);
+      totalStats = calculateTotalStats(userScores);
+      levelHaloStats = calculateLevelHaloStats(userScores, chartAnalysis);
+    }
 
     console.log("Player profile:", JSON.stringify(profile, null, 2));
     console.log("Total stats:", JSON.stringify(totalStats, null, 2));
