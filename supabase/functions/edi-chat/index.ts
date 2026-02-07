@@ -1992,10 +1992,29 @@ Deno.serve(async (req) => {
       return new Response(textToSSEStream(directResponseText), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
 
-    // Final call: non-streaming so we can validate the response isn't empty.
-    // The response is then re-streamed via textToSSEStream() for the typing effect.
-    // This guarantees the user ALWAYS sees a visible response.
-    console.log("Making final call after tool execution");
+    // Final call: build clean messages WITHOUT tool API features.
+    // Passing tools + tool_choice:"none" causes Gemini to emit empty content
+    // (it tries to make tool calls but can't, so content is blank).
+    // Instead, pack tool results into the system prompt as plain text context
+    // and make a regular non-tool completion call.
+    const toolResultsForFinal: string[] = [];
+    for (const msg of allMessages) {
+      if (msg.role === "tool" && msg.content) {
+        toolResultsForFinal.push(msg.content);
+      }
+    }
+
+    const finalSystemPrompt = systemPrompt +
+      "\n\n══════════════════════════════════════════════════════════════════════════════\nDATABASE QUERY RESULTS — USE THESE TO RESPOND\n══════════════════════════════════════════════════════════════════════════════\n\n" +
+      toolResultsForFinal.join("\n\n---\n\n") +
+      "\n\nRespond using ONLY the songs and data above. Copy each display_marker EXACTLY into your response.";
+
+    const finalMessages: Message[] = [
+      { role: "system", content: finalSystemPrompt },
+      ...preparedMessages.map(m => ({ role: m.role as string, content: m.content || "" })),
+    ];
+
+    console.log(`Making final call after tool execution (${toolResultsForFinal.length} tool results)`);
 
     const finalController = new AbortController();
     const finalTimeout = setTimeout(() => finalController.abort(), AI_TIMEOUT_MS);
@@ -2005,7 +2024,7 @@ Deno.serve(async (req) => {
       finalResponse = await fetch(GATEWAY_URL, {
         method: "POST",
         headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, tool_choice: "none", stream: false }),
+        body: JSON.stringify({ model: MODEL, messages: finalMessages, stream: false }),
         signal: finalController.signal,
       });
     } catch (fetchErr) {
@@ -2037,7 +2056,7 @@ Deno.serve(async (req) => {
     // Safety net: if the model produced no content, return a helpful fallback
     if (!finalText.trim()) {
       console.warn("Final call returned empty content — using fallback response");
-      const fallback = "I wasn't able to find what you're looking for. Could you try rephrasing your question or providing the exact song title? 🎵";
+      const fallback = "Hmm, I'm having trouble pulling that together right now. Try asking again or rephrase your question! 🎵";
       logUsage(supabaseServiceRole, usageData);
       return new Response(textToSSEStream(fallback), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
