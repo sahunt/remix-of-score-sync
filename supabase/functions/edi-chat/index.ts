@@ -1064,18 +1064,6 @@ async function getSongsByCriteria(
       hasMoreScores = scorePage.length === PAGE_SIZE;
     } else {
       hasMoreScores = false;
-  // Paginate user scores to ensure we fetch ALL rows (Supabase default limit is ~1000)
-  let allUserScores: Record<string, unknown>[] = [];
-  let userScoreFrom = 0;
-  let userScoreHasMore = true;
-  while (userScoreHasMore) {
-    const { data: userScorePage } = await supabase.from("user_scores").select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)`).eq("user_id", userId).range(userScoreFrom, userScoreFrom + PAGE_SIZE - 1);
-    if (userScorePage && userScorePage.length > 0) {
-      allUserScores = [...allUserScores, ...userScorePage as Record<string, unknown>[]];
-      userScoreFrom += PAGE_SIZE;
-      userScoreHasMore = userScorePage.length === PAGE_SIZE;
-    } else {
-      userScoreHasMore = false;
     }
   }
 

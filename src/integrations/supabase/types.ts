@@ -173,6 +173,39 @@ export type Database = {
         }
         Relationships: []
       }
+      edi_usage_log: {
+        Row: {
+          active_skills: string[] | null
+          created_at: string | null
+          id: string
+          prompt_tokens: number | null
+          request_type: string | null
+          response_time_ms: number | null
+          response_tokens: number | null
+          user_id: string | null
+        }
+        Insert: {
+          active_skills?: string[] | null
+          created_at?: string | null
+          id?: string
+          prompt_tokens?: number | null
+          request_type?: string | null
+          response_time_ms?: number | null
+          response_tokens?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          active_skills?: string[] | null
+          created_at?: string | null
+          id?: string
+          prompt_tokens?: number | null
+          request_type?: string | null
+          response_time_ms?: number | null
+          response_tokens?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       musicdb: {
         Row: {
           artist: string | null
@@ -260,6 +293,159 @@ export type Database = {
           title_yomi?: string | null
           updated_at?: string | null
           username?: string | null
+        }
+        Relationships: []
+      }
+      player_level_stats: {
+        Row: {
+          aaa_count: number | null
+          aaa_rate: number | null
+          avg_score: number | null
+          charts_pfc: number | null
+          charts_played: number | null
+          clear_count: number | null
+          clear_rate: number | null
+          difficulty_level: number
+          fail_count: number | null
+          fc_count: number | null
+          fc_rate: number | null
+          gfc_count: number | null
+          life4_count: number | null
+          mastery_tier: string | null
+          mfc_count: number | null
+          pfc_count: number | null
+          pfc_rate: number | null
+          played: number | null
+          score_variance: number | null
+          total_charts_available: number | null
+          user_id: string
+        }
+        Insert: {
+          aaa_count?: number | null
+          aaa_rate?: number | null
+          avg_score?: number | null
+          charts_pfc?: number | null
+          charts_played?: number | null
+          clear_count?: number | null
+          clear_rate?: number | null
+          difficulty_level: number
+          fail_count?: number | null
+          fc_count?: number | null
+          fc_rate?: number | null
+          gfc_count?: number | null
+          life4_count?: number | null
+          mastery_tier?: string | null
+          mfc_count?: number | null
+          pfc_count?: number | null
+          pfc_rate?: number | null
+          played?: number | null
+          score_variance?: number | null
+          total_charts_available?: number | null
+          user_id: string
+        }
+        Update: {
+          aaa_count?: number | null
+          aaa_rate?: number | null
+          avg_score?: number | null
+          charts_pfc?: number | null
+          charts_played?: number | null
+          clear_count?: number | null
+          clear_rate?: number | null
+          difficulty_level?: number
+          fail_count?: number | null
+          fc_count?: number | null
+          fc_rate?: number | null
+          gfc_count?: number | null
+          life4_count?: number | null
+          mastery_tier?: string | null
+          mfc_count?: number | null
+          pfc_count?: number | null
+          pfc_rate?: number | null
+          played?: number | null
+          score_variance?: number | null
+          total_charts_available?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      player_summary: {
+        Row: {
+          aaa_count: number | null
+          clear_ceiling: number | null
+          clear_count: number | null
+          comfort_zone_high: number | null
+          comfort_zone_low: number | null
+          fail_count: number | null
+          fc_ceiling: number | null
+          fc_count: number | null
+          gfc_count: number | null
+          last_score_date: string | null
+          level_12_plus_plays: number | null
+          life4_count: number | null
+          mfc_ceiling: number | null
+          mfc_count: number | null
+          pfc_ceiling: number | null
+          pfc_count: number | null
+          player_stage: string | null
+          proficiencies: Json | null
+          scores_last_30_days: number | null
+          total_plays: number | null
+          total_scores: number | null
+          unique_songs: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          aaa_count?: number | null
+          clear_ceiling?: number | null
+          clear_count?: number | null
+          comfort_zone_high?: number | null
+          comfort_zone_low?: number | null
+          fail_count?: number | null
+          fc_ceiling?: number | null
+          fc_count?: number | null
+          gfc_count?: number | null
+          last_score_date?: string | null
+          level_12_plus_plays?: number | null
+          life4_count?: number | null
+          mfc_ceiling?: number | null
+          mfc_count?: number | null
+          pfc_ceiling?: number | null
+          pfc_count?: number | null
+          player_stage?: string | null
+          proficiencies?: Json | null
+          scores_last_30_days?: number | null
+          total_plays?: number | null
+          total_scores?: number | null
+          unique_songs?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          aaa_count?: number | null
+          clear_ceiling?: number | null
+          clear_count?: number | null
+          comfort_zone_high?: number | null
+          comfort_zone_low?: number | null
+          fail_count?: number | null
+          fc_ceiling?: number | null
+          fc_count?: number | null
+          gfc_count?: number | null
+          last_score_date?: string | null
+          level_12_plus_plays?: number | null
+          life4_count?: number | null
+          mfc_ceiling?: number | null
+          mfc_count?: number | null
+          pfc_ceiling?: number | null
+          pfc_count?: number | null
+          player_stage?: string | null
+          proficiencies?: Json | null
+          scores_last_30_days?: number | null
+          total_plays?: number | null
+          total_scores?: number | null
+          unique_songs?: number | null
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -506,6 +692,13 @@ export type Database = {
             referencedRelation: "musicdb"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "user_scores_musicdb_id_fkey"
+            columns: ["musicdb_id"]
+            isOneToOne: false
+            referencedRelation: "song_recommendation_pool"
+            referencedColumns: ["musicdb_id"]
+          },
         ]
       }
       user_song_offsets: {
@@ -537,7 +730,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      song_recommendation_pool: {
+        Row: {
+          artist: string | null
+          bpm: number | null
+          crossovers: number | null
+          difficulty_level: number | null
+          difficulty_name: string | null
+          eamuse_id: string | null
+          era: number | null
+          footswitches: number | null
+          full_crossovers: number | null
+          has_pattern_data: boolean | null
+          jacks: number | null
+          mines: number | null
+          musicdb_id: number | null
+          notes: number | null
+          peak_nps: number | null
+          sanbai_rating: number | null
+          song_id: number | null
+          stop_count: number | null
+          stream: number | null
+          title: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       bulk_update_era: {
@@ -551,6 +768,20 @@ export type Database = {
         Returns: {
           updated_count: number
         }[]
+      }
+      calc_proficiency: {
+        Args: {
+          p_high_threshold: number
+          p_low_threshold: number
+          p_metric: string
+          p_pfc_ceiling: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      calc_speed_proficiency: {
+        Args: { p_pfc_ceiling: number; p_user_id: string }
+        Returns: Json
       }
       calculate_goal_progress: {
         Args: {
@@ -586,6 +817,10 @@ export type Database = {
           pfc_count: number
           total_count: number
         }[]
+      }
+      refresh_player_summary: {
+        Args: { p_user_id: string }
+        Returns: undefined
       }
     }
     Enums: {
