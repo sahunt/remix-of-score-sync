@@ -1,6 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
+import { useState, useEffect } from 'react';
+import { EDI_BOUNCE_EVENT, EDI_ICON_ID } from '@/hooks/useEdiMinimize';
 
 // Custom icon components matching the design spec
 const HomeIcon = ({
@@ -36,11 +38,15 @@ interface NavItemProps {
   to: string;
   icon: React.ReactNode;
   label: string;
+  id?: string;
+  bouncing?: boolean;
 }
 function NavItem({
   to,
   icon,
-  label
+  label,
+  id,
+  bouncing
 }: NavItemProps) {
   const location = useLocation();
   const isActive = location.pathname === to || to === '/home' && location.pathname === '/';
@@ -53,7 +59,7 @@ function NavItem({
       });
     }
   };
-  return <NavLink to={to} onClick={handleClick} className={cn("flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95", isActive ? "bg-[#595E73]/90 rounded-full px-4 py-2" : "px-3 py-2")}>
+  return <NavLink id={id} to={to} onClick={handleClick} className={cn("flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95", isActive ? "bg-[#595E73]/90 rounded-full px-4 py-2" : "px-3 py-2", bouncing && "animate-edi-bounce")}>
       <span className="text-[#E3E3E3]">{icon}</span>
       {isActive && <span className="text-[#E3E3E3] font-medium text-sm px-[2px] pr-0 pl-[3px]">
           {label}
@@ -61,6 +67,16 @@ function NavItem({
     </NavLink>;
 }
 export function BottomNav() {
+  const [ediBouncing, setEdiBouncing] = useState(false);
+
+  useEffect(() => {
+    const handleBounce = () => {
+      setEdiBouncing(true);
+      setTimeout(() => setEdiBouncing(false), 250);
+    };
+    window.addEventListener(EDI_BOUNCE_EVENT, handleBounce);
+    return () => window.removeEventListener(EDI_BOUNCE_EVENT, handleBounce);
+  }, []);
   const {
     isVisible
   } = useScrollDirection({
@@ -79,7 +95,7 @@ export function BottomNav() {
       {/* Navigation - Pill container */}
       <nav className={cn("fixed bottom-[46px] left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-1 h-[55px] px-5 rounded-full bg-[#383C4C] transition-transform duration-300 ease-out pl-[10px] pr-[10px]", isVisible ? "translate-y-0" : "translate-y-[120px]")}>
         <NavItem to="/home" icon={<HomeIcon />} label="Home" />
-        <NavItem to="/edi" icon={<EdiIcon />} label="Edi" />
+        <NavItem to="/edi" icon={<EdiIcon />} label="Edi" id={EDI_ICON_ID} bouncing={ediBouncing} />
         <NavItem to="/scores" icon={<ScoresIcon />} label="Scores" />
         <NavItem to="/upload" icon={<UploadIcon />} label="Upload" />
       </nav>

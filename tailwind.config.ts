@@ -120,6 +120,12 @@ export default {
           "0%": { transform: "translateY(-100%) rotate(0deg)", opacity: "1" },
           "100%": { transform: "translateY(100vh) rotate(720deg)", opacity: "0" },
         },
+        "edi-bounce": {
+          "0%": { transform: "scale(1)" },
+          "40%": { transform: "scale(1.18)" },
+          "70%": { transform: "scale(0.95)" },
+          "100%": { transform: "scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -133,6 +139,7 @@ export default {
         "scale-up": "scale-up 0.2s ease-out",
         "slide-up-spring": "slide-up-spring 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
         "confetti-fall": "confetti-fall 3s ease-in-out forwards",
+        "edi-bounce": "edi-bounce 230ms cubic-bezier(0.34, 1.56, 0.64, 1)",
       },
     },
   },
