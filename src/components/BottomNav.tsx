@@ -2,7 +2,9 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useState, useEffect } from 'react';
-import { EDI_BOUNCE_EVENT, EDI_ICON_ID, saveEdiIconPosition } from '@/hooks/useEdiMinimize';
+import { EDI_ICON_ID } from '@/hooks/useEdiMinimize';
+import { EDI_BOUNCE_EVENT } from '@/components/edi/EdiOverlay';
+import { useEdiOverlay } from '@/contexts/EdiOverlayContext';
 
 // Custom icon components matching the design spec
 const HomeIcon = ({
@@ -68,6 +70,7 @@ function NavItem({
 }
 export function BottomNav() {
   const [ediBouncing, setEdiBouncing] = useState(false);
+  const { open: openEdi } = useEdiOverlay();
 
   useEffect(() => {
     const handleBounce = () => {
@@ -78,13 +81,6 @@ export function BottomNav() {
     return () => window.removeEventListener(EDI_BOUNCE_EVENT, handleBounce);
   }, []);
 
-  // Save the Edi icon position whenever the nav is visible so the Edi page
-  // can animate to/from it even after the nav unmounts
-  useEffect(() => {
-    // Small delay to ensure layout is settled
-    const t = setTimeout(() => saveEdiIconPosition(), 100);
-    return () => clearTimeout(t);
-  });
   const {
     isVisible
   } = useScrollDirection({
@@ -92,18 +88,24 @@ export function BottomNav() {
   });
   const location = useLocation();
 
-  // Home page has its own rainbow fade effect, so skip the dark fade there
   const isHomePage = location.pathname === '/home' || location.pathname === '/';
   return <>
-      {/* Bottom fade overlay - syncs with nav visibility (skip on Home page which has its own) */}
       {!isHomePage && <div className={cn("fixed bottom-0 left-0 right-0 h-[160px] pointer-events-none z-40", "transition-transform duration-300 ease-out", isVisible ? "translate-y-0" : "translate-y-[120px]")} style={{
       background: 'linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background)) 40%, transparent 100%)'
     }} />}
 
-      {/* Navigation - Pill container */}
       <nav className={cn("fixed bottom-[46px] left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-1 h-[55px] px-5 rounded-full bg-[#383C4C] transition-transform duration-300 ease-out pl-[10px] pr-[10px]", isVisible ? "translate-y-0" : "translate-y-[120px]")}>
         <NavItem to="/home" icon={<HomeIcon />} label="Home" />
-        <NavItem to="/edi" icon={<EdiIcon />} label="Edi" id={EDI_ICON_ID} bouncing={ediBouncing} />
+        <button
+          id={EDI_ICON_ID}
+          onClick={openEdi}
+          className={cn(
+            "flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 px-3 py-2",
+            ediBouncing && "animate-edi-bounce"
+          )}
+        >
+          <span className="text-[#E3E3E3]"><EdiIcon /></span>
+        </button>
         <NavItem to="/scores" icon={<ScoresIcon />} label="Scores" />
         <NavItem to="/upload" icon={<UploadIcon />} label="Upload" />
       </nav>

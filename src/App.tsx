@@ -8,7 +8,6 @@ import { LastUploadProvider } from "@/hooks/useLastUpload";
 import { TwelveMSModeProvider } from "@/hooks/use12MSMode";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
-import { ScoresProvider } from "@/contexts/ScoresContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Home from "./pages/Home";
@@ -18,13 +17,13 @@ import GoalDetail from "./pages/GoalDetail";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import OAuthFallback from "./pages/OAuthFallback";
-import Edi from "./pages/Edi";
+import { EdiOverlayProvider } from "@/contexts/EdiOverlayContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 0,              // Check freshness on mount
-      gcTime: 5 * 60 * 1000,     // 5 minutes garbage collection
+      staleTime: 0,
+      gcTime: 5 * 60 * 1000,
       refetchOnWindowFocus: false,
       retry: 1,
     },
@@ -40,36 +39,27 @@ const App = () => (
         <AuthProvider>
           <LastUploadProvider>
             <TwelveMSModeProvider>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/auth" element={<Auth />} />
-                {/* OAuth broker routes should never render the SPA, but if they do, show a safe fallback */}
-                <Route path="/~oauth/*" element={<OAuthFallback />} />
-                <Route
-                  element={
-                    <ProtectedRoute>
-                      <AppLayout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route path="/home" element={<Home />} />
-                  <Route path="/scores" element={<Scores />} />
-                  <Route path="/upload" element={<Upload />} />
-                  <Route path="/goal/:goalId" element={<GoalDetail />} />
-                  <Route path="/profile" element={<Profile />} />
-                </Route>
-                <Route
-                  path="/edi"
-                  element={
-                    <ProtectedRoute>
-                      <ScoresProvider>
-                        <Edi />
-                      </ScoresProvider>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+              <EdiOverlayProvider>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/~oauth/*" element={<OAuthFallback />} />
+                  <Route
+                    element={
+                      <ProtectedRoute>
+                        <AppLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route path="/home" element={<Home />} />
+                    <Route path="/scores" element={<Scores />} />
+                    <Route path="/upload" element={<Upload />} />
+                    <Route path="/goal/:goalId" element={<GoalDetail />} />
+                    <Route path="/profile" element={<Profile />} />
+                  </Route>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </EdiOverlayProvider>
             </TwelveMSModeProvider>
           </LastUploadProvider>
         </AuthProvider>

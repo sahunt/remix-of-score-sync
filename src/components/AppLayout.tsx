@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { BottomNav } from './BottomNav';
 import { ScoresProvider } from '@/contexts/ScoresContext';
+import { EdiOverlay } from '@/components/edi/EdiOverlay';
 
 export function AppLayout() {
   return (
@@ -11,6 +12,7 @@ export function AppLayout() {
         </main>
         <BottomNav />
       </div>
+      <EdiOverlay />
     </ScoresProvider>
   );
 }
