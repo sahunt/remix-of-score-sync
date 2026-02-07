@@ -57,7 +57,6 @@ export function EdiOverlay() {
 
   const handleExitComplete = useCallback(() => {
     setPhase("idle");
-    triggerEdiBounce();
   }, [setPhase]);
 
   const handleClose = useCallback(() => {
