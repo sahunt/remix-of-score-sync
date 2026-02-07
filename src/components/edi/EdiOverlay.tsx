@@ -54,7 +54,7 @@ export function EdiOverlay() {
           key="edi-overlay"
           initial={{ opacity: 1, scale: 0.85, y: 40 }}
           animate={{ opacity: 1, scale: 1, y: 20 }}
-          exit={{ opacity: 1, scale: 0, y: 200 }}
+          exit={{ opacity: 1, scale: 0, y: -20 }}
           transition={{
             type: "spring",
             damping: 28,
