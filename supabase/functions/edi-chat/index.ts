@@ -893,12 +893,16 @@ These rules override everything else. Before EVERY response, check:
 6. NEVER recommend a song not returned by a tool call.
 7. If a tool returns 4 songs, recommend AT MOST those 4 songs.
 8. If a tool shows user_score as null, user has NOT played that song.
+9. If a tool returns NO results, ALWAYS respond with a helpful message. Tell the user you
+   couldn't find the song and ask them for the exact title. You CAN mention what they asked
+   about in plain text when explaining you couldn't find it. NEVER return an empty response.
 
 ═══ RESPONSE RULES ═══
 - Max 2-3 sentences per point
 - When recommending songs, output 3-5 songs using [[SONG:...]] format
 - COPY the [[SONG:...]] markers EXACTLY as shown from tool results
 - ALWAYS end with 2-3 follow-ups: [[FOLLOWUP:suggestion text here]]
+- You MUST always produce a visible response — even if tools return no data
 `;
 }
 
@@ -1988,7 +1992,10 @@ Deno.serve(async (req) => {
       return new Response(textToSSEStream(directResponseText), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
 
-    console.log("Making final streaming call after tool execution");
+    // Final call: non-streaming so we can validate the response isn't empty.
+    // The response is then re-streamed via textToSSEStream() for the typing effect.
+    // This guarantees the user ALWAYS sees a visible response.
+    console.log("Making final call after tool execution");
 
     const finalController = new AbortController();
     const finalTimeout = setTimeout(() => finalController.abort(), AI_TIMEOUT_MS);
@@ -1998,7 +2005,7 @@ Deno.serve(async (req) => {
       finalResponse = await fetch(GATEWAY_URL, {
         method: "POST",
         headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, tool_choice: "none", stream: true }),
+        body: JSON.stringify({ model: MODEL, messages: allMessages, tools: toolDefinitions, tool_choice: "none", stream: false }),
         signal: finalController.signal,
       });
     } catch (fetchErr) {
@@ -2016,10 +2023,29 @@ Deno.serve(async (req) => {
       throw new Error(`Final Gemini API error: ${finalResponse.status}`);
     }
 
-    // Log usage for streaming path (non-blocking)
+    const finalData: ChatCompletionResponse = await finalResponse.json();
+
+    // Accumulate final round usage
+    const finalUsage = extractUsageFromResponse(finalData);
+    usageData.inputTokens += finalUsage.inputTokens;
+    usageData.outputTokens += finalUsage.outputTokens;
+    usageData.totalTokens = usageData.inputTokens + usageData.outputTokens;
+    usageData.cachedTokens += finalUsage.cachedTokens;
+
+    const finalText = finalData.choices?.[0]?.message?.content || "";
+
+    // Safety net: if the model produced no content, return a helpful fallback
+    if (!finalText.trim()) {
+      console.warn("Final call returned empty content — using fallback response");
+      const fallback = "I wasn't able to find what you're looking for. Could you try rephrasing your question or providing the exact song title? 🎵";
+      logUsage(supabaseServiceRole, usageData);
+      return new Response(textToSSEStream(fallback), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    }
+
+    console.log(`Final response: ${finalText.length} chars`);
     logUsage(supabaseServiceRole, usageData);
 
-    return new Response(finalResponse.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    return new Response(textToSSEStream(finalText), { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
 
   } catch (e) {
     console.error("edi-chat error:", e);
