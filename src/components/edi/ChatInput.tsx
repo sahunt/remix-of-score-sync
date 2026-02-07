@@ -36,9 +36,9 @@ export function ChatInput({
     }
   };
   return <div className="flex items-end gap-2 p-4 bg-background border-t border-border">
-      <div className="flex-1 relative">
-        <textarea ref={textareaRef} value={value} onChange={e => setValue(e.target.value)} onKeyDown={handleKeyDown} placeholder={placeholder} disabled={disabled} rows={1} className={cn('w-full resize-none rounded-2xl bg-secondary px-4 py-3 pr-14', 'text-base text-foreground placeholder:text-muted-foreground', 'focus:outline-none focus:ring-2 focus:ring-primary/50', 'disabled:opacity-50 disabled:cursor-not-allowed', 'max-h-[120px]')} />
-        <button onClick={handleSubmit} disabled={!value.trim() || disabled} className={cn("absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed", value.trim() && !disabled ? 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95' : 'bg-muted text-muted-foreground')}>
+      <div className="flex-1 flex items-center relative rounded-2xl bg-secondary ring-primary/50 focus-within:ring-2">
+        <textarea ref={textareaRef} value={value} onChange={e => setValue(e.target.value)} onKeyDown={handleKeyDown} placeholder={placeholder} disabled={disabled} rows={1} className={cn('w-full resize-none bg-transparent px-4 py-3 pr-14', 'text-base text-foreground placeholder:text-muted-foreground', 'focus:outline-none', 'disabled:opacity-50 disabled:cursor-not-allowed', 'max-h-[120px]')} />
+        <button onClick={handleSubmit} disabled={!value.trim() || disabled} className={cn("absolute right-2 w-10 h-10 flex items-center justify-center rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed", value.trim() && !disabled ? 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95' : 'bg-muted text-muted-foreground')}>
           <Icon name="send" size={20} />
         </button>
       </div>
