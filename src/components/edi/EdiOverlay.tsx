@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { EDI_ICON_ID } from '@/hooks/useEdiMinimize';
 import { useEdiOverlay } from '@/contexts/EdiOverlayContext';
-
 import Edi from '@/pages/Edi';
 
 // Custom event for Edi icon bounce  
@@ -21,85 +21,60 @@ function getEdiIconCenter(): { x: number; y: number } | null {
 export function EdiOverlay() {
   const { isOpen, phase, setPhase, close } = useEdiOverlay();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [animStyle, setAnimStyle] = useState<React.CSSProperties>({});
+  const [iconOrigin, setIconOrigin] = useState<{ x: string; y: string } | null>(null);
 
-  // Opening animation
+  // Capture icon position when opening
   useEffect(() => {
-    if (phase !== 'opening') return;
-    const container = containerRef.current;
-    const iconCenter = getEdiIconCenter();
-    if (!container || !iconCenter) {
-      setPhase('open');
-      return;
-    }
-
-    const rect = container.getBoundingClientRect();
-    const dx = iconCenter.x - (rect.left + rect.width / 2);
-    const dy = iconCenter.y - (rect.top + rect.height / 2);
-
-    // Start from icon position
-    setAnimStyle({
-      transform: `translate(${dx}px, ${dy}px) scale(0.05)`,
-      opacity: 0,
-    });
-
-    // Force reflow then animate to full
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setAnimStyle({
-          transform: 'translate(0, 0) scale(1)',
-          opacity: 1,
-          transition: 'transform 320ms cubic-bezier(0.4, 0, 0.2, 1), opacity 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+    if (phase === 'opening') {
+      const center = getEdiIconCenter();
+      if (center) {
+        setIconOrigin({
+          x: `${center.x}px`,
+          y: `${center.y}px`,
         });
-        setTimeout(() => setPhase('open'), 320);
-      });
-    });
+      } else {
+        setIconOrigin({ x: '50%', y: '100%' });
+      }
+      // Immediately mark as open — framer-motion handles the animation
+      setPhase('open');
+    }
   }, [phase, setPhase]);
 
-  const handleMinimize = useCallback(() => {
-    const container = containerRef.current;
-    const iconCenter = getEdiIconCenter();
-    if (!container || !iconCenter) {
+  const handleAnimationComplete = useCallback((definition: string) => {
+    if (definition === 'exit') {
       setPhase('idle');
       triggerEdiBounce();
-      return;
     }
-
-    const rect = container.getBoundingClientRect();
-    const dx = iconCenter.x - (rect.left + rect.width / 2);
-    const dy = iconCenter.y - (rect.top + rect.height / 2);
-
-    setAnimStyle({
-      transform: `translate(${dx}px, ${dy}px) scale(0.05)`,
-      opacity: 0,
-      transition: 'transform 320ms cubic-bezier(0.4, 0, 0.2, 1), opacity 320ms cubic-bezier(0.4, 0, 0.2, 1)',
-      pointerEvents: 'none',
-    });
-
-    setTimeout(() => {
-      setPhase('idle');
-      setAnimStyle({});
-      triggerEdiBounce();
-    }, 320);
   }, [setPhase]);
 
-  // When phase is set to 'closing', trigger the minimize animation
-  useEffect(() => {
-    if (phase === 'closing') {
-      handleMinimize();
-    }
-  }, [phase, handleMinimize]);
-
-  if (!isOpen) return null;
+  // Compute transform-origin from icon center
+  const originStyle = iconOrigin
+    ? { transformOrigin: `${iconOrigin.x} ${iconOrigin.y}` }
+    : { transformOrigin: '50% 100%' };
 
   return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-50 flex flex-col bg-background w-full max-w-[720px] mx-auto rounded-[20px] overflow-hidden"
-      style={animStyle}
-    >
-      <Edi onMinimize={close} />
-    </div>
+    <AnimatePresence onExitComplete={() => {}}>
+      {isOpen && (
+        <motion.div
+          ref={containerRef}
+          key="edi-overlay"
+          initial={{ opacity: 0, scale: 0.85, y: 40 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.6, y: 60 }}
+          transition={{
+            type: 'spring',
+            damping: 28,
+            stiffness: 320,
+            mass: 0.8,
+          }}
+          onAnimationComplete={handleAnimationComplete}
+          style={originStyle}
+          className="fixed inset-0 z-50 flex flex-col bg-background w-full max-w-[720px] mx-auto rounded-[20px] overflow-hidden"
+        >
+          <Edi onMinimize={close} />
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
