@@ -30,7 +30,8 @@ async function searchMusicDb(
 ): Promise<Record<string, unknown>[] | null> {
   const selectCols = "id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating";
 
-  function applyFilters(q: ReturnType<SupabaseClient['from']>) {
+  // deno-lint-ignore no-explicit-any
+  function applyFilters(q: any) {
     let filtered = q;
     if (difficulty_level !== undefined) filtered = filtered.eq("difficulty_level", difficulty_level);
     if (difficulty_name !== undefined) filtered = filtered.eq("difficulty_name", difficulty_name);
