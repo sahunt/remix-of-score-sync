@@ -10,6 +10,7 @@ export interface Message {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edi-chat`;
 const STORAGE_KEY = 'edi-chat-messages';
+const MAX_API_MESSAGES = 10;
 
 // Load messages from localStorage
 function loadMessages(): Message[] {
@@ -79,8 +80,10 @@ export function useEdiChat() {
       });
     }, 500);
 
-    // Prepare messages for API (exclude IDs and timestamps)
-    const apiMessages = [...messages, userMessage].map(m => ({
+    // Prepare messages for API (exclude IDs and timestamps, limit history)
+    const allMessages = [...messages, userMessage];
+    const recentMessages = allMessages.slice(-MAX_API_MESSAGES);
+    const apiMessages = recentMessages.map(m => ({
       role: m.role,
       content: m.content,
     }));

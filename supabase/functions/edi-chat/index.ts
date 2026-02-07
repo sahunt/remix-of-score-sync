@@ -193,7 +193,8 @@ const GATEWAY_URL = "https://generativelanguage.googleapis.com/v1beta/openai/cha
 const MODEL = "gemini-3-flash-preview";
 const MAX_TOOL_ROUNDS = 2;
 const PAGE_SIZE = 1000;
-const MAX_CONVERSATION_MESSAGES = 20;
+const MAX_CONVERSATION_MESSAGES = 10;
+const RECENT_MESSAGES_TO_KEEP_INTACT = 4;
 
 // ============================================================================
 // PRICING CONSTANTS (per 1M tokens)
@@ -1664,19 +1665,50 @@ async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, sup
 // ============================================================================
 
 /**
- * Limits conversation history to prevent hallucination in long conversations.
- * As conversations grow, the LLM may mix up data from earlier messages with
- * current tool results. This function:
- * 1. Caps the number of messages sent to the LLM
- * 2. Keeps the most recent messages for continuity
+ * Strips [[SONG:...]] markers and other bulky inline data from a message's
+ * content. These markers are only useful in the current turn — older ones
+ * waste tokens and can confuse the model.
+ */
+function trimMessageContent(content: string): string {
+  // Replace [[SONG:{...}]] markers with a compact placeholder
+  let trimmed = content.replace(/\[\[SONG:\{[^}]*\}\]\]/g, '[song card]');
+  // Collapse consecutive song card placeholders
+  trimmed = trimmed.replace(/(\[song card\]\s*){2,}/g, '[song cards]\n');
+  return trimmed;
+}
+
+/**
+ * Limits conversation history to prevent token bloat and hallucination in
+ * long conversations. Strategy:
+ * 1. Cap total messages sent to the LLM (MAX_CONVERSATION_MESSAGES)
+ * 2. Keep the most recent messages fully intact for context continuity
+ * 3. Strip bulky song markers from older messages to reduce token count
  */
 function prepareMessages(incomingMessages: Message[]): Message[] {
-  if (incomingMessages.length <= MAX_CONVERSATION_MESSAGES) {
-    return incomingMessages;
+  // Step 1: Truncate to the most recent N messages
+  let messages = incomingMessages;
+  if (messages.length > MAX_CONVERSATION_MESSAGES) {
+    console.log(`Trimming conversation from ${messages.length} to ${MAX_CONVERSATION_MESSAGES} messages`);
+    messages = messages.slice(-MAX_CONVERSATION_MESSAGES);
   }
 
-  console.log(`Trimming conversation from ${incomingMessages.length} to ${MAX_CONVERSATION_MESSAGES} messages`);
-  return incomingMessages.slice(-MAX_CONVERSATION_MESSAGES);
+  // Step 2: Trim content of older messages (keep recent ones intact)
+  const recentStart = Math.max(0, messages.length - RECENT_MESSAGES_TO_KEEP_INTACT);
+  let charsSaved = 0;
+
+  const result = messages.map((msg, i) => {
+    if (i >= recentStart || !msg.content) return msg;
+    const trimmed = trimMessageContent(msg.content);
+    if (trimmed.length === msg.content.length) return msg;
+    charsSaved += msg.content.length - trimmed.length;
+    return { ...msg, content: trimmed };
+  });
+
+  if (charsSaved > 0) {
+    console.log(`Trimmed ${charsSaved} chars of stale song data from older messages`);
+  }
+
+  return result;
 }
 
 // ============================================================================
