@@ -1,7 +1,7 @@
 // EDI Chat - Consolidated Single File
 // All modules inlined to reduce bundle complexity and fix deployment timeouts
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Using Deno.serve instead of deprecated std serve
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 // ============================================================================
@@ -1808,7 +1808,7 @@ function buildDynamicSystemPrompt(
 // MAIN HANDLER
 // ============================================================================
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
