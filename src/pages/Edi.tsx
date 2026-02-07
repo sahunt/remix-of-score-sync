@@ -14,12 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { parseFollowUps } from '@/lib/parseFollowUps';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { useEdiMinimize, getEdiIconRect } from '@/hooks/useEdiMinimize';
 
 interface SelectedSong {
   song_id: number;
@@ -38,8 +33,11 @@ export default function Edi() {
   const { scores, isLoading: scoresLoading } = useScores();
   const { data: musicDbData } = useMusicDb();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [selectedSong, setSelectedSong] = useState<SelectedSong | null>(null);
+  const [expandAnimation, setExpandAnimation] = useState(true);
+  const minimize = useEdiMinimize(containerRef);
 
   // Check if chart analysis data is loaded
   const { data: chartCount, refetch: refetchChartCount } = useQuery({
@@ -85,6 +83,31 @@ export default function Edi() {
       importData();
     }
   }, [chartCount, isImporting, refetchChartCount]);
+
+  // Expand-from-icon animation on mount
+  useEffect(() => {
+    const container = containerRef.current;
+    const iconRect = getEdiIconRect();
+    if (!container || !iconRect) {
+      setExpandAnimation(false);
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const dx = (iconRect.left + iconRect.width / 2) - (containerRect.left + containerRect.width / 2);
+    const dy = (iconRect.top + iconRect.height / 2) - (containerRect.top + containerRect.height / 2);
+
+    // Inject dynamic keyframe
+    const styleEl = document.createElement('style');
+    styleEl.textContent = `
+      @keyframes edi-expand {
+        0% { transform: translate(${dx}px, ${dy}px) scale(0.05); opacity: 0; }
+        100% { transform: translate(0, 0) scale(1); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(styleEl);
+    return () => { document.head.removeChild(styleEl); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -214,34 +237,23 @@ export default function Edi() {
   const level12PlusCount = scores.filter(s => s.musicdb?.difficulty_level && s.musicdb.difficulty_level >= 12).length;
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-background w-full max-w-[720px] mx-auto">
+    <div
+      ref={containerRef}
+      className="flex flex-col h-[100dvh] bg-background w-full max-w-[720px] mx-auto"
+      style={expandAnimation ? {
+        animation: 'edi-expand 320ms cubic-bezier(0.4, 0, 0.2, 1) forwards',
+      } : undefined}
+      onAnimationEnd={() => setExpandAnimation(false)}
+    >
       {/* Header */}
       <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="p-2 -ml-2 rounded-full hover:bg-secondary active:scale-95 transition-all">
-              <Icon name="menu" size={24} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem onClick={() => navigate('/home')} className="gap-3">
-              <Icon name="home" size={20} />
-              <span>Home</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/scores')} className="gap-3">
-              <Icon name="star_shine" size={20} />
-              <span>Scores</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/upload')} className="gap-3">
-              <Icon name="upload" size={20} />
-              <span>Upload</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/profile')} className="gap-3">
-              <Icon name="person" size={20} />
-              <span>Profile</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button
+          onClick={minimize}
+          className="p-2 -ml-2 rounded-full hover:bg-secondary active:scale-95 transition-all"
+          aria-label="Minimize"
+        >
+          <Icon name="minimize" size={24} />
+        </button>
         <h1 className="text-lg font-semibold">Edi</h1>
         {hasMessages && (
           <button
