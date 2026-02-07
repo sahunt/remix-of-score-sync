@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1558,7 +1558,20 @@ async function processUploadInBackground(
         },
       })
       .eq('id', uploadId);
-    
+
+    // Refresh pre-computed player summary after successful import
+    try {
+      console.log(`Refreshing player summary for user ${userId}...`);
+      const { error: refreshError } = await supabase.rpc('refresh_player_summary', { p_user_id: userId });
+      if (refreshError) {
+        console.error('Failed to refresh player summary (non-fatal):', refreshError);
+      } else {
+        console.log('Player summary refreshed successfully');
+      }
+    } catch (refreshErr) {
+      console.error('Player summary refresh threw (non-fatal):', refreshErr);
+    }
+
     console.log(`\n========================================`);
     console.log(`Background processing COMPLETE: ${uploadId}`);
     console.log(`========================================\n`);
@@ -1646,17 +1659,34 @@ Deno.serve(async (req) => {
 
     const uploadId = upload.id;
 
-    // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
-    EdgeRuntime.waitUntil(
-      processUploadInBackground(
-        supabaseUrl,
-        supabaseServiceKey,
-        user.id,
-        uploadId,
-        content,
-        sourceType
-      )
+    const backgroundPromise = processUploadInBackground(
+      supabaseUrl,
+      supabaseServiceKey,
+      user.id,
+      uploadId,
+      content,
+      sourceType
     );
+
+    // Try to use EdgeRuntime.waitUntil for background processing.
+    // If EdgeRuntime is not available, fall back to synchronous processing.
+    let useSync = false;
+    try {
+      // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(backgroundPromise);
+      } else {
+        useSync = true;
+      }
+    } catch {
+      useSync = true;
+    }
+
+    if (useSync) {
+      console.log('EdgeRuntime not available, processing synchronously');
+      await backgroundPromise;
+    }
 
     return new Response(JSON.stringify({
       upload_id: uploadId,

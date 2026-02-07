@@ -209,37 +209,51 @@ async function getSongsByCriteria(
 
   const effectiveLimit = Math.min(limit, 25);
 
-  // Step 1: Get all user scores for this user
-  const { data: allUserScores, error: userScoreError } = await supabase
-    .from("user_scores")
-    .select(`
-      musicdb_id,
-      score,
-      halo,
-      rank,
-      flare,
-      musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)
-    `)
-    .eq("user_id", userId);
+  // Step 1: Get all user scores for this user (paginated to fetch ALL rows)
+  const PAGE_SIZE = 1000;
+  let allUserScores: Record<string, unknown>[] = [];
+  let userScoreFrom = 0;
+  let userScoreHasMore = true;
+  while (userScoreHasMore) {
+    const { data: userScorePage, error: userScoreError } = await supabase
+      .from("user_scores")
+      .select(`
+        musicdb_id,
+        score,
+        halo,
+        rank,
+        flare,
+        musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)
+      `)
+      .eq("user_id", userId)
+      .range(userScoreFrom, userScoreFrom + PAGE_SIZE - 1);
 
-  if (userScoreError) {
-    console.error("Error fetching user scores:", userScoreError);
+    if (userScoreError) {
+      console.error("Error fetching user scores:", userScoreError);
+      break;
+    }
+
+    if (userScorePage && userScorePage.length > 0) {
+      allUserScores = [...allUserScores, ...userScorePage as Record<string, unknown>[]];
+      userScoreFrom += PAGE_SIZE;
+      userScoreHasMore = userScorePage.length === PAGE_SIZE;
+    } else {
+      userScoreHasMore = false;
+    }
   }
 
   // Build user score map by musicdb_id
   const userScoreByMusicdbId = new Map<number, { score: number; halo: string; rank: string; flare: number | null }>();
   const scoredMusicdbIds = new Set<number>();
 
-  if (allUserScores) {
-    for (const us of allUserScores) {
-      userScoreByMusicdbId.set(us.musicdb_id, {
-        score: us.score,
-        halo: us.halo,
-        rank: us.rank,
-        flare: us.flare,
-      });
-      scoredMusicdbIds.add(us.musicdb_id);
-    }
+  for (const us of allUserScores) {
+    userScoreByMusicdbId.set(us.musicdb_id as number, {
+      score: us.score as number,
+      halo: us.halo as string,
+      rank: us.rank as string,
+      flare: us.flare as number | null,
+    });
+    scoredMusicdbIds.add(us.musicdb_id as number);
   }
 
   // Step 2: Build musicdb query
@@ -341,6 +355,10 @@ async function getSongsByCriteria(
         case "fc_no_pfc":
           if (!hasScore) continue;
           if (!["fc", "gfc"].includes(halo)) continue;
+          break;
+        case "has_gfc":
+          if (!hasScore) continue;
+          if (!["gfc", "pfc", "mfc"].includes(halo)) continue;
           break;
         case "pfc_no_mfc":
           if (!hasScore) continue;
@@ -622,6 +640,252 @@ async function getCatalogStats(
   });
 }
 
+// Map lamp target to halo_filter for finding remaining (not-yet-achieved) songs
+function remainingHaloFilter(targetType: string, targetValue: string): string | null {
+  if (targetType === "lamp") {
+    const map: Record<string, string> = {
+      "clear": "no_clear",
+      "fc": "clear_no_fc",
+      "gfc": "clear_no_fc",
+      "pfc": "fc_no_pfc",
+      "mfc": "pfc_no_mfc",
+    };
+    return map[targetValue.toLowerCase()] || null;
+  }
+  return null;
+}
+
+// Build get_songs_by_criteria params from goal criteria for follow-up tool calls
+function buildSearchParams(
+  rules: Array<{ field: string; operator: string; values: unknown[] }>,
+  targetType: string,
+  targetValue: string,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+
+  for (const rule of rules) {
+    if (rule.field === "level" && Array.isArray(rule.values) && rule.values.length > 0) {
+      const nums = rule.values.map((v: unknown) => Number(v));
+      if (rule.operator === "is_between" && nums.length >= 2) {
+        params.min_difficulty_level = Math.min(...nums);
+        params.max_difficulty_level = Math.max(...nums);
+      } else if (rule.operator === "is") {
+        if (nums.length === 1) {
+          params.difficulty_level = nums[0];
+        } else {
+          params.min_difficulty_level = Math.min(...nums);
+          params.max_difficulty_level = Math.max(...nums);
+        }
+      }
+    } else if (rule.field === "difficulty" && Array.isArray(rule.values) && rule.values.length === 1) {
+      const raw = String(rule.values[0]);
+      params.difficulty_name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    }
+  }
+
+  const haloFilter = remainingHaloFilter(targetType, targetValue);
+  if (haloFilter) params.halo_filter = haloFilter;
+
+  return params;
+}
+
+// Build human-readable criteria summary
+function buildCriteriaSummary(
+  rules: Array<{ field: string; operator: string; values: unknown[] }>,
+  targetType: string,
+  targetValue: string,
+): string {
+  const parts: string[] = [];
+
+  for (const rule of rules) {
+    if (rule.field === "level" && Array.isArray(rule.values) && rule.values.length > 0) {
+      const nums = rule.values.map((v: unknown) => Number(v));
+      if (rule.operator === "is_between" && nums.length >= 2) {
+        parts.push(`Level ${Math.min(...nums)}-${Math.max(...nums)}`);
+      } else if (rule.operator === "is") {
+        parts.push(`Level ${nums.join(", ")}`);
+      } else if (rule.operator === "is_not") {
+        parts.push(`Not level ${nums.join(", ")}`);
+      }
+    } else if (rule.field === "difficulty" && Array.isArray(rule.values)) {
+      parts.push(rule.values.map((v: unknown) => String(v)).join(", "));
+    }
+  }
+
+  parts.push(`${targetType.toUpperCase()} ${targetValue}`);
+  return parts.join(" | ");
+}
+
+// Get user goals with progress
+async function getUserGoals(
+  args: {
+    status?: string;
+    include_progress?: boolean;
+  },
+  supabase: SupabaseClient,
+  supabaseServiceRole: SupabaseClient,
+  userId: string
+): Promise<string> {
+  const { status = "active", include_progress = true } = args;
+
+  // Fetch all goals for the user (RLS handles user filtering)
+  const { data: goals, error: goalsError } = await supabase
+    .from("user_goals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (goalsError) {
+    console.error("Error fetching user goals:", goalsError);
+    return JSON.stringify({ error: "Failed to fetch goals", details: goalsError.message });
+  }
+
+  if (!goals || goals.length === 0) {
+    return JSON.stringify({
+      message: "No goals found. The user hasn't set any goals yet.",
+      goals: [],
+    });
+  }
+
+  // Calculate progress for each goal if requested
+  const goalsWithProgress: Array<Record<string, unknown>> = [];
+
+  for (const goal of goals) {
+    const rules = (goal.criteria_rules as Array<{ field: string; operator: string; values: unknown[] }>) || [];
+
+    const goalData: Record<string, unknown> = {
+      id: goal.id,
+      name: goal.name,
+      target_type: goal.target_type,
+      target_value: goal.target_value,
+      goal_mode: goal.goal_mode,
+      goal_count: goal.goal_count,
+      score_mode: goal.score_mode,
+      score_floor: goal.score_floor,
+      created_at: goal.created_at,
+      criteria_summary: buildCriteriaSummary(rules, goal.target_type, goal.target_value),
+      search_params: buildSearchParams(rules, goal.target_type, goal.target_value),
+    };
+
+    if (include_progress) {
+      // Parse criteria_rules to extract level and difficulty filters
+      let levelValues: number[] | null = null;
+      let levelOperator = "is";
+      let difficultyValues: string[] | null = null;
+      let difficultyOperator = "is";
+
+      for (const rule of rules) {
+        if (rule.field === "level" && Array.isArray(rule.values)) {
+          levelValues = rule.values.map((v: unknown) => Number(v));
+          levelOperator = rule.operator || "is";
+        } else if (rule.field === "difficulty" && Array.isArray(rule.values)) {
+          difficultyValues = rule.values.map((v: unknown) => String(v).toUpperCase());
+          difficultyOperator = rule.operator || "is";
+        }
+      }
+
+      // Call calculate_goal_progress RPC
+      const { data: progressData, error: progressError } = await supabaseServiceRole
+        .rpc("calculate_goal_progress", {
+          p_user_id: userId,
+          p_level_values: levelValues,
+          p_level_operator: levelOperator,
+          p_difficulty_values: difficultyValues,
+          p_difficulty_operator: difficultyOperator,
+          p_target_type: goal.target_type,
+          p_target_value: goal.target_value,
+        });
+
+      if (progressError) {
+        console.error(`Error calculating progress for goal ${goal.id}:`, progressError);
+        goalData.progress = { error: "Failed to calculate progress" };
+      } else if (progressData && progressData.length > 0) {
+        const progress = progressData[0];
+        const completedCount = Number(progress.completed_count);
+        const totalCount = Number(progress.total_count);
+        const averageScore = Number(progress.average_score);
+
+        // Determine the effective target for goal_mode: "count" uses goal_count, "all" uses total_count
+        const effectiveTarget = goal.goal_mode === "count" && goal.goal_count
+          ? Math.min(goal.goal_count, totalCount)
+          : totalCount;
+
+        const isCompleted = effectiveTarget > 0 && completedCount >= effectiveTarget;
+        const percentage = effectiveTarget > 0
+          ? Math.min(100, Math.round((completedCount / effectiveTarget) * 100))
+          : 0;
+
+        goalData.progress = {
+          completed: completedCount,
+          target: effectiveTarget,
+          total_matching_charts: totalCount,
+          percentage,
+          is_completed: isCompleted,
+        };
+
+        // Include average score for score-type goals
+        if (goal.target_type === "score") {
+          (goalData.progress as Record<string, unknown>).average_score = averageScore;
+        }
+
+        goalData.computed_status = isCompleted ? "completed" : "active";
+      }
+    }
+
+    goalsWithProgress.push(goalData);
+  }
+
+  // Filter by status if requested
+  let filteredGoals = goalsWithProgress;
+  if (status !== "all" && include_progress) {
+    filteredGoals = goalsWithProgress.filter(g => g.computed_status === status);
+  }
+
+  // Format human-readable output
+  const statusLabel = status === "all" ? "All" : status === "completed" ? "Completed" : "Active";
+  const lines: string[] = [`${statusLabel} Goals (${filteredGoals.length}):`];
+
+  for (let i = 0; i < filteredGoals.length; i++) {
+    const g = filteredGoals[i];
+    const progress = g.progress as Record<string, unknown> | undefined;
+    const targetLabel = `${(g.target_type as string).toUpperCase()} ${g.target_value}`;
+
+    lines.push("");
+    lines.push(`${i + 1}. Goal: ${g.name}`);
+    lines.push(`   Criteria: ${g.criteria_summary}`);
+    lines.push(`   Target: ${targetLabel}`);
+
+    if (progress && !progress.error) {
+      const pct = progress.percentage as number;
+      const completed = progress.completed as number;
+      const target = progress.target as number;
+
+      if (g.target_type === "score" && g.score_mode === "average") {
+        lines.push(`   Progress: Avg. ${(progress.average_score as number)?.toLocaleString()} / Target ${Number(g.target_value).toLocaleString()}`);
+      } else {
+        lines.push(`   Progress: ${completed}/${target} (${pct}%)`);
+      }
+
+      if (pct >= 100) {
+        lines.push(`   Status: COMPLETED`);
+      } else if (pct >= 90) {
+        lines.push(`   Status: Almost there!`);
+      } else {
+        lines.push(`   Status: Active`);
+      }
+    }
+
+    lines.push(`   Created: ${(g.created_at as string).split("T")[0]}`);
+  }
+
+  return JSON.stringify({
+    message: lines.join("\n"),
+    instruction: "To recommend songs for a goal, call get_songs_by_criteria using the search_params from that goal. Each goal includes search_params with the appropriate filters already mapped.",
+    goal_count: filteredGoals.length,
+    goals: filteredGoals,
+  });
+}
+
 // Main executor function
 export async function executeToolCall(
   toolCall: ToolCall,
@@ -687,6 +951,14 @@ export async function executeToolCall(
       return await getCatalogStats(
         args as { difficulty_level?: number },
         supabaseServiceRole
+      );
+
+    case "get_user_goals":
+      return await getUserGoals(
+        args as { status?: string; include_progress?: boolean },
+        supabase,
+        supabaseServiceRole,
+        userId
       );
 
     default:

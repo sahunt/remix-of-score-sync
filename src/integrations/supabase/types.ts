@@ -449,6 +449,7 @@ export type Database = {
           created_at: string
           flare: number | null
           halo: string | null
+          has_access: boolean | null
           id: string
           judgement_offset: number | null
           musicdb_id: number
@@ -466,6 +467,7 @@ export type Database = {
           created_at?: string
           flare?: number | null
           halo?: string | null
+          has_access?: boolean | null
           id?: string
           judgement_offset?: number | null
           musicdb_id: number
@@ -483,6 +485,7 @@ export type Database = {
           created_at?: string
           flare?: number | null
           halo?: string | null
+          has_access?: boolean | null
           id?: string
           judgement_offset?: number | null
           musicdb_id?: number

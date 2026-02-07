@@ -61,28 +61,41 @@ function GoalCardWithProgress({
     const criteriaRules = goal.criteria_rules as FilterRule[];
     const targetType = goal.target_type as 'lamp' | 'grade' | 'flare' | 'score';
     const targetValue = goal.target_value;
-    
+
+    // Build set of no-access song IDs from all scores
+    const noAccessSongIds = new Set<number>();
+    for (const s of scores) {
+      if (s.has_access === false) {
+        const sid = s.musicdb?.song_id ?? s.song_id;
+        if (sid) noAccessSongIds.add(sid);
+      }
+    }
+
     // Filter musicdb charts by goal criteria to get total
     const levelRule = criteriaRules.find(r => r.type === 'level');
     const difficultyRule = criteriaRules.find(r => r.type === 'difficulty');
-    
+
     const matchingCharts = filterChartsByCriteria(
       allCharts.charts,
       levelRule ? { operator: levelRule.operator, value: levelRule.value as number[] | [number, number] } : null,
       difficultyRule ? { operator: difficultyRule.operator, value: difficultyRule.value as string[] } : null
     );
-    
-    const total = goal.goal_mode === 'count' 
-      ? (goal.goal_count ?? 0) 
-      : matchingCharts.length;
-    
-    // Filter user scores by goal criteria
-    const matchingScores = filterScoresByRules(
-      scores, 
-      criteriaRules, 
+
+    // Subtract no-access charts from total
+    const noAccessChartCount = matchingCharts.filter(c => c.song_id && noAccessSongIds.has(c.song_id)).length;
+
+    const total = goal.goal_mode === 'count'
+      ? (goal.goal_count ?? 0)
+      : matchingCharts.length - noAccessChartCount;
+
+    // Filter user scores by goal criteria, then exclude no-access
+    const allMatchingScores = filterScoresByRules(
+      scores,
+      criteriaRules,
       goal.criteria_match_mode as 'all' | 'any'
     );
-    
+    const matchingScores = allMatchingScores.filter(s => s.has_access !== false);
+
     // Handle average score mode
     if (targetType === 'score' && goal.score_mode === 'average') {
       const playedWithScores = matchingScores.filter(s => s.score !== null);
@@ -95,14 +108,14 @@ function GoalCardWithProgress({
         averageScore: avg,
       };
     }
-    
+
     // Count completed scores
-    const completedCount = matchingScores.filter(s => 
+    const completedCount = matchingScores.filter(s =>
       meetsTarget(s, targetType, targetValue, reverseTransformHalo)
     ).length;
-    
+
     return {
-      completed: goal.goal_mode === 'count' 
+      completed: goal.goal_mode === 'count'
         ? Math.min(completedCount, goal.goal_count ?? completedCount)
         : completedCount,
       total,

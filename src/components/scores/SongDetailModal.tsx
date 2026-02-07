@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Switch } from '@/components/ui/switch';
 import { FlareChip, type FlareType } from '@/components/ui/FlareChip';
 import { HaloChip, type HaloType } from '@/components/ui/HaloChip';
 import { SourceIcon } from '@/components/ui/SourceIcon';
@@ -9,9 +11,12 @@ import { OffsetInlineEditor } from '@/components/scores/OffsetInlineEditor';
 import { use12MSMode } from '@/hooks/use12MSMode';
 import { useAuth } from '@/hooks/useAuth';
 import { useOffset } from '@/hooks/useOffset';
+import { useScores } from '@/contexts/ScoresContext';
+import { useToggleSongAccess } from '@/hooks/useToggleSongAccess';
 import { supabase } from '@/integrations/supabase/client';
 import { getJacketUrl, getJacketFallbackUrl } from '@/lib/jacketUrl';
 import { cn } from '@/lib/utils';
+import { X, MoreHorizontal } from 'lucide-react';
 
 export interface ChartWithScore {
   id: number;
@@ -86,8 +91,11 @@ export function SongDetailModal({
 }: SongDetailModalProps) {
   const { user } = useAuth();
   const { transformHalo } = use12MSMode();
+  const { scores } = useScores();
+  const { toggleAccess, isUpdating } = useToggleSongAccess();
   const [charts, setCharts] = useState<ChartWithScore[]>([]);
   const [loading, setLoading] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Offset data
   const {
@@ -115,6 +123,21 @@ export function SongDetailModal({
     }
   };
 
+  // Determine has_access state from global scores cache
+  const hasNoAccess = useMemo(() => {
+    if (!songId) return false;
+    return scores.some(
+      s => (s.musicdb?.song_id ?? s.song_id) === songId && s.has_access === false
+    );
+  }, [scores, songId]);
+
+  const handleToggleAccess = () => {
+    if (!songId) return;
+    // Fire-and-forget: optimistic cache update in the hook gives instant UI feedback
+    toggleAccess(songId, hasNoAccess); // if currently no-access, set to has-access
+    setMenuOpen(false);
+  };
+
   // Reset image state when song changes
   useEffect(() => {
     setImgError(false);
@@ -122,7 +145,6 @@ export function SongDetailModal({
   }, [songId, eamuseId]);
 
   // Use preloaded data ONLY - no background fetch to prevent flicker
-  // The global scores cache provides all played difficulties instantly
   useEffect(() => {
     if (!isOpen || !songId) {
       setCharts([]);
@@ -130,15 +152,13 @@ export function SongDetailModal({
       return;
     }
 
-    // If we have preloaded data, use it directly - NO background fetch
     const hasPreloadedData = preloadedCharts && preloadedCharts.length > 0;
     if (hasPreloadedData) {
       setCharts(preloadedCharts);
       setLoading(false);
-      return; // DONE - no fetch needed
+      return;
     }
 
-    // Only fetch if we have NO preloaded data (rare edge case)
     if (!user) {
       setCharts([]);
       setLoading(false);
@@ -149,7 +169,6 @@ export function SongDetailModal({
 
     const fetchData = async () => {
       try {
-        // Fetch all SP charts for this song (exclude deleted)
         const { data: chartData, error: chartError } = await supabase
           .from('musicdb')
           .select('id, difficulty_name, difficulty_level')
@@ -165,7 +184,6 @@ export function SongDetailModal({
           return;
         }
 
-        // Fetch user's scores for these charts
         const chartIds = chartData.map(c => c.id);
         const { data: scoreData, error: scoreError } = await supabase
           .from('user_scores')
@@ -175,12 +193,10 @@ export function SongDetailModal({
 
         if (scoreError) throw scoreError;
 
-        // Create a map of scores by musicdb_id (deduplicate by keeping first/best)
         const scoreMap = new Map(
           (scoreData || []).map(s => [s.musicdb_id, s])
         );
 
-        // Build complete chart list - deduplicate by difficulty_name
         const seenDifficulties = new Set<string>();
         const mergedCharts: ChartWithScore[] = chartData
           .map(chart => {
@@ -222,10 +238,43 @@ export function SongDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-[#3B3F51] border-none rounded-[20px] p-6 max-w-[340px] mx-auto">
+      <DialogContent className="bg-[#3B3F51] border-none rounded-[20px] p-6 max-w-[340px] mx-auto [&>button:last-of-type]:hidden">
         <DialogHeader className="sr-only">
           <DialogTitle>{songName}</DialogTitle>
         </DialogHeader>
+
+        {/* Top bar: Close (left) + Menu (right) */}
+        <div className="flex items-center justify-between -mt-1 mb-2">
+          <button
+            onClick={onClose}
+            className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
+          >
+            <X className="h-4 w-4 text-foreground" />
+            <span className="sr-only">Close</span>
+          </button>
+
+          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+            <PopoverTrigger asChild>
+              <button className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
+                <MoreHorizontal className="h-5 w-5 text-foreground" />
+                <span className="sr-only">Song options</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              className="w-auto min-w-[220px] bg-[#262937] border-[#3B3F51] p-3"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-foreground">I don't have this song</span>
+                <Switch
+                  checked={hasNoAccess}
+                  onCheckedChange={handleToggleAccess}
+                  disabled={isUpdating}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
 
         {/* Song Header */}
         <div className="flex flex-col items-center text-center mb-6">
@@ -257,7 +306,6 @@ export function SongDetailModal({
 
           {/* Era + Offset Chips - inline row */}
           <div className="flex items-start justify-center gap-2 mt-2">
-            {/* Offset Inline Editor (left) */}
             <OffsetInlineEditor
               effectiveOffset={effectiveOffset}
               globalOffset={globalOffset}
@@ -265,8 +313,6 @@ export function SongDetailModal({
               onSave={saveCustomOffset}
               onClear={clearCustomOffset}
             />
-            
-            {/* Era Chip (right) */}
             {era !== null && era !== undefined && (
               <EraChip era={era} className="h-5" />
             )}
@@ -295,7 +341,6 @@ export function SongDetailModal({
                   key={chart.id}
                   className="flex items-center gap-2 bg-[#262937] rounded-lg px-3 py-2"
                 >
-                  {/* Difficulty Chip */}
                   <div
                     className={cn(
                       'flex-shrink-0 w-[22px] h-[22px] rounded-[5px] flex items-center justify-center',
@@ -307,7 +352,6 @@ export function SongDetailModal({
                     </span>
                   </div>
 
-                  {/* Score or No play */}
                   <div className="flex-1 min-w-0">
                     {hasScore ? (
                       <span className="text-sm font-bold text-white tabular-nums">
@@ -318,7 +362,6 @@ export function SongDetailModal({
                     )}
                   </div>
 
-                  {/* Right side: rank, flare, halo, source */}
                   {hasScore && (
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       {chart.rank && (

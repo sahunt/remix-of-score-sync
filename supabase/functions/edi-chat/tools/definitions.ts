@@ -90,6 +90,7 @@ export const toolDefinitions: ToolDefinition[] = [
               "no_clear",
               "clear_no_fc",
               "fc_no_pfc",
+              "has_gfc",
               "pfc_no_mfc",
               "has_pfc",
               "has_mfc",
@@ -217,6 +218,29 @@ export const toolDefinitions: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_user_goals",
+      description:
+        "Fetch the user's goals and their current progress. Use this when the user asks about their goals, asks how they're doing, or when you want to check if a recent score or achievement is relevant to one of their goals. Do NOT call this on every message — only when goals are specifically relevant to the conversation.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            description: "Filter goals by completion status (default: active)",
+            enum: ["active", "completed", "all"],
+          },
+          include_progress: {
+            type: "boolean",
+            description: "Include current progress calculation (default: true)",
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 // System prompt section explaining available tools
@@ -231,6 +255,7 @@ You have access to tools that query the DDR database. USE THEM — do NOT guess 
 - get_songs_by_criteria: Filter songs by level, patterns, score status, etc.
 - get_song_offset: Look up timing offset for a song.
 - get_catalog_stats: Get counts of available charts by level.
+- get_user_goals: Fetch user's goals and progress. Only use when goals are relevant.
 
 ⚠️ CRITICAL RULES — VIOLATION CAUSES HARM TO THE USER:
 

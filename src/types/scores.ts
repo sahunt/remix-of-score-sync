@@ -22,6 +22,7 @@ export interface ScoreWithSong {
   halo: string | null;
   source_type?: string | null;
   musicdb_id?: number | null;
+  has_access?: boolean | null;
   // musicdb is optional because unplayed charts from musicdb don't have this relation
   // Chart metadata (difficulty_level, difficulty_name, playstyle) comes from musicdb - SINGLE SOURCE OF TRUTH
   musicdb?: {

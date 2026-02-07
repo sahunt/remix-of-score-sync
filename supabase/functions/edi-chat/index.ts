@@ -546,6 +546,58 @@ function calculateTotalStats(userScores: UserScore[]): TotalStats {
   return { totalPlayed: userScores.length, totalMfcs, totalPfcs, totalGfcs, totalFcs, totalLife4s, totalClears, totalAAAs };
 }
 
+interface LevelHaloStats {
+  level: number;
+  catalogTotal: number;
+  played: number;
+  mfc: number;
+  pfc: number;
+  gfc: number;
+  fc: number;
+  life4: number;
+  clear: number;
+  fail: number;
+}
+
+function calculateLevelHaloStats(userScores: UserScore[], chartAnalysis: ChartAnalysis[]): LevelHaloStats[] {
+  const catalogCounts = new Map<number, number>();
+  for (const chart of chartAnalysis) {
+    catalogCounts.set(chart.difficulty_level, (catalogCounts.get(chart.difficulty_level) || 0) + 1);
+  }
+
+  const levelMap = new Map<number, { played: number; mfc: number; pfc: number; gfc: number; fc: number; life4: number; clear: number; fail: number }>();
+
+  for (const score of userScores) {
+    const level = score.musicdb?.difficulty_level;
+    if (!level) continue;
+
+    const current = levelMap.get(level) || { played: 0, mfc: 0, pfc: 0, gfc: 0, fc: 0, life4: 0, clear: 0, fail: 0 };
+    current.played++;
+
+    const halo = score.halo?.toLowerCase() || '';
+    if (halo === 'mfc') current.mfc++;
+    else if (halo === 'pfc') current.pfc++;
+    else if (halo === 'gfc') current.gfc++;
+    else if (halo === 'fc') current.fc++;
+    else if (halo === 'life4') current.life4++;
+    else if (halo === 'clear') current.clear++;
+    else if (halo === 'fail') current.fail++;
+
+    levelMap.set(level, current);
+  }
+
+  const allLevels = new Set([...catalogCounts.keys(), ...levelMap.keys()]);
+  const results: LevelHaloStats[] = [];
+
+  for (const level of allLevels) {
+    const catalogTotal = catalogCounts.get(level) || 0;
+    const userData = levelMap.get(level) || { played: 0, mfc: 0, pfc: 0, gfc: 0, fc: 0, life4: 0, clear: 0, fail: 0 };
+    results.push({ level, catalogTotal, ...userData });
+  }
+
+  return results.sort((a, b) => a.level - b.level);
+}
+
 // ============================================================================
 // SKILL PROMPTS
 // ============================================================================
@@ -644,6 +696,23 @@ When displaying song offset/bias information:
 - Say "crossovers" not "crosses"
 - Say "footswitches" not "foot switches"
 
+--- GOALS AWARENESS ---
+You have access to the user's goals via the get_user_goals tool. Use it when:
+- The user asks about their goals or progress
+- You notice a score or achievement that might relate to a goal they have
+- The user seems unsure what to work on next (check if they have active goals first)
+
+Do NOT:
+- Reference goals in every message
+- Become a passive goal status reporter — you're a coach, not a dashboard
+- Stop challenging users to set NEW ambitious goals just because they have existing ones
+- Call get_user_goals unless the conversation makes it relevant
+
+When you DO reference goals, tie it to your coaching voice. Examples:
+- "Oh wait — that 987K on MAX 300? You're knocking on the door of that PFC goal you set. One more clean run."
+- "You've got 13 FCs to go on your 500 FC goal. Want me to find some charts where you're close?"
+- "I see you set a goal to clear all 17s but you've been playing 15s all week. Let's get back on track."
+
 --- FOLLOW-UPS (REQUIRED) ---
 At END of EVERY response, include 2-3 follow-up suggestions: [[FOLLOWUP:suggestion text here]]
 `;
@@ -700,6 +769,43 @@ COUNTING STATS (ALL LEVELS 1-19)
 - LIFE4s: ${totalStats.totalLife4s} | Clears: ${totalStats.totalClears} | AAAs: ${totalStats.totalAAAs}
 
 ⚠️ READ the number above — do NOT calculate or estimate.
+`;
+}
+
+function buildLevelHaloStatsPrompt(levelHaloStats: LevelHaloStats[]): string {
+  const lines = levelHaloStats
+    .filter(s => s.played > 0 || s.catalogTotal > 0)
+    .map(s => {
+      const unplayed = s.catalogTotal - s.played;
+      return `Lv${s.level}: ${s.catalogTotal} catalog, ${s.played} played (${unplayed} unplayed) | MFC:${s.mfc} PFC:${s.pfc} GFC:${s.gfc} FC:${s.fc} LIFE4:${s.life4} CLEAR:${s.clear} FAIL:${s.fail}`;
+    })
+    .join('\n');
+
+  return `
+══════════════════════════════════════════════════════════════════════════════
+PER-LEVEL HALO BREAKDOWN
+══════════════════════════════════════════════════════════════════════════════
+
+${lines}
+
+⚠️ HALO COUNTING RULES — READ CAREFULLY:
+
+Each song has EXACTLY ONE halo — its best achievement. Halos do NOT stack.
+A song with PFC is NOT also counted as GFC, FC, etc. Its halo is PFC, period.
+
+HALO HIERARCHY (best → worst): MFC > PFC > GFC > FC > LIFE4 > CLEAR > FAIL
+
+USE THESE NUMBERS to answer counting questions:
+- "How many 14s left to PFC?" = Lv14 catalog total − (Lv14 PFC + Lv14 MFC)
+- "How many 14s left to FC?" = Lv14 catalog total − (Lv14 MFC + Lv14 PFC + Lv14 GFC + Lv14 FC)
+- "How many 11s have I life4'd?" = Lv11 LIFE4 count above
+- "What 16s have I GFC'd?" = Use get_songs_by_criteria with difficulty_level=16 and halo_filter="is_gfc"
+- "How many 14s have I PFC'd?" = Lv14 PFC + Lv14 MFC (MFCs are better than PFCs)
+- "How many 15s have I cleared?" = Lv15 played − Lv15 FAIL (everything except fails is a clear)
+
+When user says "left to [halo]", they mean songs NOT YET at that halo level or above.
+When user says "have I [halo]'d", they mean songs with EXACTLY that halo (not higher).
+Exception: "PFC'd" includes MFCs because MFC is strictly better than PFC.
 `;
 }
 
@@ -765,7 +871,7 @@ const toolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "get_songs_by_criteria",
-      description: "Filter songs by gameplay criteria. Use for recommendations, practice suggestions, finding songs with specific patterns.",
+      description: "Filter songs by gameplay criteria. Use for recommendations, practice suggestions, finding songs with specific patterns, or listing songs by halo type. Use is_* halo filters for exact halo matches (e.g., is_gfc for exactly GFC, is_life4 for exactly LIFE4).",
       parameters: {
         type: "object",
         properties: {
@@ -774,6 +880,11 @@ const toolDefinitions: ToolDefinition[] = [
           max_difficulty_level: { type: "integer", description: "Maximum difficulty level", minimum: 1, maximum: 20 },
           difficulty_name: { type: "string", enum: ["Beginner", "Basic", "Difficult", "Expert", "Challenge"] },
           halo_filter: { type: "string", enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "has_fc", "has_gfc", "pfc_no_mfc", "has_pfc", "has_mfc"], description: "Filter by halo/lamp status. has_fc = any FC or better. has_gfc = GFC or better (GFC, PFC, MFC). fc_no_pfc = only FC or GFC (not PFC/MFC)." },
+          halo_filter: {
+            type: "string",
+            description: "Filter by user's halo status. EXACT MATCH filters (is_X) return songs with exactly that halo: is_mfc, is_pfc, is_gfc, is_fc, is_life4, is_clear, is_fail. RANGE filters: no_score (unplayed), no_clear (no clear/fail/unplayed), clear_no_fc (cleared but no full combo — includes CLEAR and LIFE4), fc_no_pfc (has FC or GFC but not PFC/MFC), has_gfc (GFC or better — GFC+PFC+MFC), pfc_no_mfc (exactly PFC), has_pfc (PFC or MFC), has_mfc (exactly MFC).",
+            enum: ["no_score", "no_clear", "clear_no_fc", "fc_no_pfc", "has_gfc", "pfc_no_mfc", "has_pfc", "has_mfc", "is_mfc", "is_pfc", "is_gfc", "is_fc", "is_life4", "is_clear", "is_fail"],
+          },
           min_crossovers: { type: "integer", minimum: 0 },
           min_footswitches: { type: "integer", minimum: 0 },
           min_jacks: { type: "integer", minimum: 0 },
@@ -808,6 +919,21 @@ const toolDefinitions: ToolDefinition[] = [
       parameters: { type: "object", properties: { difficulty_level: { type: "integer", minimum: 1, maximum: 20 } }, required: [] },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_user_goals",
+      description: "Fetch the user's goals and their current progress. Use this when the user asks about their goals, asks how they're doing, or when you want to check if a recent score or achievement is relevant to one of their goals. Do NOT call this on every message — only when goals are specifically relevant to the conversation.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", description: "Filter goals by completion status (default: active)", enum: ["active", "completed", "all"] },
+          include_progress: { type: "boolean", description: "Include current progress calculation (default: true)" },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 const toolsSystemPrompt = `
@@ -818,9 +944,12 @@ AVAILABLE DATA TOOLS
 You have access to tools that query the DDR database. USE THEM — do NOT guess.
 
 - search_songs: Find songs by name
-- get_songs_by_criteria: Filter songs by level, patterns, score status, etc.
+- get_songs_by_criteria: Filter songs by level, patterns, halo status, etc.
+  Use is_* filters for exact halo matches: is_mfc, is_pfc, is_gfc, is_fc, is_life4, is_clear, is_fail
+  Use range filters: no_score, clear_no_fc, fc_no_pfc, has_pfc, has_mfc, etc.
 - get_song_offset: Look up timing offset for a song
 - get_catalog_stats: Get counts of available charts by level
+- get_user_goals: Fetch user's goals and progress. Only use when goals are relevant.
 
 ⚠️ CRITICAL RULES:
 1. NEVER recommend a song not returned by a tool call
@@ -847,7 +976,7 @@ These rules override everything else. Before EVERY response, check:
 // TOOL EXECUTOR
 // ============================================================================
 
-interface SongMarker { song_id: number; title: string; difficulty: string; level: number; eamuse_id: string | null }
+interface SongMarker { song_id: number; difficulty: string; eamuse_id: string | null }
 
 function formatSongMarker(song: SongMarker): string {
   return `[[SONG:${JSON.stringify(song)}]]`;
@@ -895,7 +1024,7 @@ async function searchSongs(
     const patterns = chartMap.get(chartKey);
     const userScore = userScoreMap.get(m.id);
     return {
-      display_marker: formatSongMarker({ song_id: m.song_id, title: m.name, difficulty: m.difficulty_name, level: m.difficulty_level, eamuse_id: m.eamuse_id }),
+      display_marker: formatSongMarker({ song_id: m.song_id, difficulty: m.difficulty_name, eamuse_id: m.eamuse_id }),
       name: m.name, artist: m.artist, difficulty: m.difficulty_name, level: m.difficulty_level, era: m.era, sanbai_rating: m.sanbai_rating,
       patterns: patterns ? { crossovers: patterns.crossovers, footswitches: patterns.footswitches, jacks: patterns.jacks, shock_arrows: patterns.mines, notes: patterns.notes, bpm: patterns.bpm, peak_nps: patterns.peak_nps, stop_count: patterns.stop_count } : null,
       user_score: userScore ? { score: userScore.score, halo: userScore.halo, rank: userScore.rank, flare: userScore.flare } : null,
@@ -935,6 +1064,18 @@ async function getSongsByCriteria(
       hasMoreScores = scorePage.length === PAGE_SIZE;
     } else {
       hasMoreScores = false;
+  // Paginate user scores to ensure we fetch ALL rows (Supabase default limit is ~1000)
+  let allUserScores: Record<string, unknown>[] = [];
+  let userScoreFrom = 0;
+  let userScoreHasMore = true;
+  while (userScoreHasMore) {
+    const { data: userScorePage } = await supabase.from("user_scores").select(`musicdb_id, score, halo, rank, flare, musicdb!inner(song_id, difficulty_level, difficulty_name, name, artist, eamuse_id)`).eq("user_id", userId).range(userScoreFrom, userScoreFrom + PAGE_SIZE - 1);
+    if (userScorePage && userScorePage.length > 0) {
+      allUserScores = [...allUserScores, ...userScorePage as Record<string, unknown>[]];
+      userScoreFrom += PAGE_SIZE;
+      userScoreHasMore = userScorePage.length === PAGE_SIZE;
+    } else {
+      userScoreHasMore = false;
     }
   }
 
@@ -971,6 +1112,7 @@ async function getSongsByCriteria(
       const halo = userScore?.halo?.toLowerCase() || "";
       const hasScore = userScore !== null;
       switch (halo_filter) {
+        // Range filters
         case "no_score": if (hasScore) continue; break;
         case "no_clear": if (hasScore && !["fail", "none", ""].includes(halo)) continue; break;
         case "clear_no_fc": if (!hasScore || ["fc", "gfc", "pfc", "mfc", "fail", "none", ""].includes(halo)) continue; break;
@@ -980,6 +1122,14 @@ async function getSongsByCriteria(
         case "pfc_no_mfc": if (!hasScore || halo !== "pfc") continue; break;
         case "has_pfc": if (!hasScore || !["pfc", "mfc"].includes(halo)) continue; break;
         case "has_mfc": if (!hasScore || halo !== "mfc") continue; break;
+        // Exact match filters
+        case "is_mfc": if (!hasScore || halo !== "mfc") continue; break;
+        case "is_pfc": if (!hasScore || halo !== "pfc") continue; break;
+        case "is_gfc": if (!hasScore || halo !== "gfc") continue; break;
+        case "is_fc": if (!hasScore || halo !== "fc") continue; break;
+        case "is_life4": if (!hasScore || halo !== "life4") continue; break;
+        case "is_clear": if (!hasScore || halo !== "clear") continue; break;
+        case "is_fail": if (!hasScore || halo !== "fail") continue; break;
       }
     }
 
@@ -1026,14 +1176,15 @@ async function getSongsByCriteria(
     }
   }
 
+  const totalBeforeLimit = results.length;
   results = results.slice(0, effectiveLimit);
 
   const formattedResults = results.map(r => ({
-    display_marker: formatSongMarker({ song_id: r.song_id, title: r.name, difficulty: r.difficulty, level: r.level, eamuse_id: r.eamuse_id }),
+    display_marker: formatSongMarker({ song_id: r.song_id, difficulty: r.difficulty, eamuse_id: r.eamuse_id }),
     name: r.name, artist: r.artist, difficulty: r.difficulty, level: r.level, era: r.era, sanbai_rating: r.sanbai_rating, patterns: r.patterns, user_score: r.user_score,
   }));
 
-  return JSON.stringify({ message: `Found ${formattedResults.length} chart(s) matching criteria`, instruction: "ONLY recommend songs from THIS result. Do NOT reference songs from earlier in the conversation. Copy each song's display_marker EXACTLY as shown.", total_matches: results.length, results: formattedResults });
+  return JSON.stringify({ message: `Found ${totalBeforeLimit} chart(s) matching criteria (showing ${formattedResults.length})`, instruction: "ONLY recommend songs from THIS result. Do NOT reference songs from earlier in the conversation. Copy each song's display_marker EXACTLY as shown. Use total_matches for counting questions.", total_matches: totalBeforeLimit, showing: formattedResults.length, results: formattedResults });
 }
 
 async function getSongOffset(args: { query: string }, supabaseServiceRole: SupabaseClient): Promise<string> {
@@ -1094,6 +1245,208 @@ async function getCatalogStats(args: { difficulty_level?: number }, supabaseServ
   return JSON.stringify({ message: "Catalog statistics by difficulty level", total_charts: count || 0, by_level: byLevel });
 }
 
+// Map lamp target to halo_filter for finding remaining (not-yet-achieved) songs
+function remainingHaloFilter(targetType: string, targetValue: string): string | null {
+  if (targetType === "lamp") {
+    const map: Record<string, string> = {
+      "clear": "no_clear", "fc": "clear_no_fc", "gfc": "clear_no_fc",
+      "pfc": "fc_no_pfc", "mfc": "pfc_no_mfc",
+    };
+    return map[targetValue.toLowerCase()] || null;
+  }
+  return null;
+}
+
+// Build get_songs_by_criteria params from goal criteria for follow-up tool calls
+function buildSearchParams(
+  rules: Array<{ field: string; operator: string; values: unknown[] }>,
+  targetType: string,
+  targetValue: string,
+): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+
+  for (const rule of rules) {
+    if (rule.field === "level" && Array.isArray(rule.values) && rule.values.length > 0) {
+      const nums = rule.values.map((v: unknown) => Number(v));
+      if (rule.operator === "is_between" && nums.length >= 2) {
+        params.min_difficulty_level = Math.min(...nums);
+        params.max_difficulty_level = Math.max(...nums);
+      } else if (rule.operator === "is") {
+        if (nums.length === 1) {
+          params.difficulty_level = nums[0];
+        } else {
+          params.min_difficulty_level = Math.min(...nums);
+          params.max_difficulty_level = Math.max(...nums);
+        }
+      }
+    } else if (rule.field === "difficulty" && Array.isArray(rule.values) && rule.values.length === 1) {
+      // Capitalize properly: "EXPERT" → "Expert"
+      const raw = String(rule.values[0]);
+      params.difficulty_name = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    }
+  }
+
+  const haloFilter = remainingHaloFilter(targetType, targetValue);
+  if (haloFilter) params.halo_filter = haloFilter;
+
+  return params;
+}
+
+// Build human-readable criteria summary
+function buildCriteriaSummary(
+  rules: Array<{ field: string; operator: string; values: unknown[] }>,
+  targetType: string,
+  targetValue: string,
+): string {
+  const parts: string[] = [];
+
+  for (const rule of rules) {
+    if (rule.field === "level" && Array.isArray(rule.values) && rule.values.length > 0) {
+      const nums = rule.values.map((v: unknown) => Number(v));
+      if (rule.operator === "is_between" && nums.length >= 2) {
+        parts.push(`Level ${Math.min(...nums)}-${Math.max(...nums)}`);
+      } else if (rule.operator === "is") {
+        parts.push(`Level ${nums.join(", ")}`);
+      } else if (rule.operator === "is_not") {
+        parts.push(`Not level ${nums.join(", ")}`);
+      }
+    } else if (rule.field === "difficulty" && Array.isArray(rule.values)) {
+      parts.push(rule.values.map((v: unknown) => String(v)).join(", "));
+    }
+  }
+
+  parts.push(`${targetType.toUpperCase()} ${targetValue}`);
+  return parts.join(" | ");
+}
+
+async function getUserGoals(
+  args: { status?: string; include_progress?: boolean },
+  supabase: SupabaseClient,
+  supabaseServiceRole: SupabaseClient,
+  userId: string
+): Promise<string> {
+  const { status = "active", include_progress = true } = args;
+
+  const { data: goals, error: goalsError } = await supabase
+    .from("user_goals")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (goalsError) {
+    console.error("Error fetching user goals:", goalsError);
+    return JSON.stringify({ error: "Failed to fetch goals", details: goalsError.message });
+  }
+
+  if (!goals || goals.length === 0) {
+    return JSON.stringify({ message: "No goals found. The user hasn't set any goals yet.", goals: [] });
+  }
+
+  const goalsWithProgress: Array<Record<string, unknown>> = [];
+
+  for (const goal of goals) {
+    const rules = (goal.criteria_rules as Array<{ field: string; operator: string; values: unknown[] }>) || [];
+
+    const goalData: Record<string, unknown> = {
+      id: goal.id, name: goal.name, target_type: goal.target_type, target_value: goal.target_value,
+      goal_mode: goal.goal_mode, goal_count: goal.goal_count, score_mode: goal.score_mode,
+      score_floor: goal.score_floor, created_at: goal.created_at,
+      criteria_summary: buildCriteriaSummary(rules, goal.target_type, goal.target_value),
+      search_params: buildSearchParams(rules, goal.target_type, goal.target_value),
+    };
+
+    if (include_progress) {
+      let levelValues: number[] | null = null;
+      let levelOperator = "is";
+      let difficultyValues: string[] | null = null;
+      let difficultyOperator = "is";
+
+      for (const rule of rules) {
+        if (rule.field === "level" && Array.isArray(rule.values)) {
+          levelValues = rule.values.map((v: unknown) => Number(v));
+          levelOperator = rule.operator || "is";
+        } else if (rule.field === "difficulty" && Array.isArray(rule.values)) {
+          difficultyValues = rule.values.map((v: unknown) => String(v).toUpperCase());
+          difficultyOperator = rule.operator || "is";
+        }
+      }
+
+      const { data: progressData, error: progressError } = await supabaseServiceRole
+        .rpc("calculate_goal_progress", {
+          p_user_id: userId, p_level_values: levelValues, p_level_operator: levelOperator,
+          p_difficulty_values: difficultyValues, p_difficulty_operator: difficultyOperator,
+          p_target_type: goal.target_type, p_target_value: goal.target_value,
+        });
+
+      if (progressError) {
+        console.error(`Error calculating progress for goal ${goal.id}:`, progressError);
+        goalData.progress = { error: "Failed to calculate progress" };
+      } else if (progressData && progressData.length > 0) {
+        const progress = progressData[0];
+        const completedCount = Number(progress.completed_count);
+        const totalCount = Number(progress.total_count);
+        const averageScore = Number(progress.average_score);
+        const effectiveTarget = goal.goal_mode === "count" && goal.goal_count
+          ? Math.min(goal.goal_count, totalCount) : totalCount;
+        const isCompleted = effectiveTarget > 0 && completedCount >= effectiveTarget;
+        const percentage = effectiveTarget > 0 ? Math.min(100, Math.round((completedCount / effectiveTarget) * 100)) : 0;
+
+        goalData.progress = { completed: completedCount, target: effectiveTarget, total_matching_charts: totalCount, percentage, is_completed: isCompleted };
+        if (goal.target_type === "score") {
+          (goalData.progress as Record<string, unknown>).average_score = averageScore;
+        }
+        goalData.computed_status = isCompleted ? "completed" : "active";
+      }
+    }
+
+    goalsWithProgress.push(goalData);
+  }
+
+  let filteredGoals = goalsWithProgress;
+  if (status !== "all" && include_progress) {
+    filteredGoals = goalsWithProgress.filter(g => g.computed_status === status);
+  }
+
+  const statusLabel = status === "all" ? "All" : status === "completed" ? "Completed" : "Active";
+  const lines: string[] = [`${statusLabel} Goals (${filteredGoals.length}):`];
+
+  for (let i = 0; i < filteredGoals.length; i++) {
+    const g = filteredGoals[i];
+    const progress = g.progress as Record<string, unknown> | undefined;
+    const targetLabel = `${(g.target_type as string).toUpperCase()} ${g.target_value}`;
+
+    lines.push("");
+    lines.push(`${i + 1}. Goal: ${g.name}`);
+    lines.push(`   Criteria: ${g.criteria_summary}`);
+    lines.push(`   Target: ${targetLabel}`);
+
+    if (progress && !progress.error) {
+      const pct = progress.percentage as number;
+      const completed = progress.completed as number;
+      const target = progress.target as number;
+
+      if (g.target_type === "score" && g.score_mode === "average") {
+        lines.push(`   Progress: Avg. ${(progress.average_score as number)?.toLocaleString()} / Target ${Number(g.target_value).toLocaleString()}`);
+      } else {
+        lines.push(`   Progress: ${completed}/${target} (${pct}%)`);
+      }
+
+      if (pct >= 100) lines.push(`   Status: COMPLETED`);
+      else if (pct >= 90) lines.push(`   Status: Almost there!`);
+      else lines.push(`   Status: Active`);
+    }
+
+    lines.push(`   Created: ${(g.created_at as string).split("T")[0]}`);
+  }
+
+  return JSON.stringify({
+    message: lines.join("\n"),
+    instruction: "To recommend songs for a goal, call get_songs_by_criteria using the search_params from that goal. Each goal includes search_params with the appropriate filters already mapped.",
+    goal_count: filteredGoals.length,
+    goals: filteredGoals,
+  });
+}
+
 async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, supabaseServiceRole: SupabaseClient, userId: string): Promise<string> {
   const { name, arguments: argsString } = toolCall.function;
 
@@ -1107,6 +1460,7 @@ async function executeToolCall(toolCall: ToolCall, supabase: SupabaseClient, sup
     case "get_songs_by_criteria": return await getSongsByCriteria(args, supabaseServiceRole, supabase, userId);
     case "get_song_offset": return await getSongOffset(args as { query: string }, supabaseServiceRole);
     case "get_catalog_stats": return await getCatalogStats(args as { difficulty_level?: number }, supabaseServiceRole);
+    case "get_user_goals": return await getUserGoals(args as { status?: string; include_progress?: boolean }, supabase, supabaseServiceRole, userId);
     default: return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
 }
@@ -1192,6 +1546,7 @@ serve(async (req) => {
 
     const profile = buildPlayerProfile(userScores, chartAnalysis);
     const totalStats = calculateTotalStats(userScores);
+    const levelHaloStats = calculateLevelHaloStats(userScores, chartAnalysis);
 
     console.log("Player profile:", JSON.stringify(profile, null, 2));
     console.log("Total stats:", JSON.stringify(totalStats, null, 2));
@@ -1199,6 +1554,7 @@ serve(async (req) => {
     let systemPrompt = buildWhoIAmPrompt();
     systemPrompt += buildPlayerProfilePrompt(profile);
     systemPrompt += buildCountingStatsPrompt(totalStats);
+    systemPrompt += buildLevelHaloStatsPrompt(levelHaloStats);
     systemPrompt += buildSdpRulesPrompt();
     systemPrompt += buildWarmupRulesPrompt();
     systemPrompt += toolsSystemPrompt;
@@ -1256,7 +1612,6 @@ serve(async (req) => {
         console.log(`Tool result length: ${result.length} chars`);
         allMessages.push({ role: "tool", tool_call_id: toolCall.id, content: result });
       }
-      break;
     }
 
     if (resolvedWithoutTools) {
