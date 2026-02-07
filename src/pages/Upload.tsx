@@ -84,7 +84,19 @@ export default function UploadPage() {
       // Play completion sound
       try {
         const audio = new Audio('/sounds/done.mp3');
-        audio.play();
+        audio.currentTime = 0;
+        audio.preload = 'auto';
+        await new Promise<void>((resolve) => {
+          audio.addEventListener('canplaythrough', () => {
+            audio.play().catch(() => {});
+            resolve();
+          }, { once: true });
+          // Fallback if already loaded
+          if (audio.readyState >= 4) {
+            audio.play().catch(() => {});
+            resolve();
+          }
+        });
       } catch { /* ignore audio errors */ }
       
       // Clear polling
