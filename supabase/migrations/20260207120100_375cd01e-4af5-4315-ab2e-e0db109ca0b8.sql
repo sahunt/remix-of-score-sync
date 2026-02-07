@@ -1,6 +1,9 @@
 -- Phase 2: refresh_player_summary() and helper functions
 -- Recomputes player_summary and player_level_stats from raw user_scores.
 -- Must produce EXACTLY the same numbers as the TypeScript functions in edi-chat/index.ts.
+--
+-- IMPORTANT: user_scores does NOT have difficulty_level (it was dropped in migration
+-- 20260201211958). All level lookups go through musicdb via musicdb_id join.
 
 -- ================================================================
 -- Helper: calc_proficiency()
@@ -188,6 +191,9 @@ $$;
 -- ================================================================
 -- Main: refresh_player_summary()
 -- Called after score imports to recompute all pre-computed data.
+--
+-- NOTE: user_scores does NOT have difficulty_level — it was dropped.
+-- All level lookups join musicdb via us.musicdb_id = m.id.
 -- ================================================================
 
 CREATE OR REPLACE FUNCTION public.refresh_player_summary(p_user_id uuid)
@@ -225,8 +231,7 @@ BEGIN
   -- ================================================================
   -- STEP 1: calculateTotalStats() equivalent
   -- Counts halos by EXACT match (not cumulative), across ALL levels.
-  -- TS: if (halo === 'mfc') totalMfcs++; if (halo === 'pfc') totalPfcs++; etc.
-  -- TS totalClears: if (!['fail', 'none', ''].includes(halo)) totalClears++;
+  -- Must join musicdb for difficulty_level.
   -- ================================================================
 
   SELECT
@@ -239,11 +244,12 @@ BEGIN
     count(*) FILTER (WHERE lower(us.halo) NOT IN ('fail', 'none', '') AND us.halo IS NOT NULL)::integer,
     count(*) FILTER (WHERE lower(us.halo) = 'fail')::integer,
     count(*) FILTER (WHERE upper(us.rank) = 'AAA')::integer,
-    count(*) FILTER (WHERE us.difficulty_level >= 12)::integer
+    count(*) FILTER (WHERE m.difficulty_level >= 12)::integer
   INTO
     v_total_scores, v_mfc_count, v_pfc_count, v_gfc_count, v_fc_count,
     v_life4_count, v_clear_count, v_fail_count, v_aaa_count, v_level_12_plus_plays
   FROM public.user_scores us
+  INNER JOIN public.musicdb m ON m.id = us.musicdb_id
   WHERE us.user_id = p_user_id;
 
   v_total_plays := v_total_scores;
@@ -259,15 +265,7 @@ BEGIN
   -- ================================================================
   -- STEP 2: calculateLevelMastery() + calculateLevelHaloStats()
   -- Populates player_level_stats from raw scores.
-  --
-  -- TS calculateLevelMastery (levels >= 12):
-  --   Halo counts: fcs++ for 'fc', gfcs++ for 'gfc', pfcs++ for 'pfc', mfcs++ for 'mfc'
-  --   clears = everything not fail/none/empty
-  --   fcRate = (fcs+gfcs+pfcs+mfcs) / played
-  --   pfcRate = (pfcs+mfcs) / played
-  --
-  -- TS calculateLevelHaloStats (all levels):
-  --   Exact halo counts per level + catalog totals from musicdb
+  -- All difficulty_level comes from musicdb join.
   -- ================================================================
 
   DELETE FROM public.player_level_stats WHERE user_id = p_user_id;
@@ -296,7 +294,7 @@ BEGIN
     ld.pfc_cnt + ld.mfc_cnt
   FROM (
     SELECT
-      us.difficulty_level,
+      m.difficulty_level,
       count(*)::integer as played,
       round(avg(us.score))::integer as avg_score,
       -- Population stddev (TS: sqrt(sum(sq_diff)/N), returns 0 for <2 scores)
@@ -323,14 +321,17 @@ BEGIN
         / count(*)::numeric as pfc_rate,
       count(*) FILTER (WHERE upper(us.rank) = 'AAA')::numeric / count(*)::numeric as aaa_rate
     FROM public.user_scores us
+    INNER JOIN public.musicdb m ON m.id = us.musicdb_id
     INNER JOIN (
-      SELECT difficulty_level, avg(score) as level_avg
-      FROM public.user_scores
-      WHERE user_id = p_user_id AND score IS NOT NULL
-      GROUP BY difficulty_level
-    ) sub ON us.difficulty_level = sub.difficulty_level
+      -- subquery for per-level average (needed for variance calc)
+      SELECT m2.difficulty_level, avg(us2.score) as level_avg
+      FROM public.user_scores us2
+      INNER JOIN public.musicdb m2 ON m2.id = us2.musicdb_id
+      WHERE us2.user_id = p_user_id AND us2.score IS NOT NULL
+      GROUP BY m2.difficulty_level
+    ) sub ON m.difficulty_level = sub.difficulty_level
     WHERE us.user_id = p_user_id AND us.score IS NOT NULL
-    GROUP BY us.difficulty_level
+    GROUP BY m.difficulty_level
   ) ld
   LEFT JOIN (
     SELECT difficulty_level, count(*)::integer as catalog_count
@@ -354,11 +355,6 @@ BEGIN
 
   -- ================================================================
   -- STEP 3: buildPlayerProfile() ceilings
-  -- TS iterates levelMastery sorted ascending (levels >= 12 only):
-  --   if (lm.clearRate > 0.3 && lm.played >= 3) clearCeiling = lm.level
-  --   if (totalFcs >= 3) fcCeiling = lm.level  [totalFcs = fc+gfc+pfc+mfc]
-  --   if (lm.pfcCount >= 3) pfcCeiling = lm.level  [pfcCount = pfc+mfc]
-  -- Last match wins = max()
   -- ================================================================
 
   SELECT coalesce(max(pls.difficulty_level), 12) INTO v_clear_ceiling
