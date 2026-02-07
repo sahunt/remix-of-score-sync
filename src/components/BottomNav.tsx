@@ -77,7 +77,7 @@ export function BottomNav() {
     }} />}
 
       {/* Navigation - Pill container */}
-      <nav className={cn("fixed bottom-[46px] left-1/2 -translate-x-1/2 z-50", "flex items-center justify-center gap-1", "h-[55px] px-5 rounded-full", "bg-[#383C4C]", "transition-transform duration-300 ease-out", isVisible ? "translate-y-0" : "translate-y-[120px]")}>
+      <nav className={cn("fixed bottom-[46px] left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-1 h-[55px] px-5 rounded-full bg-[#383C4C] transition-transform duration-300 ease-out pl-[10px] pr-[10px]", isVisible ? "translate-y-0" : "translate-y-[120px]")}>
         <NavItem to="/home" icon={<HomeIcon />} label="Home" />
         <NavItem to="/edi" icon={<EdiIcon />} label="Edi" />
         <NavItem to="/scores" icon={<ScoresIcon />} label="Scores" />
