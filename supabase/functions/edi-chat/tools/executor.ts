@@ -16,10 +16,12 @@ function formatSongMarker(song: SongMarker): string {
   return `[[SONG:${JSON.stringify(song)}]]`;
 }
 
-// Search musicdb with word-based fallback for better matching of CJK
-// characters, alternate spellings, and multi-word song titles.
-// If the full query returns no results, splits into individual words
-// and searches for each word, combining and deduplicating results.
+// Resilient song search: tries multiple strategies to find songs.
+// 1. Exact substring match on name
+// 2. Exact substring match on artist
+// 3. Word-by-word OR match across name and artist
+// This handles CJK characters, alternate names, romanizations, and
+// queries like "hou five flares mix" where individual words match.
 async function searchMusicDb(
   query: string,
   difficulty_level: number | undefined,
@@ -28,30 +30,36 @@ async function searchMusicDb(
 ): Promise<Record<string, unknown>[] | null> {
   const selectCols = "id, song_id, name, artist, difficulty_name, difficulty_level, eamuse_id, era, sanbai_rating";
 
-  // Try exact substring match first
-  let dbQuery = supabaseServiceRole
-    .from("musicdb")
-    .select(selectCols)
-    .eq("playstyle", "SP")
-    .eq("deleted", false)
-    .ilike("name", `%${query}%`)
-    .order("difficulty_level", { ascending: true })
-    .limit(50);
-  if (difficulty_level !== undefined) dbQuery = dbQuery.eq("difficulty_level", difficulty_level);
-  if (difficulty_name !== undefined) dbQuery = dbQuery.eq("difficulty_name", difficulty_name);
-
-  const { data, error } = await dbQuery;
-  if (error) {
-    console.error("Error searching songs:", error);
-    return null;
+  function applyFilters(q: ReturnType<SupabaseClient['from']>) {
+    let filtered = q;
+    if (difficulty_level !== undefined) filtered = filtered.eq("difficulty_level", difficulty_level);
+    if (difficulty_name !== undefined) filtered = filtered.eq("difficulty_name", difficulty_name);
+    return filtered;
   }
-  if (data && data.length > 0) return data as Record<string, unknown>[];
 
-  // Fallback: split query into words and search for each individually.
-  // Filter out very short words (<=1 char) to avoid overly broad matches,
-  // but keep single CJK characters which are meaningful.
+  // Strategy 1: exact substring match on name
+  const { data: nameData, error: nameError } = await applyFilters(
+    supabaseServiceRole.from("musicdb").select(selectCols)
+      .eq("playstyle", "SP").eq("deleted", false)
+      .ilike("name", `%${query}%`)
+      .order("difficulty_level", { ascending: true }).limit(50)
+  );
+  if (nameError) { console.error("Error searching songs:", nameError); return null; }
+  if (nameData && nameData.length > 0) return nameData as Record<string, unknown>[];
+
+  // Strategy 2: exact substring match on artist
+  const { data: artistData, error: artistError } = await applyFilters(
+    supabaseServiceRole.from("musicdb").select(selectCols)
+      .eq("playstyle", "SP").eq("deleted", false)
+      .ilike("artist", `%${query}%`)
+      .order("difficulty_level", { ascending: true }).limit(50)
+  );
+  if (artistError) { console.error("Error searching artist:", artistError); }
+  if (artistData && artistData.length > 0) return artistData as Record<string, unknown>[];
+
+  // Strategy 3: split into words, search each across name and artist
   const cjkRange = /[\u3000-\u9fff\uf900-\ufaff]/;
-  const words = query.split(/[\s()\[\]{}]+/)
+  const words = query.split(/[\s()\[\]{},]+/)
     .filter(w => w.length > 1 || cjkRange.test(w));
 
   if (words.length <= 1) return []; // single word already tried above
@@ -62,32 +70,34 @@ async function searchMusicDb(
   const combined: Record<string, unknown>[] = [];
 
   for (const word of words) {
-    let wordQuery = supabaseServiceRole
-      .from("musicdb")
-      .select(selectCols)
-      .eq("playstyle", "SP")
-      .eq("deleted", false)
-      .ilike("name", `%${word}%`)
-      .order("difficulty_level", { ascending: true })
-      .limit(20);
-    if (difficulty_level !== undefined) wordQuery = wordQuery.eq("difficulty_level", difficulty_level);
-    if (difficulty_name !== undefined) wordQuery = wordQuery.eq("difficulty_name", difficulty_name);
-
-    const { data: wordData, error: wordError } = await wordQuery;
-    if (wordError) {
-      console.error(`Error searching word "${word}":`, wordError);
-      continue;
-    }
-    if (wordData) {
-      for (const row of wordData) {
+    // Search name
+    const { data: wordName } = await applyFilters(
+      supabaseServiceRole.from("musicdb").select(selectCols)
+        .eq("playstyle", "SP").eq("deleted", false)
+        .ilike("name", `%${word}%`)
+        .order("difficulty_level", { ascending: true }).limit(20)
+    );
+    if (wordName) {
+      for (const row of wordName) {
         const id = row.id as number;
-        if (!seen.has(id)) {
-          seen.add(id);
-          combined.push(row as Record<string, unknown>);
-        }
+        if (!seen.has(id)) { seen.add(id); combined.push(row as Record<string, unknown>); }
       }
     }
-    // Cap total results to avoid overwhelming the model
+
+    // Search artist
+    const { data: wordArtist } = await applyFilters(
+      supabaseServiceRole.from("musicdb").select(selectCols)
+        .eq("playstyle", "SP").eq("deleted", false)
+        .ilike("artist", `%${word}%`)
+        .order("difficulty_level", { ascending: true }).limit(20)
+    );
+    if (wordArtist) {
+      for (const row of wordArtist) {
+        const id = row.id as number;
+        if (!seen.has(id)) { seen.add(id); combined.push(row as Record<string, unknown>); }
+      }
+    }
+
     if (combined.length >= 50) break;
   }
 
@@ -117,7 +127,7 @@ async function searchSongs(
 
   if (musicDbResults.length === 0) {
     return JSON.stringify({
-      message: `No songs found matching "${query}"`,
+      message: `No songs found matching "${query}". Tell the user you couldn't find this song and ask them to provide the exact song title as it appears in DDR. You may reference what they asked about in plain text when explaining you couldn't find it.`,
       results: []
     });
   }
@@ -574,7 +584,7 @@ async function getSongOffset(
 
   if (musicDbResults.length === 0) {
     return JSON.stringify({
-      message: `No song found matching "${query}". Cannot look up offset.`,
+      message: `No song found matching "${query}". Cannot look up offset. Tell the user you couldn't find this song and ask for the exact title.`,
       offset: null,
     });
   }
