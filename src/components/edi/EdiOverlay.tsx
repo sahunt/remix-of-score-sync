@@ -81,7 +81,7 @@ export function EdiOverlay() {
             type: "spring",
             damping: 36,
             stiffness: 180,
-            mass: 0.8,
+            mass: 1.6,
           }}
           style={originStyle}
           className="fixed inset-0 z-50 flex flex-col bg-background w-full max-w-[720px] mx-auto rounded-[20px] overflow-hidden"
