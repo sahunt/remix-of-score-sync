@@ -52,7 +52,7 @@ export function EdiOverlay() {
       {isOpen && (
         <motion.div
           key="edi-overlay"
-          initial={{ opacity: 0, scale: 0.85, y: 40 }}
+          initial={{ opacity: 1, scale: 0.85, y: 40 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.6, y: 60 }}
           transition={{
