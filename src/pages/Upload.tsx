@@ -90,11 +90,13 @@ export default function UploadPage() {
       setState('success');
       setCurrentUploadId(null);
       
-      // Play completion sound
+      // Play completion sound (delay to avoid browser cutting off start)
       try {
         if (doneAudioRef.current) {
           doneAudioRef.current.currentTime = 0;
-          doneAudioRef.current.play().catch(() => {});
+          setTimeout(() => {
+            doneAudioRef.current?.play().catch(() => {});
+          }, 1000);
         }
       } catch { /* ignore audio errors */ }
       
