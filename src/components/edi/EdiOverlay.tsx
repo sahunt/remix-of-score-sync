@@ -95,7 +95,7 @@ export function EdiOverlay() {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 flex flex-col bg-background w-full max-w-[720px] mx-auto"
+      className="fixed inset-0 z-50 flex flex-col bg-background w-full max-w-[720px] mx-auto rounded-[20px] overflow-hidden"
       style={animStyle}
     >
       <Edi onMinimize={close} />
