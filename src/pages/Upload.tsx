@@ -44,6 +44,15 @@ export default function UploadPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentUploadId, setCurrentUploadId] = useState<string | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
+  const doneAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Preload the completion sound on mount
+  useEffect(() => {
+    const audio = new Audio('/sounds/done.mp3');
+    audio.preload = 'auto';
+    audio.load();
+    doneAudioRef.current = audio;
+  }, []);
 
   // Poll for upload status
   const pollUploadStatus = useCallback(async (uploadId: string) => {
@@ -83,20 +92,10 @@ export default function UploadPage() {
       
       // Play completion sound
       try {
-        const audio = new Audio('/sounds/done.mp3');
-        audio.currentTime = 0;
-        audio.preload = 'auto';
-        await new Promise<void>((resolve) => {
-          audio.addEventListener('canplaythrough', () => {
-            audio.play().catch(() => {});
-            resolve();
-          }, { once: true });
-          // Fallback if already loaded
-          if (audio.readyState >= 4) {
-            audio.play().catch(() => {});
-            resolve();
-          }
-        });
+        if (doneAudioRef.current) {
+          doneAudioRef.current.currentTime = 0;
+          doneAudioRef.current.play().catch(() => {});
+        }
       } catch { /* ignore audio errors */ }
       
       // Clear polling
